@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::env;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -33,8 +33,9 @@ pub fn calculate_port() -> Result<u16> {
     let checksum: u32 = stdout
         .split_whitespace()
         .next()
-        .and_then(|s| s.parse().ok())
-        .ok_or_else(|| anyhow::anyhow!("Failed to parse cksum output"))?;
+        .context("cksum output was empty")?
+        .parse()
+        .context("Failed to parse cksum output as integer")?;
 
     // Map to ephemeral port range: 32768-65535
     let port = 32768 + (checksum % 32768);
