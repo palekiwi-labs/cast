@@ -1,16 +1,14 @@
-mod commands;
-
 use clap::Parser;
-use commands::Cli;
+use ocx::commands::{run, Cli};
 
 fn main() {
-    if let Err(e) = run() {
+    if let Err(e) = run_cli() {
         eprintln!("Error: {:#}", e);
         std::process::exit(1);
     }
 }
 
-fn run() -> anyhow::Result<()> {
+fn run_cli() -> anyhow::Result<()> {
     let cli = Cli::parse();
-    commands::run(cli)
+    run(cli)
 }

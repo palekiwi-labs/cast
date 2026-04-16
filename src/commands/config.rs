@@ -9,8 +9,9 @@ pub enum ConfigCommands {
 pub fn handle_config(command: Option<ConfigCommands>) -> Result<()> {
     match command {
         Some(ConfigCommands::Show) | None => {
-            // Stub: just print a placeholder for now
-            println!("Configuration will be displayed here");
+            let config = crate::config::load_config()?;
+            let json = serde_json::to_string_pretty(&config)?;
+            println!("{}", json);
             Ok(())
         }
     }

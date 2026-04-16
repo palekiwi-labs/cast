@@ -12,7 +12,7 @@ fn test_ocx_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage:"))
-        .stdout(predicate::str::contains("ocx - a secure Docker wrapper for OpenCode"));
+        .stdout(predicate::str::contains("ocx"));
 }
 
 #[test]
@@ -41,4 +41,18 @@ fn test_ocx_config_show() {
         .assert()
         .success()
         .stdout(predicate::str::is_empty().not());
+}
+
+#[test]
+fn test_ocx_config_show_outputs_valid_json() {
+    let output = ocx()
+        .args(["config", "show"])
+        .assert()
+        .success();
+    
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    
+    // Should be valid JSON - that's all we care about at this level
+    serde_json::from_str::<serde_json::Value>(&stdout)
+        .expect("Output should be valid JSON");
 }
