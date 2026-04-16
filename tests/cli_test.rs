@@ -1,42 +1,44 @@
-use std::process::Command;
+use assert_cmd::Command;
+use predicates::prelude::*;
 
-fn ocx_cmd() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_ocx"))
+fn ocx() -> Command {
+    Command::cargo_bin("ocx").unwrap()
 }
 
 #[test]
 fn test_ocx_help() {
-    let output = ocx_cmd()
+    ocx()
         .arg("--help")
-        .output()
-        .expect("Failed to execute ocx");
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Usage:"));
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage:"))
+        .stdout(predicate::str::contains("ocx - a secure Docker wrapper for OpenCode"));
 }
 
 #[test]
 fn test_ocx_config_help() {
-    let output = ocx_cmd()
+    ocx()
         .args(["config", "--help"])
-        .output()
-        .expect("Failed to execute ocx config");
-
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("config"));
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: ocx config"))
+        .stdout(predicate::str::contains("show"));
 }
 
 #[test]
 fn test_ocx_config_runs() {
-    let output = ocx_cmd()
+    ocx()
         .arg("config")
-        .output()
-        .expect("Failed to execute ocx config");
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty().not());
+}
 
-    assert!(output.status.success());
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    // For now, just verify it prints something
-    assert!(!stdout.is_empty());
+#[test]
+fn test_ocx_config_show() {
+    ocx()
+        .args(["config", "show"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty().not());
 }
