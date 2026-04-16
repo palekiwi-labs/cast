@@ -12,26 +12,24 @@ use std::path::PathBuf;
 /// 3. Global config (~/.config/ocx/ocx.json)
 /// 4. Defaults
 pub fn load_config() -> Result<Config> {
-    let global_config_path = global_config_path();
+    let mut figment = Figment::new()
+        .merge(Serialized::defaults(Config::default()));
 
-    Figment::new()
-        // 4. Defaults: hardcoded values
-        .merge(Serialized::defaults(Config::default()))
-        // 3. Global Config: ~/.config/ocx/ocx.json (if it exists)
-        .merge(Json::file(&global_config_path))
-        // 2. Project Config: ./ocx.json (if it exists)
+    if let Some(global_path) = global_config_path() {
+        figment = figment.merge(Json::file(global_path));
+    }
+
+    figment
         .merge(Json::file("ocx.json"))
-        // 1. Environment Variables: OCX_* prefix (highest priority)
         .merge(Env::prefixed("OCX_").split("_"))
         .extract()
         .context("Failed to load configuration")
 }
 
 /// Resolve the global config path (~/.config/ocx/ocx.json)
-fn global_config_path() -> PathBuf {
-    dirs::config_dir()
-        .map(|p| p.join("ocx").join("ocx.json"))
-        .unwrap_or_else(|| PathBuf::from("/etc/ocx/ocx.json"))
+/// Returns None if the system config directory cannot be determined
+fn global_config_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("ocx").join("ocx.json"))
 }
 
 #[cfg(test)]
@@ -43,18 +41,18 @@ mod tests {
         // Just verify it loads without error
         // Don't test specific values since they depend on user's environment
         let config = load_config().unwrap();
-        
+
         // Basic sanity checks - these fields should always have some value
         assert!(!config.opencode_version.is_empty());
         assert!(!config.memory.is_empty());
         assert!(config.cpus > 0.0);
     }
-    
+
     #[test]
     fn test_config_default_has_expected_values() {
         // Test the defaults in isolation
         let config = Config::default();
-        
+
         assert_eq!(config.opencode_version, "latest");
         assert_eq!(config.memory, "1024m");
         assert_eq!(config.cpus, 1.0);
