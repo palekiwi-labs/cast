@@ -1,4 +1,5 @@
 pub mod config;
+pub mod port;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -19,11 +20,14 @@ pub enum Commands {
         #[command(subcommand)]
         command: Option<config::ConfigCommands>,
     },
+    /// Print the port that the container will publish
+    Port,
 }
 
 pub fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Some(Commands::Config { command }) => config::handle_config(command),
+        Some(Commands::Port) => port::handle_port(),
         None => {
             // No subcommand provided, print help
             Cli::parse_from(["ocx", "--help"]);
