@@ -1,41 +1,30 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
+use crc::{Crc, CRC_32_CKSUM};
 use std::env;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 use crate::config::Config;
+
+/// The POSIX cksum algorithm implementation
+const CKSUM: Crc<u32> = Crc::<u32>::new(&CRC_32_CKSUM);
 
 /// Calculate a deterministic port based on the current working directory
 pub fn calculate_port() -> Result<u16> {
     let pwd = env::current_dir()?;
     let pwd_str = pwd.to_string_lossy();
 
-    // Use cksum to generate a hash of the directory path
-    let mut child = Command::new("cksum")
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()?;
+    // The POSIX cksum algorithm includes the length of the string
+    // appended as little-endian bytes to the end of the digest calculation
+    let mut digest = CKSUM.digest();
+    digest.update(pwd_str.as_bytes());
 
-    // Write the path to stdin
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(pwd_str.as_bytes())?;
+    // cksum requires appending the length in a specific way
+    let mut len = pwd_str.len();
+    while len > 0 {
+        digest.update(&[(len & 0xFF) as u8]);
+        len >>= 8;
     }
 
-    let output = child.wait_with_output()?;
-
-    if !output.status.success() {
-        anyhow::bail!("Failed to run cksum command");
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Parse the checksum value (first field in output)
-    let checksum: u32 = stdout
-        .split_whitespace()
-        .next()
-        .context("cksum output was empty")?
-        .parse()
-        .context("Failed to parse cksum output as integer")?;
+    let checksum = digest.finalize();
 
     // Map to ephemeral port range: 32768-65535
     let port = 32768 + (checksum % 32768);
@@ -77,5 +66,33 @@ mod tests {
         let port1 = calculate_port().expect("Should calculate port");
         let port2 = calculate_port().expect("Should calculate port");
         assert_eq!(port1, port2, "Port should be deterministic");
+    }
+
+    #[test]
+    fn test_cksum_algorithm_matches_posix() {
+        // Test our native CRC implementation against known cksum outputs
+        let test_cases = vec![
+            ("test", 3076352578),
+            ("hello world", 1135714720),
+            ("ocx-rs is awesome", 1458670426),
+        ];
+
+        for (input, expected_checksum) in test_cases {
+            let mut digest = CKSUM.digest();
+            digest.update(input.as_bytes());
+
+            let mut len = input.len();
+            while len > 0 {
+                digest.update(&[(len & 0xFF) as u8]);
+                len >>= 8;
+            }
+
+            let checksum = digest.finalize();
+            assert_eq!(
+                checksum, expected_checksum,
+                "Checksum for '{}' did not match. Expected {}, got {}",
+                input, expected_checksum, checksum
+            );
+        }
     }
 }
