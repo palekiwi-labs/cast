@@ -6,9 +6,6 @@ pub enum DockerError {
     #[error("Docker command failed: {0}")]
     CommandFailed(String),
 
-    #[error("Container not found: {0}")]
-    ContainerNotFound(String),
-
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 }
