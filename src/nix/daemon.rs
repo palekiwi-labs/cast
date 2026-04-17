@@ -78,3 +78,10 @@ fn build_image<D: DockerClient>(docker: &D, tag: &str) -> Result<()> {
 
     Ok(())
 }
+
+/// Explicitly build the custom nix daemon image
+pub fn build<D: DockerClient>(docker: &D) -> Result<()> {
+    let image_tag = image::get_image_tag();
+    println!("Building nix daemon image: {}", image_tag);
+    build_image(docker, &image_tag)
+}
