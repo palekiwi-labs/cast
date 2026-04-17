@@ -56,21 +56,13 @@ fn build_image<D: DockerClient>(docker: &D, tag: &str) -> Result<()> {
     let context_path = temp_dir.path();
 
     // Write the Dockerfile
-    let dockerfile_path = context_path.join("Dockerfile.nix-daemon");
+    let dockerfile_path = context_path.join("Dockerfile");
     fs::write(&dockerfile_path, image::get_dockerfile())
         .map_err(crate::nix::docker::DockerError::Io)?;
 
     // Write the entrypoint script
     let entrypoint_path = context_path.join("entrypoint.sh");
     fs::write(&entrypoint_path, image::get_entrypoint())
-        .map_err(crate::nix::docker::DockerError::Io)?;
-
-    // Since we're using a specific Dockerfile name, we actually need to pass the context path
-    // and let docker build find the Dockerfile. The docker CLI builder function
-    // needs to point to this specific Dockerfile or we should rename it to "Dockerfile".
-    // For simplicity, let's rename it to standard "Dockerfile" in the temp context.
-    let standard_dockerfile_path = context_path.join("Dockerfile");
-    fs::rename(&dockerfile_path, &standard_dockerfile_path)
         .map_err(crate::nix::docker::DockerError::Io)?;
 
     // Build the image
