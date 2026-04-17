@@ -77,3 +77,20 @@ pub fn build<D: DockerClient>(docker: &D) -> Result<()> {
     println!("Building nix daemon image: {}", image_tag);
     build_image(docker, &image_tag)
 }
+
+/// Stop the nix daemon container
+pub fn stop<D: DockerClient>(docker: &D, config: &Config) -> Result<()> {
+    let container_name = &config.nix_daemon_container_name;
+
+    // Check if it's actually running
+    if !docker.is_container_running(container_name)? {
+        println!("Nix daemon is not running: {}", container_name);
+        return Ok(());
+    }
+
+    println!("Stopping nix daemon container: {}", container_name);
+    docker.stop_container(container_name)?;
+    println!("Nix daemon stopped successfully");
+
+    Ok(())
+}

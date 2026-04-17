@@ -33,4 +33,7 @@ pub trait DockerClient {
         detached: bool,
         remove: bool,
     ) -> Result<()>;
+
+    /// Stop a running container by name
+    fn stop_container(&self, name: &str) -> Result<()>;
 }

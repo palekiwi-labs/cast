@@ -73,6 +73,11 @@ pub fn build_run_args(
     args
 }
 
+/// Build arguments for `docker stop` command
+pub fn build_stop_args(name: &str) -> Vec<String> {
+    vec!["stop".to_string(), name.to_string()]
+}
+
 /// Real Docker client that executes docker CLI commands
 pub struct DockerCliClient;
 
@@ -129,6 +134,19 @@ impl DockerClient for DockerCliClient {
         remove: bool,
     ) -> Result<()> {
         let args = build_run_args(name, image, volumes, env_vars, detached, remove);
+        let output = Command::new("docker").args(&args).output()?;
+
+        if !output.status.success() {
+            return Err(DockerError::CommandFailed(
+                String::from_utf8_lossy(&output.stderr).to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn stop_container(&self, name: &str) -> Result<()> {
+        let args = build_stop_args(name);
         let output = Command::new("docker").args(&args).output()?;
 
         if !output.status.success() {
@@ -295,5 +313,11 @@ mod tests {
                 "localhost/ocx-nix-daemon:sha-12345678"
             ]
         );
+    }
+
+    #[test]
+    fn test_build_stop_args() {
+        let args = build_stop_args("my-container");
+        assert_eq!(args, vec!["stop", "my-container"]);
     }
 }
