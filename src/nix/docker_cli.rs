@@ -113,12 +113,14 @@ impl DockerClient for DockerCliClient {
     fn build_image(&self, tag: &str, context_path: &Path) -> Result<()> {
         let args = build_build_args(tag, context_path);
 
-        let output = Command::new("docker").args(&args).output()?;
+        // Use .status() to allow Docker build output to stream to the terminal
+        let status = Command::new("docker").args(&args).status()?;
 
-        if !output.status.success() {
-            return Err(DockerError::CommandFailed(
-                String::from_utf8_lossy(&output.stderr).to_string(),
-            ));
+        if !status.success() {
+            return Err(DockerError::CommandFailed(format!(
+                "docker build failed with exit code: {}",
+                status.code().unwrap_or(-1)
+            )));
         }
 
         Ok(())
