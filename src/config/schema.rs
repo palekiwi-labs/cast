@@ -27,16 +27,6 @@ pub struct Config {
     pub publish_port: bool,
     pub add_host_docker_internal: bool,
 
-    // User Settings
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uid: Option<u32>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub gid: Option<u32>,
-
     // Paths & Files
     pub opencode_config_dir: String,
     pub opencode_command: Vec<String>,
@@ -113,9 +103,6 @@ impl Default for Config {
             port: None,
             publish_port: true,
             add_host_docker_internal: true,
-            username: None,
-            uid: None,
-            gid: None,
             opencode_config_dir: "~/.config/opencode".to_string(),
             opencode_command: vec!["opencode".to_string()],
             rgignore_file: None,
