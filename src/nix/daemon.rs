@@ -52,18 +52,16 @@ pub fn ensure_running<D: DockerClient>(docker: &D, config: &Config) -> Result<()
 /// Build the custom nix daemon image
 fn build_image<D: DockerClient>(docker: &D, tag: &str) -> Result<()> {
     // Create a temporary directory for the build context
-    let temp_dir = TempDir::new().map_err(crate::nix::docker::DockerError::Io)?;
+    let temp_dir = TempDir::new()?;
     let context_path = temp_dir.path();
 
     // Write the Dockerfile
     let dockerfile_path = context_path.join("Dockerfile");
-    fs::write(&dockerfile_path, image::get_dockerfile())
-        .map_err(crate::nix::docker::DockerError::Io)?;
+    fs::write(&dockerfile_path, image::get_dockerfile())?;
 
     // Write the entrypoint script
     let entrypoint_path = context_path.join("entrypoint.sh");
-    fs::write(&entrypoint_path, image::get_entrypoint())
-        .map_err(crate::nix::docker::DockerError::Io)?;
+    fs::write(&entrypoint_path, image::get_entrypoint())?;
 
     // Build the image
     docker.build_image(tag, context_path)?;
