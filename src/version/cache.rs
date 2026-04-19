@@ -1,7 +1,7 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
@@ -10,6 +10,14 @@ pub struct CacheEntry {
     pub version: String,
     /// Nanoseconds since Unix epoch
     pub fetched_at: u64,
+}
+
+/// Returns the standard path to the version cache file
+pub fn get_cache_path() -> PathBuf {
+    dirs::cache_dir()
+        .unwrap_or_else(|| PathBuf::from(".cache"))
+        .join("ocx")
+        .join("version-cache.json")
 }
 
 /// Read a valid (non-expired) cache entry from the given path.
