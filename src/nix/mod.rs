@@ -1,5 +1,6 @@
 pub mod config;
 pub mod daemon;
+mod dev_image;
 mod docker;
 mod docker_cli;
 mod image;
