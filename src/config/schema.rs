@@ -43,8 +43,7 @@ pub struct Config {
     // Data Volumes
     pub data_volumes_mode: String,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data_volumes_name: Option<String>,
+    pub data_volumes_name: String,
 
     pub extra_data_volumes: HashMap<String, VolumeConfig>,
 
@@ -109,7 +108,7 @@ impl Default for Config {
             custom_base_dockerfile: None,
             env_file: None,
             data_volumes_mode: "git".to_string(),
-            data_volumes_name: None,
+            data_volumes_name: "ocx".to_string(),
             extra_data_volumes: HashMap::new(),
             nix_volume_name: format!("{}ocx-nix", dev_prefix),
             nix_daemon_container_name: format!("{}ocx-nix-daemon", dev_prefix),
