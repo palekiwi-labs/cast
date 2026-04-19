@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod config;
+pub mod docker;
 pub mod nix;
 pub mod opencode;
 pub mod shadow_mounts;
