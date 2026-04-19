@@ -2,7 +2,7 @@ use std::fs;
 use tempfile::TempDir;
 
 use crate::config::Config;
-use crate::nix::dev_image::{get_dockerfile, get_image_tag};
+use crate::nix::dev_image::{get_dockerfile, get_entrypoint, get_image_tag};
 use crate::nix::docker::{DockerClient, Result};
 use crate::nix::extra_dirs::resolve_extra_dirs;
 use crate::user::ResolvedUser;
@@ -32,8 +32,7 @@ pub fn build_dev<D: DockerClient>(
     fs::write(&dockerfile_path, get_dockerfile())?;
 
     let entrypoint_path = context_path.join("entrypoint.sh");
-    let entrypoint = include_str!("../../assets/nix/entrypoint-dev.sh");
-    fs::write(&entrypoint_path, entrypoint)?;
+    fs::write(&entrypoint_path, get_entrypoint())?;
 
     let extra_dirs = resolve_extra_dirs(config, &user.username);
     let uid_str = user.uid.to_string();

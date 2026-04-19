@@ -17,6 +17,11 @@ pub fn get_dockerfile() -> &'static str {
     DOCKERFILE
 }
 
+/// Get the embedded entrypoint script content for the nix dev image.
+pub fn get_entrypoint() -> &'static str {
+    ENTRYPOINT
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -46,5 +51,10 @@ mod tests {
     #[test]
     fn test_get_dockerfile_has_correct_base_image() {
         assert!(get_dockerfile().contains("FROM debian:trixie-slim"));
+    }
+
+    #[test]
+    fn test_get_entrypoint_is_not_empty() {
+        assert!(!get_entrypoint().is_empty());
     }
 }
