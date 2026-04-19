@@ -28,7 +28,7 @@ pub fn build_dev<D: DockerClient>(
     let temp_dir = TempDir::new()?;
     let context_path = temp_dir.path();
 
-    let dockerfile_path = context_path.join("Dockerfile.nix-dev");
+    let dockerfile_path = context_path.join("Dockerfile");
     fs::write(&dockerfile_path, get_dockerfile())?;
 
     let entrypoint_path = context_path.join("entrypoint.sh");
