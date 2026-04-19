@@ -1,7 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::io::Write;
+use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tempfile::NamedTempFile;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct CacheEntry {
@@ -25,16 +27,21 @@ pub fn read_cache(path: &Path, ttl_hours: u32) -> Option<CacheEntry> {
 }
 
 /// Write a cache entry to the given path, creating parent directories as needed.
+/// Performs an atomic write using a temporary file.
 pub fn write_cache(path: &Path, version: &str) -> Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    std::fs::create_dir_all(parent)?;
+
     let entry = CacheEntry {
         version: version.to_string(),
         fetched_at: now_nanos(),
     };
     let json = serde_json::to_string(&entry)?;
-    std::fs::write(path, json)?;
+
+    let mut temp = NamedTempFile::new_in(parent)?;
+    temp.write_all(json.as_bytes())?;
+    temp.persist(path)?;
+
     Ok(())
 }
 
@@ -50,6 +57,7 @@ pub fn now_nanos() -> u64 {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     fn cache_path(dir: &TempDir) -> PathBuf {
