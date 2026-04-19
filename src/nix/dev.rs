@@ -5,6 +5,7 @@ use crate::config::Config;
 use crate::nix::dev_image::{get_dockerfile, get_entrypoint, get_image_tag};
 use crate::nix::docker::{DockerClient, Result};
 use crate::nix::extra_dirs::resolve_extra_dirs;
+use crate::nix::BuildOptions;
 use crate::user::ResolvedUser;
 
 /// Build the nix dev image locally.
@@ -13,12 +14,11 @@ pub fn build_dev<D: DockerClient>(
     config: &Config,
     user: &ResolvedUser,
     version: &str,
-    force: bool,
-    no_cache: bool,
+    opts: BuildOptions,
 ) -> Result<()> {
     let image_tag = get_image_tag(version);
 
-    if !force && docker.image_exists(&image_tag)? {
+    if !opts.force && docker.image_exists(&image_tag)? {
         println!("Nix dev image already exists: {}", image_tag);
         return Ok(());
     }
@@ -46,7 +46,7 @@ pub fn build_dev<D: DockerClient>(
         ("EXTRA_DIRS", &extra_dirs),
     ];
 
-    docker.build_image(&image_tag, context_path, &build_args, no_cache)?;
+    docker.build_image(&image_tag, context_path, &build_args, opts.no_cache)?;
 
     Ok(())
 }
