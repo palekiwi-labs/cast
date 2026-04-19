@@ -37,7 +37,9 @@ pub fn resolve_version<F: VersionFetcher>(
     match fetcher.fetch_latest_version() {
         Ok(fetched) => {
             let resolved = normalize_version(&fetched);
-            cache::write_cache(cache_path, &resolved)?;
+            if let Err(e) = cache::write_cache(cache_path, &resolved) {
+                eprintln!("Warning: Failed to write version cache: {}", e);
+            }
             Ok(resolved)
         }
         Err(fetch_err) => {
