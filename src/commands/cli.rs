@@ -27,7 +27,7 @@ pub enum Commands {
     },
     /// Print the port that the container will publish
     Port,
-    /// Build both the Nix daemon and Nix dev images
+    /// Build the Nix dev image (and optionally the daemon base image)
     Build {
         #[arg(long)]
         base: bool,
