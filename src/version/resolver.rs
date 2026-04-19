@@ -69,12 +69,9 @@ pub fn normalize_version(version: &str) -> String {
     trimmed.strip_prefix('v').unwrap_or(trimmed).to_string()
 }
 
-/// Validate that a string is either `"latest"` or a three-part semver
+/// Validate that a string is a three-part semver
 /// (`MAJOR.MINOR.PATCH`, each part a non-empty integer).
 pub fn validate_semver(version: &str) -> bool {
-    if version == "latest" {
-        return true;
-    }
     let parts: Vec<&str> = version.split('.').collect();
     if parts.len() != 3 {
         return false;
@@ -229,8 +226,8 @@ mod tests {
     // --- validate_semver ---
 
     #[test]
-    fn test_validate_semver_accepts_latest() {
-        assert!(validate_semver("latest"));
+    fn test_validate_semver_rejects_latest() {
+        assert!(!validate_semver("latest"));
     }
 
     #[test]
