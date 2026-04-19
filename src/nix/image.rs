@@ -1,4 +1,4 @@
-use sha2::{Digest, Sha256};
+use super::image_hash::compute_hash;
 
 /// Embedded Dockerfile content for the nix daemon image
 const DOCKERFILE: &str = include_str!("../../assets/nix/Dockerfile.nix-daemon");
@@ -8,20 +8,6 @@ const ENTRYPOINT: &str = include_str!("../../assets/nix/entrypoint.sh");
 
 /// Base name for the nix daemon image
 const IMAGE_BASE: &str = "localhost/ocx-nix-daemon";
-
-/// Compute SHA256 hash of the Dockerfile and entrypoint script
-///
-/// Returns the first 8 characters of the hex-encoded hash.
-/// This is used to tag images and detect when structural changes require rebuilds.
-pub fn compute_hash(dockerfile: &str, entrypoint: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(dockerfile.as_bytes());
-    hasher.update(entrypoint.as_bytes());
-    let result = hasher.finalize();
-
-    // Convert to hex and take first 8 characters
-    hex::encode(result)[..8].to_string()
-}
 
 /// Get the full image tag for the nix daemon container
 ///

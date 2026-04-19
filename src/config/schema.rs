@@ -123,17 +123,6 @@ impl Default for Config {
     }
 }
 
-impl Default for VolumeConfig {
-    fn default() -> Self {
-        VolumeConfig {
-            target: String::new(),
-            source: None,
-            mode: default_volume_mode(),
-            volume_type: default_volume_type(),
-        }
-    }
-}
-
 fn default_volume_mode() -> String {
     "rw".to_string()
 }

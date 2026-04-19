@@ -11,7 +11,8 @@ pub enum NixCommands {
     /// Stop the nix daemon container
     Stop,
     /// Build the nix daemon image
-    Build,
+    #[command(name = "build")]
+    BuildDaemon,
 }
 
 pub fn handle_nix(cfg: &Config, command: Option<NixCommands>) -> Result<()> {
@@ -26,7 +27,7 @@ pub fn handle_nix(cfg: &Config, command: Option<NixCommands>) -> Result<()> {
             nix::stop(&docker, cfg)?;
             Ok(())
         }
-        Some(NixCommands::Build) => {
+        Some(NixCommands::BuildDaemon) => {
             let docker = DockerCliClient;
             nix::build(&docker)?;
             Ok(())

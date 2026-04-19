@@ -21,7 +21,13 @@ pub trait DockerClient {
     fn image_exists(&self, tag: &str) -> Result<bool>;
 
     /// Build an image from a context directory
-    fn build_image(&self, tag: &str, context_path: &std::path::Path) -> Result<()>;
+    fn build_image(
+        &self,
+        tag: &str,
+        context_path: &std::path::Path,
+        build_args: &[(&str, &str)],
+        no_cache: bool,
+    ) -> Result<()>;
 
     /// Start a container with the given configuration
     fn run_container(

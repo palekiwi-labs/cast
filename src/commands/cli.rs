@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use super::{config, nix, port};
+use super::{build, config, nix, port};
 use crate::config::load_config;
 
 /// ocx - a secure Docker wrapper for OpenCode
@@ -27,6 +27,15 @@ pub enum Commands {
     },
     /// Print the port that the container will publish
     Port,
+    /// Build the Nix dev image (and optionally the daemon base image)
+    Build {
+        #[arg(long)]
+        base: bool,
+        #[arg(short, long)]
+        force: bool,
+        #[arg(long)]
+        no_cache: bool,
+    },
 }
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -37,6 +46,11 @@ pub fn run(cli: Cli) -> Result<()> {
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::Nix { command }) => nix::handle_nix(&cfg, command),
         Some(Commands::Port) => port::handle_port(&cfg),
+        Some(Commands::Build {
+            base,
+            force,
+            no_cache,
+        }) => build::handle_build(&cfg, base, force, no_cache),
         None => {
             // No subcommand provided, print help
             Cli::parse_from(["ocx", "--help"]);

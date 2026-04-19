@@ -25,13 +25,25 @@ pub fn build_image_exists_args(tag: &str) -> Vec<String> {
 }
 
 /// Build arguments for `docker build` command
-pub fn build_build_args(tag: &str, context_path: &Path) -> Vec<String> {
-    vec![
-        "build".to_string(),
-        "-t".to_string(),
-        tag.to_string(),
-        context_path.to_string_lossy().to_string(),
-    ]
+pub fn build_docker_build_args(
+    tag: &str,
+    context_path: &Path,
+    build_args: &[(&str, &str)],
+    no_cache: bool,
+) -> Vec<String> {
+    let mut args = vec!["build".to_string(), "-t".to_string(), tag.to_string()];
+
+    for (key, value) in build_args {
+        args.push("--build-arg".to_string());
+        args.push(format!("{}={}", key, value));
+    }
+
+    if no_cache {
+        args.push("--no-cache".to_string());
+    }
+
+    args.push(context_path.to_string_lossy().to_string());
+    args
 }
 
 /// Build arguments for `docker run` command
@@ -110,8 +122,14 @@ impl DockerClient for DockerCliClient {
         Ok(!stdout.trim().is_empty())
     }
 
-    fn build_image(&self, tag: &str, context_path: &Path) -> Result<()> {
-        let args = build_build_args(tag, context_path);
+    fn build_image(
+        &self,
+        tag: &str,
+        context_path: &Path,
+        build_args: &[(&str, &str)],
+        no_cache: bool,
+    ) -> Result<()> {
+        let args = build_docker_build_args(tag, context_path, build_args, no_cache);
 
         // Use .status() to allow Docker build output to stream to the terminal
         let status = Command::new("docker").args(&args).status()?;
@@ -198,11 +216,65 @@ mod tests {
     }
 
     #[test]
-    fn test_build_build_args() {
+    fn test_build_docker_build_args_no_build_args_no_no_cache() {
         let context = Path::new("/tmp/build");
-        let args = build_build_args("my-image:tag", context);
+        let args = build_docker_build_args("my-image:tag", context, &[], false);
 
         assert_eq!(args, vec!["build", "-t", "my-image:tag", "/tmp/build"]);
+    }
+
+    #[test]
+    fn test_build_docker_build_args_single_build_arg() {
+        let context = Path::new("/tmp/build");
+        let args = build_docker_build_args("my-image:tag", context, &[("FOO", "bar")], false);
+
+        assert_eq!(
+            args,
+            vec![
+                "build",
+                "-t",
+                "my-image:tag",
+                "--build-arg",
+                "FOO=bar",
+                "/tmp/build"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_docker_build_args_multiple_build_args() {
+        let context = Path::new("/tmp/build");
+        let args = build_docker_build_args(
+            "my-image:tag",
+            context,
+            &[("FOO", "bar"), ("BAZ", "qux")],
+            false,
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "build",
+                "-t",
+                "my-image:tag",
+                "--build-arg",
+                "FOO=bar",
+                "--build-arg",
+                "BAZ=qux",
+                "/tmp/build"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_build_docker_build_args_no_cache() {
+        let context = Path::new("/tmp/build");
+        let args = build_docker_build_args("my-image:tag", context, &[], true);
+
+        assert_eq!(
+            args,
+            vec!["build", "-t", "my-image:tag", "--no-cache", "/tmp/build"]
+        );
     }
 
     #[test]

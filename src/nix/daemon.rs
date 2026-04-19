@@ -64,7 +64,7 @@ fn build_image<D: DockerClient>(docker: &D, tag: &str) -> Result<()> {
     fs::write(&entrypoint_path, image::get_entrypoint())?;
 
     // Build the image
-    docker.build_image(tag, context_path)?;
+    docker.build_image(tag, context_path, &[], false)?;
 
     Ok(())
 }

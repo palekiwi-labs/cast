@@ -1,0 +1,94 @@
+FROM debian:trixie-slim
+
+ARG OPENCODE_VERSION=latest
+ARG TARGETARCH
+
+# Install essential tools for development
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and install OpenCode (auto-detect arch)
+RUN set -eux; \
+    case "${TARGETARCH}" in \
+        amd64) BIN_ARCH="x64" ;; \
+        arm64) BIN_ARCH="arm64" ;; \
+        *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
+    esac; \
+    curl -fsSL "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-${BIN_ARCH}.tar.gz" \
+    | tar -xz -C /usr/local/bin/; \
+    chmod +x /usr/local/bin/opencode;
+
+# Configure Nix system-wide to enable flakes
+# (Nix store will be mounted from nix-daemon volume)
+RUN mkdir -p /etc/nix && \
+    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
+
+# Add Nix to PATH (will be available if /nix is mounted)
+ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+
+# Copy entrypoint script
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Limit GC marker threads for Nix commands running in the container
+ENV GC_NPROCS=1
+
+# Ensure Nix client communicates via daemon socket (store is mounted read-only)
+ENV NIX_REMOTE=daemon
+
+ARG USERNAME=user
+ARG UID=1000
+ARG GID=1000
+ARG EXTRA_DIRS=""
+
+USER root
+
+# Configure git defaults (system-level, immutable)
+# This ensures agents can commit without configuration errors
+RUN git config --system user.name "opencode" && \
+    git config --system user.email "opencode@local" && \
+    git config --system init.defaultBranch "main" && \
+    git config --system commit.gpgsign false && \
+    git config --system core.autocrlf input && \
+    git config --system pull.rebase false;
+
+# Ensure /usr/local/bin is in PATH (defensive for custom base images)
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Create user and OCX directories (idempotent - safe even if user/dirs exist)
+RUN set -e; \
+    # Handle group creation
+    if getent group ${GID} >/dev/null 2>&1; then \
+        GROUP_NAME=$(getent group ${GID} | cut -d: -f1); \
+    else \
+        groupadd -g ${GID} --non-unique ${USERNAME} 2>/dev/null || true; \
+        GROUP_NAME=${USERNAME}; \
+    fi && \
+    # Create user if doesn't exist
+    if ! getent passwd ${USERNAME} >/dev/null 2>&1; then \
+        useradd -u ${UID} -g ${GID} -m -d /home/${USERNAME} --non-unique -s /bin/bash ${USERNAME} 2>/dev/null || true; \
+    fi && \
+    # Ensure home directory exists
+    mkdir -p /home/${USERNAME} && \
+    # Create OCX directories
+    mkdir -p /workspace \
+             /home/${USERNAME}/.cache \
+             /home/${USERNAME}/.config \
+             /home/${USERNAME}/.local \
+             ${EXTRA_DIRS} && \
+    chown -R ${UID}:${GID} /workspace \
+                           /home/${USERNAME}/.cache \
+                           /home/${USERNAME}/.config \
+                           /home/${USERNAME}/.local \
+                           /home/${USERNAME} \
+                           ${EXTRA_DIRS} 2>/dev/null || true
+
+USER ${USERNAME}
+WORKDIR /workspace
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+CMD ["opencode"]
