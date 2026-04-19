@@ -84,11 +84,6 @@ mod tests {
             .insert("local".to_string(), volume("~/.local", "volume"));
 
         let result = resolve_extra_dirs(&config, "alice");
-
-        // Order is not guaranteed (HashMap), so check both paths are present
-        assert!(result.contains("/home/alice/.cargo"));
-        assert!(result.contains("/home/alice/.local"));
-        let parts: Vec<&str> = result.split(' ').collect();
-        assert_eq!(parts.len(), 2);
+        assert_eq!(result, "/home/alice/.cargo /home/alice/.local");
     }
 }
