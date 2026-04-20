@@ -68,4 +68,15 @@ impl DockerClient {
 
         Ok(())
     }
+
+    /// Replace the current process with `docker <args>` via execvp.
+    ///
+    /// This function never returns on success — the OS replaces the process
+    /// image. It returns an `anyhow::Error` only if the exec syscall itself
+    /// fails (e.g. docker not found in PATH).
+    pub fn exec_command(&self, args: Vec<String>) -> anyhow::Error {
+        use std::os::unix::process::CommandExt;
+        let err = Command::new("docker").args(&args).exec();
+        anyhow::Error::from(err)
+    }
 }
