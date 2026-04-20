@@ -1,9 +1,17 @@
 use anyhow::{bail, Context, Result};
 use std::process::Command;
 
+use crate::docker::args;
+
 pub struct DockerClient;
 
 impl DockerClient {
+    pub fn is_container_running(&self, name: &str) -> Result<bool> {
+        let ps_args = args::build_ps_args(name);
+        let output = self.query_command(ps_args)?;
+        Ok(!output.trim().is_empty())
+    }
+
     pub fn run_command(&self, args: Vec<String>) -> Result<()> {
         let output = Command::new("docker")
             .args(&args)

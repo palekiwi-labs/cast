@@ -12,8 +12,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if already running
-    let ps_args = args::build_ps_args(container_name);
-    if !docker.query_command(ps_args)?.trim().is_empty() {
+    if docker.is_container_running(container_name)? {
         println!("Nix daemon is already running: {}", container_name);
         return Ok(());
     }
@@ -84,8 +83,7 @@ pub fn stop(docker: &DockerClient, config: &Config) -> Result<()> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if it's actually running
-    let ps_args = args::build_ps_args(container_name);
-    if docker.query_command(ps_args)?.trim().is_empty() {
+    if !docker.is_container_running(container_name)? {
         println!("Nix daemon is not running: {}", container_name);
         return Ok(());
     }
