@@ -1,4 +1,4 @@
-use super::image_hash::compute_hash;
+use crate::docker::image_hash::compute_hash;
 
 /// Embedded Dockerfile content for the nix daemon image
 const DOCKERFILE: &str = include_str!("../../assets/nix/Dockerfile.nix-daemon");

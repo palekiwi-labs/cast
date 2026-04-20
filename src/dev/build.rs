@@ -4,11 +4,12 @@ use tempfile::TempDir;
 use crate::config::Config;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
-use crate::nix::dev_image::{get_dockerfile, get_entrypoint, get_image_tag};
-use crate::nix::extra_dirs::resolve_extra_dirs;
-use crate::nix::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
+
+use super::extra_dirs::resolve_extra_dirs;
+use super::image::{get_dockerfile, get_entrypoint, get_image_tag};
+use super::BuildOptions;
 
 /// Build the nix dev image locally.
 pub fn build_dev(

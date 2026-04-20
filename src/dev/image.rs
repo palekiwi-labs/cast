@@ -1,4 +1,4 @@
-use super::image_hash::compute_hash;
+use crate::docker::image_hash::compute_hash;
 
 const DOCKERFILE: &str = include_str!("../../assets/nix/Dockerfile.nix-dev");
 const ENTRYPOINT: &str = include_str!("../../assets/nix/entrypoint-dev.sh");
