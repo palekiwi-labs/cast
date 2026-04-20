@@ -35,7 +35,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     println!("Starting nix daemon container: {}", container_name);
 
     // Assemble options
-    let mut opts = vec![
+    let opts = vec![
         "-d".to_string(),
         "--rm".to_string(),
         "-e".to_string(),
