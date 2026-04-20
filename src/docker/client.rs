@@ -12,17 +12,12 @@ impl DockerClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let detail = stderr.trim();
-            if detail.is_empty() {
-                bail!("`docker {}` failed ({})", args.join(" "), output.status);
-            } else {
-                bail!(
-                    "`docker {}` failed ({})\n{}",
-                    args.join(" "),
-                    output.status,
-                    detail
-                );
-            }
+            bail!(
+                "`docker {}` failed ({})\n{}",
+                args.join(" "),
+                output.status,
+                stderr.trim()
+            );
         }
 
         Ok(())
@@ -36,17 +31,12 @@ impl DockerClient {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            let detail = stderr.trim();
-            if detail.is_empty() {
-                bail!("`docker {}` failed ({})", args.join(" "), output.status);
-            } else {
-                bail!(
-                    "`docker {}` failed ({})\n{}",
-                    args.join(" "),
-                    output.status,
-                    detail
-                );
-            }
+            bail!(
+                "`docker {}` failed ({})\n{}",
+                args.join(" "),
+                output.status,
+                stderr.trim()
+            );
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
