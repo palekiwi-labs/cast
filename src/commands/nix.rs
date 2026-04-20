@@ -3,6 +3,7 @@ use clap::Subcommand;
 
 use crate::config::Config;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix;
 
 #[derive(Subcommand)]
@@ -13,7 +14,15 @@ pub enum NixCommands {
     Stop,
     /// Build the nix daemon image
     #[command(name = "build")]
-    BuildDaemon,
+    BuildDaemon {
+        /// Force rebuild even if image exists
+        #[arg(long)]
+        force: bool,
+
+        /// Do not use cache when building
+        #[arg(long)]
+        no_cache: bool,
+    },
 }
 
 pub fn handle_nix(cfg: &Config, command: Option<NixCommands>) -> Result<()> {
@@ -28,9 +37,10 @@ pub fn handle_nix(cfg: &Config, command: Option<NixCommands>) -> Result<()> {
             nix::stop(&docker, cfg)?;
             Ok(())
         }
-        Some(NixCommands::BuildDaemon) => {
+        Some(NixCommands::BuildDaemon { force, no_cache }) => {
             let docker = DockerClient;
-            nix::build(&docker)?;
+            let opts = BuildOptions { force, no_cache };
+            nix::build(&docker, opts)?;
             Ok(())
         }
         None => {

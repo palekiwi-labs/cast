@@ -2,8 +2,8 @@ use anyhow::Result;
 
 use crate::config::Config;
 use crate::dev;
-use crate::dev::BuildOptions;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix;
 use crate::user::get_user;
 use crate::version::github::GithubVersionFetcher;
@@ -21,11 +21,12 @@ pub fn handle_build(cfg: &Config, base: bool, force: bool, no_cache: bool) -> Re
         &GithubVersionFetcher,
     )?;
 
+    let opts = BuildOptions { force, no_cache };
+
     if base {
-        nix::build(&docker)?;
+        nix::build(&docker, opts)?;
     }
 
-    let opts = BuildOptions { force, no_cache };
     dev::build_dev(&docker, cfg, &user, &version, opts)?;
 
     Ok(())
