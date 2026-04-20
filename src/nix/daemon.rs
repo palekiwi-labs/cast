@@ -21,8 +21,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     let image_tag = image::get_image_tag();
 
     // Check if the image exists, build it if it doesn't
-    let image_args = args::build_image_exists_args(&image_tag);
-    if docker.query_command(image_args)?.trim().is_empty() {
+    if !docker.image_exists(&image_tag)? {
         println!("Building nix daemon image: {}", image_tag);
         build_image(docker, &image_tag)?;
     }

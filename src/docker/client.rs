@@ -12,6 +12,12 @@ impl DockerClient {
         Ok(!output.trim().is_empty())
     }
 
+    pub fn image_exists(&self, tag: &str) -> Result<bool> {
+        let image_args = args::build_image_exists_args(tag);
+        let output = self.query_command(image_args)?;
+        Ok(!output.trim().is_empty())
+    }
+
     pub fn run_command(&self, args: Vec<String>) -> Result<()> {
         let output = Command::new("docker")
             .args(&args)
