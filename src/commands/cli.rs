@@ -25,7 +25,10 @@ pub enum Commands {
         command: Option<nix::NixCommands>,
     },
     /// Start an interactive OpenCode session
-    #[command(alias = "o")]
+    #[command(
+        alias = "o",
+        disable_help_flag = true,
+    )]
     Opencode {
         /// Extra arguments to pass to the opencode command
         #[arg(
