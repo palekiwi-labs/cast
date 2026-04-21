@@ -58,3 +58,23 @@ pub fn build_dev(
 
     Ok(())
 }
+
+/// Ensure the dev image exists locally, building it if necessary.
+pub fn ensure_dev_image(
+    docker: &DockerClient,
+    config: &Config,
+    user: &ResolvedUser,
+    version: &str,
+) -> Result<()> {
+    let image_tag = get_image_tag(version);
+
+    if !docker.image_exists(&image_tag)? {
+        println!(
+            "Image {} not found, building nix dev environment...",
+            image_tag
+        );
+        build_dev(docker, config, user, version, BuildOptions::default())?;
+    }
+
+    Ok(())
+}
