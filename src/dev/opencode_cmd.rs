@@ -11,10 +11,7 @@ pub fn resolve_opencode_command(
     user: &ResolvedUser,
     user_flake_present: bool,
 ) -> Vec<String> {
-    let base: Vec<String> = cfg
-        .nix_opencode_command
-        .clone()
-        .unwrap_or_else(|| cfg.opencode_command.clone());
+    let base = cfg.opencode_command.clone();
 
     if user_flake_present {
         let flake_dir = format!("/home/{}/.config/ocx/nix", user.username);
@@ -69,9 +66,9 @@ mod tests {
     }
 
     #[test]
-    fn test_nix_opencode_command_no_flake() {
+    fn test_custom_cmd_no_flake() {
         let cfg = Config {
-            nix_opencode_command: Some(vec!["my-opencode".to_string(), "--flag".to_string()]),
+            opencode_command: vec!["my-opencode".to_string(), "--flag".to_string()],
             ..Config::default()
         };
         let cmd = resolve_opencode_command(&cfg, &alice(), false);
@@ -79,9 +76,9 @@ mod tests {
     }
 
     #[test]
-    fn test_nix_opencode_command_with_flake() {
+    fn test_custom_cmd_with_flake() {
         let cfg = Config {
-            nix_opencode_command: Some(vec!["my-opencode".to_string(), "--flag".to_string()]),
+            opencode_command: vec!["my-opencode".to_string(), "--flag".to_string()],
             ..Config::default()
         };
         let cmd = resolve_opencode_command(&cfg, &alice(), true);

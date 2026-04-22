@@ -1,5 +1,4 @@
 {
-  "nix_opencode_command": ["nix", "develop", "-c", "opencode"],
   "extra_data_volumes": {
     "cargo": {
       "source": "~/.cargo/",
