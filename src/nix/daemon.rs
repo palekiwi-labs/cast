@@ -14,7 +14,6 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
 
     // Check if already running
     if docker.is_container_running(container_name)? {
-        println!("Nix daemon is already running: {}", container_name);
         return Ok(());
     }
 
