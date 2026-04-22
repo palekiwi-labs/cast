@@ -5,14 +5,15 @@ use crate::config::Config;
 use crate::dev;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_passthrough::build_passthrough_env_args;
+use crate::dev::opencode_cmd::resolve_opencode_command;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::{build_data_volume_args, build_extra_volume_args};
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
 use crate::nix;
 use crate::opencode;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Options for building the Docker run command.
 pub struct RunOpts {
@@ -67,7 +68,11 @@ pub fn run_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
     let opts = build_run_opts(config, &run_opts);
 
     // Build the full command.
-    let mut cmd = config.opencode_command.clone();
+    let mut cmd = resolve_opencode_command(
+        config,
+        &run_opts.user,
+        run_opts.user_flake_host_dir.is_some(),
+    );
     cmd.extend(extra_args);
 
     // Exec into the container.
@@ -219,11 +224,8 @@ mod tests {
         assert!(run_args.contains(&"no-new-privileges".to_string()));
         assert!(run_args.contains(&"USER=alice".to_string()));
         assert!(run_args.contains(&"/home/alice/project:/home/alice/project:rw".to_string()));
-        assert!(
-            run_args.contains(
-                &"/home/alice/.config/opencode:/home/alice/.config/opencode:rw".to_string()
-            )
-        );
+        assert!(run_args
+            .contains(&"/home/alice/.config/opencode:/home/alice/.config/opencode:rw".to_string()));
 
         // Port check
         if config.publish_port {
@@ -305,11 +307,8 @@ mod tests {
 
         let run_args = build_run_opts(&config, &opts);
 
-        assert!(
-            run_args.contains(
-                &"/home/alice/.config/ocx/nix:/home/alice/.config/ocx/nix:rw".to_string()
-            )
-        );
+        assert!(run_args
+            .contains(&"/home/alice/.config/ocx/nix:/home/alice/.config/ocx/nix:rw".to_string()));
     }
 
     #[test]

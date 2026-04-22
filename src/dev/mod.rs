@@ -3,6 +3,7 @@ pub mod container_name;
 pub mod env_passthrough;
 pub mod extra_dirs;
 pub mod image;
+pub mod opencode_cmd;
 pub mod port;
 pub mod run;
 pub mod shadow_mounts;
