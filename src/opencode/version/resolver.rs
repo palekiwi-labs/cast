@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use std::path::Path;
 
-use crate::version::cache;
-use crate::version::github::VersionFetcher;
+use crate::opencode::version::cache;
+use crate::opencode::version::github::VersionFetcher;
 
 /// Resolve a raw version string to a concrete semver string.
 ///
@@ -86,7 +86,7 @@ pub fn validate_semver(version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::version::cache::{write_cache, CacheEntry};
+    use crate::opencode::version::cache::{write_cache, CacheEntry};
     use std::fs;
     use std::path::PathBuf;
     use tempfile::TempDir;
@@ -187,7 +187,7 @@ mod tests {
         let path = tmp_cache(&dir);
 
         // Write a stale entry
-        let stale_nanos = crate::version::cache::now_nanos() - (48u64 * 3600 * 1_000_000_000);
+        let stale_nanos = crate::opencode::version::cache::now_nanos() - (48u64 * 3600 * 1_000_000_000);
         let stale = CacheEntry {
             version: "0.0.1".to_string(),
             fetched_at: stale_nanos,
@@ -205,7 +205,7 @@ mod tests {
         let path = tmp_cache(&dir);
 
         // Write a stale (expired) entry
-        let stale_nanos = crate::version::cache::now_nanos() - (48u64 * 3600 * 1_000_000_000);
+        let stale_nanos = crate::opencode::version::cache::now_nanos() - (48u64 * 3600 * 1_000_000_000);
         let stale = CacheEntry {
             version: "1.1.1".to_string(),
             fetched_at: stale_nanos,

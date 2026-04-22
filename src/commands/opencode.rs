@@ -7,6 +7,7 @@ use crate::dev::workspace::get_workspace;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
 use crate::nix;
+use crate::opencode;
 use crate::user::get_user;
 
 pub fn handle_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
@@ -18,7 +19,7 @@ pub fn handle_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
     nix::ensure_running(&docker, config)?;
 
     // Resolve version and ensure the dev image exists.
-    let version = dev::resolve_opencode_version(config)?;
+    let version = opencode::resolve_version(config)?;
     let image_tag = dev::image::get_image_tag(&version);
     dev::ensure_dev_image(&docker, config, &user, &version)?;
 
