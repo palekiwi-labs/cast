@@ -37,11 +37,7 @@ pub fn build_extra_volume_args(
 }
 
 /// Expand container-side target: `~/` → `/home/{username}/`, `./` → `{container_path}/`
-fn expand_container_target(
-    target: &str,
-    username: &str,
-    container_path: &std::path::PathBuf,
-) -> String {
+fn expand_container_target(target: &str, username: &str, container_path: &Path) -> String {
     if target == "~" {
         format!("/home/{}", username)
     } else if let Some(rest) = target.strip_prefix("~/") {
