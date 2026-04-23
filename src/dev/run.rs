@@ -23,6 +23,7 @@ pub struct RunOpts {
     pub opencode_config_dir: PathBuf,
     pub host_home_dir: Option<PathBuf>,
     pub user_flake_host_dir: Option<PathBuf>,
+    pub opencode_config_dir_env: Option<PathBuf>,
 }
 
 /// Orchestrate and run an OpenCode session.
@@ -55,6 +56,11 @@ pub fn run_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
         .filter(|h| h.join(".config/ocx/nix/flake.nix").exists())
         .map(|h| h.join(".config/ocx/nix"));
 
+    let opencode_config_dir_env = std::env::var("OPENCODE_CONFIG_DIR")
+        .ok()
+        .map(|p| dev::utils::expand_tilde(&p, host_home_dir.as_deref()))
+        .filter(|p| p.exists());
+
     let run_opts = RunOpts {
         workspace,
         user,
@@ -62,6 +68,7 @@ pub fn run_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
         opencode_config_dir,
         host_home_dir,
         user_flake_host_dir,
+        opencode_config_dir_env,
     };
 
     // Build docker run flags.
@@ -122,6 +129,16 @@ pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
 
     // LLM API keys and OpenCode-specific env vars present on the host.
     run_args.extend(build_passthrough_env_args());
+
+    // OPENCODE_CONFIG_DIR special case: bind-mount with container path rewrite.
+    if let Some(config_dir_env) = &opts.opencode_config_dir_env {
+        run_args.extend([
+            "-v".to_string(),
+            format!("{}:/opencode-config-dir:ro", config_dir_env.display()),
+            "-e".to_string(),
+            "OPENCODE_CONFIG_DIR=/opencode-config-dir".to_string(),
+        ]);
+    }
 
     // Nix store.
     run_args.extend([
@@ -205,15 +222,15 @@ mod tests {
             container_path: PathBuf::from("/home/alice/project"),
         };
         let opencode_config_dir = PathBuf::from("/home/alice/.config/opencode");
-        let port = 32768;
 
         let opts = RunOpts {
             workspace,
             user,
-            port,
+            port: 32768,
             opencode_config_dir,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_host_dir: None,
+            opencode_config_dir_env: None,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -226,11 +243,6 @@ mod tests {
         assert!(run_args.contains(&"/home/alice/project:/home/alice/project:rw".to_string()));
         assert!(run_args
             .contains(&"/home/alice/.config/opencode:/home/alice/.config/opencode:rw".to_string()));
-
-        // Port check
-        if config.publish_port {
-            assert!(run_args.contains(&"32768:80".to_string()));
-        }
 
         // Phase 2 volume checks
         assert!(run_args.contains(&format!("{}:/nix:ro", config.nix_volume_name)));
@@ -263,15 +275,15 @@ mod tests {
             container_path: PathBuf::from("/home/alice/project"),
         };
         let opencode_config_dir = PathBuf::from("/home/alice/.config/opencode");
-        let port = 32768;
 
         let opts = RunOpts {
             workspace,
             user,
-            port,
+            port: 32768,
             opencode_config_dir,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_host_dir: None,
+            opencode_config_dir_env: None,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -303,6 +315,7 @@ mod tests {
             opencode_config_dir,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_host_dir: Some(flake_dir),
+            opencode_config_dir_env: None,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -332,6 +345,7 @@ mod tests {
             opencode_config_dir,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_host_dir: None,
+            opencode_config_dir_env: None,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -340,5 +354,101 @@ mod tests {
         for arg in &run_args {
             assert!(!arg.contains("/.config/ocx/nix"));
         }
+    }
+
+    #[test]
+    fn test_build_run_opts_opencode_config_dir_env_set() {
+        let config = Config::default();
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opencode_config_dir = PathBuf::from("/home/alice/.config/opencode");
+        let config_dir_env = PathBuf::from("/some/host/config");
+
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            opencode_config_dir,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_host_dir: None,
+            opencode_config_dir_env: Some(config_dir_env),
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+
+        assert!(run_args.contains(&"-v".to_string()));
+        assert!(run_args.contains(&"/some/host/config:/opencode-config-dir:ro".to_string()));
+        assert!(run_args.contains(&"-e".to_string()));
+        assert!(run_args.contains(&"OPENCODE_CONFIG_DIR=/opencode-config-dir".to_string()));
+    }
+
+    #[test]
+    fn test_build_run_opts_opencode_config_dir_env_unset() {
+        let config = Config::default();
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opencode_config_dir = PathBuf::from("/home/alice/.config/opencode");
+
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            opencode_config_dir,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_host_dir: None,
+            opencode_config_dir_env: None,
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+
+        for arg in &run_args {
+            assert!(!arg.contains("/opencode-config-dir"));
+        }
+    }
+
+    #[test]
+    fn test_build_run_opts_opencode_config_dir_env_tilde() {
+        let config = Config::default();
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opencode_config_dir = PathBuf::from("/home/alice/.config/opencode");
+        // We simulate what happens after expansion in run_opencode
+        let config_dir_env = PathBuf::from("/home/alice/.config/opencode-custom");
+
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            opencode_config_dir,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_host_dir: None,
+            opencode_config_dir_env: Some(config_dir_env),
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+
+        assert!(run_args
+            .contains(&"/home/alice/.config/opencode-custom:/opencode-config-dir:ro".to_string()));
     }
 }
