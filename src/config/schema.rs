@@ -51,6 +51,9 @@ pub struct Config {
     pub nix_extra_substituters: Vec<String>,
     pub nix_extra_trusted_public_keys: Vec<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nix_opencode_command: Option<Vec<String>>,
+
     // Security
     pub read_only: bool,
     pub forbidden_paths: Vec<String>,
@@ -108,6 +111,7 @@ impl Default for Config {
             nix_daemon_container_name: format!("{}ocx-nix-daemon", dev_prefix),
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
+            nix_opencode_command: None,
             read_only: false,
             forbidden_paths: Vec::new(),
             timezone: None,
