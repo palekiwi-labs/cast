@@ -78,12 +78,6 @@ pub struct VolumeConfig {
 
 impl Default for Config {
     fn default() -> Self {
-        // In debug builds, prefix container/volume names to avoid conflicts with production
-        #[cfg(debug_assertions)]
-        let dev_prefix = "dev-";
-        #[cfg(not(debug_assertions))]
-        let dev_prefix = "";
-
         Config {
             opencode_version: "latest".to_string(),
             container_name: None,
@@ -103,8 +97,8 @@ impl Default for Config {
             custom_base_dockerfile: None,
             data_volumes_name: "ocx".to_string(),
             extra_data_volumes: HashMap::new(),
-            nix_volume_name: format!("{}ocx-nix", dev_prefix),
-            nix_daemon_container_name: format!("{}ocx-nix-daemon", dev_prefix),
+            nix_volume_name: "ocx-nix".to_string(),
+            nix_daemon_container_name: "ocx-nix-daemon".to_string(),
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             nix_opencode_command: None,
