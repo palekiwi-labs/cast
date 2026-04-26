@@ -30,7 +30,10 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     let nix_conf_content = nix_config::generate_nix_conf(config);
 
     // Start the daemon container
-    println!("Starting nix daemon container: {}", container_name);
+    println!(
+        "Starting nix daemon container: {} ({})",
+        container_name, image_tag
+    );
 
     // Assemble options
     let opts = vec![
