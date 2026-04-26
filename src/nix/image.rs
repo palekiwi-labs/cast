@@ -8,7 +8,7 @@ const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Get the full image tag for the nix daemon container
 ///
-/// Format: `localhost/ocx-nix-daemon:v<version>`
+/// Format: `localhost/ocx-nix-daemon:<version>`
 pub fn get_image_tag() -> String {
     format!("{}:{}", IMAGE_BASE, OCX_VERSION)
 }

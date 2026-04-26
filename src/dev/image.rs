@@ -2,9 +2,7 @@ const DOCKERFILE: &str = include_str!("../../assets/nix/Dockerfile.nix-dev");
 const IMAGE_BASE: &str = "localhost/ocx";
 const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag for the nix dev container.
-///
-/// Format: `localhost/ocx:{ocx_version}-opencode-{opencode_version}`
+/// Get the full image tag: `localhost/ocx:{ocx_version}-opencode-{opencode_version}`
 pub fn get_image_tag(opencode_version: &str) -> String {
     format!(
         "{}:{}-opencode-{}",
