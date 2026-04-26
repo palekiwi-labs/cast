@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 ///
 /// If `home_dir` is `None` or `path` does not start with `~/`, the path is
 /// returned as-is. This is the host-side equivalent of the container-side
-/// tilde expansion in `nix::extra_dirs`, which uses a username string instead.
+/// tilde expansion in `nix_daemon::extra_dirs`, which uses a username string instead.
 pub fn expand_tilde(path: &str, home_dir: Option<&Path>) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/")
         && let Some(home) = home_dir {

@@ -4,7 +4,7 @@ use crate::config::Config;
 use crate::dev;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
-use crate::nix;
+use crate::nix_daemon;
 use crate::opencode;
 use crate::user::get_user;
 
@@ -17,7 +17,7 @@ pub fn handle_build(cfg: &Config, base: bool, force: bool, no_cache: bool) -> Re
     let opts = BuildOptions { force, no_cache };
 
     if base {
-        nix::build(&docker, opts)?;
+        nix_daemon::build(&docker, opts)?;
     }
 
     dev::build_dev(&docker, cfg, &user, &version, opts)?;

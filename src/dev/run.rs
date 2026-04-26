@@ -12,7 +12,7 @@ use crate::dev::volumes::{build_data_volume_args, build_extra_volume_args};
 use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::nix;
+use crate::nix_daemon;
 use crate::opencode;
 use crate::user::{get_user, ResolvedUser};
 
@@ -41,7 +41,7 @@ pub fn run_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
     let workspace = get_workspace(&user.username)?;
 
     // Ensure the Nix daemon is running.
-    nix::ensure_running(&docker, config)?;
+    nix_daemon::ensure_running(&docker, config)?;
 
     // Resolve version and ensure the dev image exists.
     let version = opencode::resolve_version(config)?;

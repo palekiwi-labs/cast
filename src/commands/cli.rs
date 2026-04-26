@@ -1,4 +1,4 @@
-use super::{build, config, nix, opencode, port};
+use super::{build, config, nix_daemon, opencode, port};
 use crate::config::load_config;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -20,15 +20,13 @@ pub enum Commands {
         command: Option<config::ConfigCommands>,
     },
     /// Manage Nix daemon
-    Nix {
+    #[command(name = "nix-daemon")]
+    NixDaemon {
         #[command(subcommand)]
-        command: Option<nix::NixCommands>,
+        command: Option<nix_daemon::NixDaemonCommands>,
     },
     /// Start an interactive OpenCode session
-    #[command(
-        alias = "o",
-        disable_help_flag = true,
-    )]
+    #[command(alias = "o", disable_help_flag = true)]
     Opencode {
         /// Extra arguments to pass to the opencode command
         #[arg(
@@ -57,7 +55,7 @@ pub fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
-        Some(Commands::Nix { command }) => nix::handle_nix(&cfg, command),
+        Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Opencode { extra_args }) => opencode::handle_opencode(&cfg, extra_args),
         Some(Commands::Port) => port::handle_port(&cfg),
         Some(Commands::Build {

@@ -1,7 +1,7 @@
 mod build;
 mod cli;
 mod config;
-mod nix;
+mod nix_daemon;
 mod opencode;
 mod port;
 

@@ -5,7 +5,7 @@ use crate::config::Config;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
-use crate::nix::{config as nix_config, image};
+use crate::nix_daemon::{config as nix_config, image};
 use anyhow::Result;
 
 /// Ensure the nix daemon container is running

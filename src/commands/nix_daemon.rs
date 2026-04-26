@@ -4,10 +4,10 @@ use clap::Subcommand;
 use crate::config::Config;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
-use crate::nix;
+use crate::nix_daemon;
 
 #[derive(Subcommand)]
-pub enum NixCommands {
+pub enum NixDaemonCommands {
     /// Start the nix daemon container
     Start,
     /// Stop the nix daemon container
@@ -25,27 +25,27 @@ pub enum NixCommands {
     },
 }
 
-pub fn handle_nix(cfg: &Config, command: Option<NixCommands>) -> Result<()> {
+pub fn handle_nix_daemon(cfg: &Config, command: Option<NixDaemonCommands>) -> Result<()> {
     match command {
-        Some(NixCommands::Start) => {
+        Some(NixDaemonCommands::Start) => {
             let docker = DockerClient;
-            nix::ensure_running(&docker, cfg)?;
+            nix_daemon::ensure_running(&docker, cfg)?;
             Ok(())
         }
-        Some(NixCommands::Stop) => {
+        Some(NixDaemonCommands::Stop) => {
             let docker = DockerClient;
-            nix::stop(&docker, cfg)?;
+            nix_daemon::stop(&docker, cfg)?;
             Ok(())
         }
-        Some(NixCommands::BuildDaemon { force, no_cache }) => {
+        Some(NixDaemonCommands::BuildDaemon { force, no_cache }) => {
             let docker = DockerClient;
             let opts = BuildOptions { force, no_cache };
-            nix::build(&docker, opts)?;
+            nix_daemon::build(&docker, opts)?;
             Ok(())
         }
         None => {
-            // No subcommand provided, print help for nix
-            println!("Usage: ocx nix <COMMAND>");
+            // No subcommand provided, print help for nix-daemon
+            println!("Usage: ocx nix-daemon <COMMAND>");
             println!();
             println!("Commands:");
             println!("  start    Start the nix daemon container");
