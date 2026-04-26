@@ -4,15 +4,8 @@ FROM nixos/nix:2.34.6
 # This is necessary because the daemon builds repos on behalf of multiple dev containers
 RUN git config --global safe.directory "*"
 
-# Copy and set up the entrypoint script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+VOLUME /nix
 
-# Environment variable for configuration injection
 ENV GC_NPROCS=1
 
-# Use custom entrypoint for config injection
-ENTRYPOINT ["/entrypoint.sh"]
-
-# Default command is to run the nix daemon
 CMD ["nix-daemon"]

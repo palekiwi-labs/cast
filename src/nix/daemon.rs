@@ -40,7 +40,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
         "-d".to_string(),
         "--rm".to_string(),
         "-e".to_string(),
-        format!("NIX_CONF_CONTENT={}", nix_conf_content),
+        format!("NIX_CONFIG={}", nix_conf_content),
         "-v".to_string(),
         format!("{}:/nix:rw", config.nix_volume_name),
     ];
@@ -61,10 +61,6 @@ fn build_image(docker: &DockerClient, tag: &str, no_cache: bool) -> Result<()> {
     // Write the Dockerfile
     let dockerfile_path = context_path.join("Dockerfile");
     fs::write(&dockerfile_path, image::get_dockerfile())?;
-
-    // Write the entrypoint script
-    let entrypoint_path = context_path.join("entrypoint.sh");
-    fs::write(&entrypoint_path, image::get_entrypoint())?;
 
     // Build the image
     let build_args = args::build_docker_build_args(tag, context_path, &[], no_cache);

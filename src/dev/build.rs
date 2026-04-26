@@ -9,7 +9,7 @@ use crate::user::ResolvedUser;
 use anyhow::Result;
 
 use super::extra_dirs::resolve_extra_dirs;
-use super::image::{get_dockerfile, get_entrypoint, get_image_tag};
+use super::image::{get_dockerfile, get_image_tag};
 
 /// Build the nix dev image locally.
 pub fn build_dev(
@@ -36,9 +36,6 @@ pub fn build_dev(
 
     let dockerfile_path = context_path.join("Dockerfile");
     fs::write(&dockerfile_path, get_dockerfile())?;
-
-    let entrypoint_path = context_path.join("entrypoint.sh");
-    fs::write(&entrypoint_path, get_entrypoint())?;
 
     let extra_dirs = resolve_extra_dirs(config, &user.username);
     let uid_str = user.uid.to_string();
