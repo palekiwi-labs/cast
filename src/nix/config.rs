@@ -3,7 +3,7 @@ use crate::config::Config;
 /// Generate the nix.conf content based on the provided configuration.
 ///
 /// This configuration is injected into the nix daemon container via
-/// the NIX_CONF_CONTENT environment variable.
+/// the NIX_CONFIG environment variable.
 pub fn generate_nix_conf(config: &Config) -> String {
     let mut conf = String::new();
 

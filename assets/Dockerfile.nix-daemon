@@ -1,0 +1,11 @@
+FROM nixos/nix:2.34.6
+
+# Allow building git repositories owned by different users
+# This is necessary because the daemon builds repos on behalf of multiple dev containers
+RUN git config --global safe.directory "*"
+
+VOLUME /nix
+
+ENV GC_NPROCS=1
+
+CMD ["nix-daemon"]

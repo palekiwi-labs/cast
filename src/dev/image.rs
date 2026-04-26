@@ -1,25 +1,18 @@
-use crate::docker::image_hash::compute_hash;
-
-const DOCKERFILE: &str = include_str!("../../assets/nix/Dockerfile.nix-dev");
-const ENTRYPOINT: &str = include_str!("../../assets/nix/entrypoint-dev.sh");
+const DOCKERFILE: &str = include_str!("../../assets/Dockerfile.dev");
 const IMAGE_BASE: &str = "localhost/ocx";
+const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag for the nix dev container.
-///
-/// Format: `localhost/ocx:v{version}-sha-{hash}`
-pub fn get_image_tag(version: &str) -> String {
-    let hash = compute_hash(DOCKERFILE, ENTRYPOINT);
-    format!("{}:v{}-sha-{}", IMAGE_BASE, version, hash)
+/// Get the full image tag: `localhost/ocx:{ocx_version}-opencode-{opencode_version}`
+pub fn get_image_tag(opencode_version: &str) -> String {
+    format!(
+        "{}:{}-opencode-{}",
+        IMAGE_BASE, OCX_VERSION, opencode_version
+    )
 }
 
 /// Get the embedded Dockerfile content for the nix dev image.
 pub fn get_dockerfile() -> &'static str {
     DOCKERFILE
-}
-
-/// Get the embedded entrypoint script content for the nix dev image.
-pub fn get_entrypoint() -> &'static str {
-    ENTRYPOINT
 }
 
 #[cfg(test)]
@@ -28,33 +21,17 @@ mod tests {
 
     #[test]
     fn test_get_image_tag_format() {
-        let tag = get_image_tag("1.4.7");
-
-        assert!(tag.starts_with("localhost/ocx:v1.4.7-sha-"));
-        assert_eq!(tag.len(), "localhost/ocx:v1.4.7-sha-".len() + 8);
-    }
-
-    #[test]
-    fn test_get_image_tag_hash_is_hex() {
-        let tag = get_image_tag("1.0.0");
-        let hash = tag.split("-sha-").nth(1).unwrap();
-
-        assert_eq!(hash.len(), 8);
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()));
-    }
-
-    #[test]
-    fn test_get_dockerfile_is_not_empty() {
-        assert!(!get_dockerfile().is_empty());
+        assert_eq!(
+            get_image_tag("1.4.7"),
+            format!(
+                "localhost/ocx:{}-opencode-1.4.7",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
     }
 
     #[test]
     fn test_get_dockerfile_has_correct_base_image() {
         assert!(get_dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_get_entrypoint_is_not_empty() {
-        assert!(!get_entrypoint().is_empty());
     }
 }
