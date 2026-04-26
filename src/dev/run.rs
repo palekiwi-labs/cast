@@ -51,11 +51,7 @@ pub fn run_opencode(config: &Config, extra_args: Vec<String>) -> Result<()> {
     // Resolve port and container name.
     let port = dev::port::resolve_port(config)?;
     let opencode_config_dir = opencode::ensure_config_dir()?;
-    let cwd_basename = workspace
-        .root
-        .file_name()
-        .and_then(|n| n.to_str())
-        .expect("Workspace root should have a valid directory name");
+    let cwd_basename = workspace.root_basename();
     let container_name = resolve_container_name(config, cwd_basename, port);
 
     let host_home_dir = dirs::home_dir();

@@ -7,6 +7,7 @@ pub mod image;
 pub mod opencode_cmd;
 pub mod port;
 pub mod run;
+pub mod shell;
 pub mod shadow_mounts;
 pub mod utils;
 pub mod volumes;
@@ -14,3 +15,4 @@ pub mod workspace;
 
 pub use build::{build_dev, ensure_dev_image};
 pub use run::run_opencode;
+pub use shell::shell;

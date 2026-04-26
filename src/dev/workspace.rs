@@ -8,6 +8,16 @@ pub struct ResolvedWorkspace {
     pub container_path: PathBuf,
 }
 
+impl ResolvedWorkspace {
+    /// Get the basename of the workspace root directory.
+    pub fn root_basename(&self) -> &str {
+        self.root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .expect("Workspace root should have a valid directory name")
+    }
+}
+
 /// Imperative shell — performs all OS interaction.
 /// Call this from the command handler.
 pub fn get_workspace(username: &str) -> Result<ResolvedWorkspace> {
