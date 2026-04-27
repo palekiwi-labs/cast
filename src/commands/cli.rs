@@ -1,6 +1,7 @@
 use super::{build, config, nix_daemon, opencode, port};
 use crate::config::load_config;
 use crate::dev;
+use crate::dev::opencode::OpenCodeHarness;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -67,7 +68,7 @@ pub fn run(cli: Cli) -> Result<()> {
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Opencode { extra_args }) => opencode::handle_opencode(&cfg, extra_args),
         Some(Commands::Port) => port::handle_port(&cfg),
-        Some(Commands::Shell) => dev::shell(&cfg),
+        Some(Commands::Shell) => dev::shell(&OpenCodeHarness, &cfg),
         None => unreachable!("Clap should handle required subcommands"),
     }
 }

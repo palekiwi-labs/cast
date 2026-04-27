@@ -2,14 +2,29 @@ use std::fs;
 use tempfile::TempDir;
 
 use crate::config::Config;
+use crate::dev::extra_dirs::resolve_extra_dirs;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 
-use super::extra_dirs::resolve_extra_dirs;
-use super::image::{get_dockerfile, get_image_tag};
+const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.dev");
+const IMAGE_BASE: &str = "localhost/ocx";
+const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Get the full image tag: `localhost/ocx:{ocx_version}-opencode-{opencode_version}`
+pub fn get_image_tag(opencode_version: &str) -> String {
+    format!(
+        "{}:{}-opencode-{}",
+        IMAGE_BASE, OCX_VERSION, opencode_version
+    )
+}
+
+/// Get the embedded Dockerfile content for the nix dev image.
+pub fn get_dockerfile() -> &'static str {
+    DOCKERFILE
+}
 
 /// Build the nix dev image locally.
 pub fn build_dev(
@@ -62,6 +77,7 @@ pub fn ensure_dev_image(
     config: &Config,
     user: &ResolvedUser,
     version: &str,
+    opts: BuildOptions,
 ) -> Result<()> {
     let image_tag = get_image_tag(version);
 
@@ -70,8 +86,26 @@ pub fn ensure_dev_image(
             "Image {} not found, building nix dev environment...",
             image_tag
         );
-        build_dev(docker, config, user, version, BuildOptions::default())?;
+        build_dev(docker, config, user, version, opts)?;
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_image_tag_format() {
+        assert_eq!(
+            get_image_tag("1.4.7"),
+            format!("localhost/ocx:{}-opencode-1.4.7", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn test_get_dockerfile_has_correct_base_image() {
+        assert!(get_dockerfile().contains("FROM debian:trixie-slim"));
+    }
 }

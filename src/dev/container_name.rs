@@ -1,17 +1,22 @@
 use crate::config::Config;
 
-/// Resolve the Docker container name for the opencode session.
+/// Resolve the Docker container name for a harness session.
 ///
 /// - If `cfg.container_name` is set: `"{name}-{port}"`
-/// - Otherwise: `"ocx-{basename}-{port}"` where `basename` is the name of the
-///   current working directory.
+/// - Otherwise: `"ocx-{harness}-{basename}-{port}"` where `harness` is the
+///   harness identifier and `basename` is the name of the current working directory.
 ///
-/// `cwd_basename` is injected by the caller (from `std::env::current_dir()`)
-/// so that this function remains pure and fully unit-testable.
-pub fn resolve_container_name(cfg: &Config, cwd_basename: &str, port: u16) -> String {
+/// Both `harness_name` and `cwd_basename` are injected by the caller so that
+/// this function remains pure and fully unit-testable.
+pub fn resolve_container_name(
+    cfg: &Config,
+    harness_name: &str,
+    cwd_basename: &str,
+    port: u16,
+) -> String {
     match &cfg.container_name {
         Some(name) => format!("{}-{}", name, port),
-        None => format!("ocx-{}-{}", cwd_basename, port),
+        None => format!("ocx-{}-{}-{}", harness_name, cwd_basename, port),
     }
 }
 
@@ -26,17 +31,17 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            resolve_container_name(&cfg, "irrelevant", 8080),
+            resolve_container_name(&cfg, "opencode", "irrelevant", 8080),
             "my-project-8080",
         );
     }
 
     #[test]
-    fn test_default_uses_basename_and_port() {
+    fn test_default_uses_harness_basename_and_port() {
         let cfg = Config::default();
         assert_eq!(
-            resolve_container_name(&cfg, "my-app", 8080),
-            "ocx-my-app-8080",
+            resolve_container_name(&cfg, "opencode", "my-app", 8080),
+            "ocx-opencode-my-app-8080",
         );
     }
 }
