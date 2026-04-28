@@ -3,9 +3,9 @@ use std::path::PathBuf;
 
 use crate::config::Config;
 use crate::dev;
+use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
-use crate::dev::harness::Harness;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::{build_data_volume_args, build_extra_volume_args};
 use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
@@ -16,8 +16,8 @@ use crate::nix_daemon;
 use crate::user::{get_user, ResolvedUser};
 
 /// Generic options for building the Docker run command.
-/// Contains only harness-agnostic data; each harness resolves its own
-/// additional context inside `Harness::extra_run_args`.
+/// Contains only agent-agnostic data; each agent resolves its own
+/// additional context inside `Agent::extra_run_args`.
 pub struct RunOpts {
     pub workspace: ResolvedWorkspace,
     pub user: ResolvedUser,
@@ -25,8 +25,8 @@ pub struct RunOpts {
     pub host_home_dir: Option<PathBuf>,
 }
 
-/// Orchestrate and run a harness session inside the dev container.
-pub fn run_harness(harness: &dyn Harness, config: &Config, extra_args: Vec<String>) -> Result<()> {
+/// Orchestrate and run an agent session inside the dev container.
+pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) -> Result<()> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -34,14 +34,14 @@ pub fn run_harness(harness: &dyn Harness, config: &Config, extra_args: Vec<Strin
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
 
-    // Resolve the image for this harness and ensure it exists locally.
-    let image_tag = harness.image_tag(config)?;
-    harness.ensure_image(&docker, config, &user, BuildOptions::default())?;
+    // Resolve the image for this agent and ensure it exists locally.
+    let image_tag = agent.image_tag(config)?;
+    agent.ensure_image(&docker, config, &user, BuildOptions::default())?;
 
     // Resolve port and container name.
     let port = dev::port::resolve_port(config)?;
     let cwd_basename = workspace.root_basename();
-    let container_name = resolve_container_name(config, harness.name(), cwd_basename, port);
+    let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
 
     let host_home_dir = dirs::home_dir();
 
@@ -52,20 +52,20 @@ pub fn run_harness(harness: &dyn Harness, config: &Config, extra_args: Vec<Strin
         host_home_dir,
     };
 
-    // Build generic docker run flags, then append harness-specific ones.
+    // Build generic docker run flags, then append agent-specific ones.
     let mut opts = build_run_opts(config, &run_opts);
-    opts.extend(harness.extra_run_args(config, &run_opts)?);
+    opts.extend(agent.extra_run_args(config, &run_opts)?);
 
     // Build the full command and exec into the container.
-    let cmd = harness.command(config, &run_opts.user, extra_args);
+    let cmd = agent.command(config, &run_opts.user, extra_args);
     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
     Err(docker.exec_command(docker_args))
 }
 
-/// Build the generic set of Docker run flags that apply to every harness.
+/// Build the generic set of Docker run flags that apply to every agent.
 ///
-/// Harness-specific arguments (env vars, program-specific mounts, etc.) are
-/// NOT included here — each harness appends them via `Harness::extra_run_args`.
+/// Agent-specific arguments (env vars, program-specific mounts, etc.) are
+/// NOT included here — each agent appends them via `Agent::extra_run_args`.
 pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
     let mut run_args: Vec<String> = vec![
         "--rm".to_string(),

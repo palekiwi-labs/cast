@@ -6,20 +6,20 @@ use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 
-/// A harness encapsulates everything that is specific to a particular program
+/// An agent encapsulates everything that is specific to a particular program
 /// run inside the dev container (e.g. OpenCode, ClaudeCode).
 ///
 /// Generic docker run arguments (security, resource limits, workspace mount,
-/// shadow mounts, etc.) are assembled by the caller. The harness is responsible
+/// shadow mounts, etc.) are assembled by the caller. The agent is responsible
 /// only for the program-specific layer on top.
-pub trait Harness {
+pub trait Agent {
     /// Short identifier used in container names and CLI subcommands (e.g. `"opencode"`).
     fn name(&self) -> &str;
 
-    /// Resolve the Docker image tag that should be used for this harness.
+    /// Resolve the Docker image tag that should be used for this agent.
     fn image_tag(&self, config: &Config) -> Result<String>;
 
-    /// Ensure the harness image exists locally, building it if necessary.
+    /// Ensure the agent image exists locally, building it if necessary.
     fn ensure_image(
         &self,
         docker: &DockerClient,
@@ -28,7 +28,7 @@ pub trait Harness {
         opts: BuildOptions,
     ) -> Result<()>;
 
-    /// Return harness-specific `docker run` arguments (env vars, mounts, etc.)
+    /// Return agent-specific `docker run` arguments (env vars, mounts, etc.)
     /// that are appended after the generic arguments.
     fn extra_run_args(&self, config: &Config, opts: &RunOpts) -> Result<Vec<String>>;
 

@@ -8,7 +8,7 @@ use anyhow::Result;
 use std::path::{Path, PathBuf};
 
 use crate::config::Config;
-use crate::dev::harness::Harness;
+use crate::dev::agent::Agent;
 use crate::dev::opencode::version::github::GithubVersionFetcher;
 use crate::dev::opencode::version::{get_cache_path, resolve_version as do_resolve_version};
 use crate::dev::run::RunOpts;
@@ -36,10 +36,10 @@ pub fn resolve_config_dir_env(env_val: Option<String>, home_dir: Option<&Path>) 
         .filter(|p| p.exists())
 }
 
-/// The OpenCode harness — runs the `opencode` program inside the dev container.
-pub struct OpenCodeHarness;
+/// The OpenCode agent — runs the `opencode` program inside the dev container.
+pub struct OpenCode;
 
-impl Harness for OpenCodeHarness {
+impl Agent for OpenCode {
     fn name(&self) -> &str {
         "opencode"
     }
@@ -190,7 +190,7 @@ mod tests {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
 
-        let args = OpenCodeHarness.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
 
         for arg in &args {
             assert!(!arg.contains("/.config/ocx/nix"), "unexpected flake mount: {}", arg);
@@ -205,7 +205,7 @@ mod tests {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
 
-        let args = OpenCodeHarness.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
 
         for arg in &args {
             assert!(!arg.contains("/opencode-config-dir"), "unexpected env mount: {}", arg);
@@ -221,7 +221,7 @@ mod tests {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
 
-        let args = OpenCodeHarness.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
 
         // Clean up env before any assertions that could panic.
         unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
@@ -252,7 +252,7 @@ mod tests {
             host_home_dir: Some(home_dir),
         };
 
-        let args = OpenCodeHarness.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
 
         unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
 
@@ -281,7 +281,7 @@ mod tests {
             host_home_dir: Some(PathBuf::from("/home/alice")),
         };
 
-        let args = OpenCodeHarness.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
 
         // The opencode config dir mount must not appear (workspace covers it).
         let mount_count = args

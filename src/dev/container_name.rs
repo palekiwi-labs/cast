@@ -1,22 +1,22 @@
 use crate::config::Config;
 
-/// Resolve the Docker container name for a harness session.
+/// Resolve the Docker container name for an agent session.
 ///
 /// - If `cfg.container_name` is set: `"{name}-{port}"`
-/// - Otherwise: `"ocx-{harness}-{basename}-{port}"` where `harness` is the
-///   harness identifier and `basename` is the name of the current working directory.
+/// - Otherwise: `"ocx-{agent}-{basename}-{port}"` where `agent` is the
+///   agent identifier and `basename` is the name of the current working directory.
 ///
-/// Both `harness_name` and `cwd_basename` are injected by the caller so that
+/// Both `agent_name` and `cwd_basename` are injected by the caller so that
 /// this function remains pure and fully unit-testable.
 pub fn resolve_container_name(
     cfg: &Config,
-    harness_name: &str,
+    agent_name: &str,
     cwd_basename: &str,
     port: u16,
 ) -> String {
     match &cfg.container_name {
         Some(name) => format!("{}-{}", name, port),
-        None => format!("ocx-{}-{}-{}", harness_name, cwd_basename, port),
+        None => format!("ocx-{}-{}-{}", agent_name, cwd_basename, port),
     }
 }
 
@@ -37,7 +37,7 @@ mod tests {
     }
 
     #[test]
-    fn test_default_uses_harness_basename_and_port() {
+    fn test_default_uses_agent_basename_and_port() {
         let cfg = Config::default();
         assert_eq!(
             resolve_container_name(&cfg, "opencode", "my-app", 8080),

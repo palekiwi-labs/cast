@@ -1,8 +1,8 @@
 use anyhow::Result;
 
 use crate::config::Config;
-use crate::dev::harness::Harness;
-use crate::dev::opencode::OpenCodeHarness;
+use crate::dev::agent::Agent;
+use crate::dev::opencode::OpenCode;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::nix_daemon;
@@ -17,7 +17,7 @@ pub fn handle_build(cfg: &Config, base: bool, force: bool, no_cache: bool) -> Re
         nix_daemon::build(&docker, opts)?;
     }
 
-    OpenCodeHarness.ensure_image(&docker, cfg, &user, opts)?;
+    OpenCode.ensure_image(&docker, cfg, &user, opts)?;
 
     Ok(())
 }

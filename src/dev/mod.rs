@@ -1,7 +1,7 @@
+pub mod agent;
 pub mod container_name;
 pub mod env_file;
 pub mod extra_dirs;
-pub mod harness;
 pub mod opencode;
 pub mod port;
 pub mod run;
@@ -11,5 +11,5 @@ pub mod utils;
 pub mod volumes;
 pub mod workspace;
 
-pub use run::run_harness;
+pub use run::run_agent;
 pub use shell::shell;
