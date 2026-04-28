@@ -127,11 +127,8 @@ impl Agent for OpenCode {
         Ok(args)
     }
 
-    fn command(&self, config: &Config, user: &ResolvedUser, extra_args: Vec<String>) -> Vec<String> {
-        let user_flake_present = dirs::home_dir()
-            .filter(|h| h.join(".config/ocx/nix/flake.nix").exists())
-            .is_some();
-        let mut command = cmd::resolve_opencode_command(config, user, user_flake_present);
+    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
+        let mut command = cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
         command.extend(extra_args);
         command
     }
@@ -161,6 +158,7 @@ mod tests {
             user: alice(),
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
         }
     }
 
@@ -280,6 +278,7 @@ mod tests {
             user: alice(),
             port: 32768,
             host_home_dir: Some(home_dir),
+            user_flake_present: false,
         };
 
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
@@ -305,6 +304,7 @@ mod tests {
             user: alice(),
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
         };
         let env = HashMap::new();
 

@@ -46,6 +46,5 @@ pub trait Agent {
     }
 
     /// Build the command vector that will be passed to `docker run` after all flags.
-    fn command(&self, config: &Config, user: &ResolvedUser, extra_args: Vec<String>)
-        -> Vec<String>;
+    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String>;
 }

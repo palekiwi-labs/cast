@@ -25,6 +25,7 @@ pub struct RunOpts {
     pub user: ResolvedUser,
     pub port: u16,
     pub host_home_dir: Option<PathBuf>,
+    pub user_flake_present: bool,
 }
 
 /// Orchestrate and run an agent session inside the dev container.
@@ -48,11 +49,17 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     let host_home_dir = dirs::home_dir();
     let env: HashMap<String, String> = std::env::vars().collect();
 
+    let user_flake_present = host_home_dir
+        .as_ref()
+        .filter(|h| h.join(".config/ocx/nix/flake.nix").exists())
+        .is_some();
+
     let run_opts = RunOpts {
         workspace,
         user,
         port,
         host_home_dir,
+        user_flake_present,
     };
 
     // Prepare host-side side effects before building arguments.
@@ -63,7 +70,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
 
     // Build the full command and exec into the container.
-    let cmd = agent.command(config, &run_opts.user, extra_args);
+    let cmd = agent.command(config, &run_opts, extra_args);
     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
     Err(docker.exec_command(docker_args))
 }
@@ -182,6 +189,7 @@ mod tests {
             user,
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -233,6 +241,7 @@ mod tests {
             user,
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);
