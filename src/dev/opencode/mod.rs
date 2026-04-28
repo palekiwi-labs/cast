@@ -294,7 +294,6 @@ mod tests {
         let config = Config::default();
         // workspace root == opencode config dir → no duplicate mount
         let workspace_root = dirs::config_dir().unwrap().join("opencode");
-        std::fs::create_dir_all(&workspace_root).unwrap();
 
         let opts = RunOpts {
             workspace: ResolvedWorkspace {
