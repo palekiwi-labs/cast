@@ -12,7 +12,6 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::version::github::GithubVersionFetcher;
-use crate::dev::opencode::version::{get_cache_path, resolve_version as do_resolve_version};
 use crate::dev::run::RunOpts;
 use crate::dev::utils;
 use crate::docker::client::DockerClient;
@@ -21,8 +20,8 @@ use crate::user::ResolvedUser;
 
 /// Resolve the concrete opencode version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
-    let cache_path = get_cache_path();
-    do_resolve_version(
+    let cache_path = version::get_cache_path();
+    version::resolve_version(
         &config.opencode_version,
         config.version_cache_ttl_hours,
         &cache_path,
