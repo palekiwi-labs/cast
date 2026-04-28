@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_extra_volume_args_named_volume_plain_target() {
-        let mut cfg = Config::default(); // data_volumes_name = "ocx"
+        let mut cfg = Config::default(); // data_volumes_name = "cast"
         cfg.extra_data_volumes.insert(
             "cargo".to_string(),
             volume("/home/alice/.cargo", "volume", None, "rw"),
@@ -135,7 +135,7 @@ mod tests {
 
         let args = build_extra_volume_args(&cfg, &user, &ws, Some(Path::new("/home/alice")));
 
-        assert_eq!(args, vec!["-v", "ocx-cargo:/home/alice/.cargo:rw"]);
+        assert_eq!(args, vec!["-v", "cast-cargo:/home/alice/.cargo:rw"]);
     }
 
     #[test]
@@ -150,7 +150,7 @@ mod tests {
 
         let args = build_extra_volume_args(&cfg, &user, &ws, Some(Path::new("/home/alice")));
 
-        assert_eq!(args, vec!["-v", "ocx-cargo:/home/alice/.cargo:rw"]);
+        assert_eq!(args, vec!["-v", "cast-cargo:/home/alice/.cargo:rw"]);
     }
 
     #[test]
@@ -163,7 +163,7 @@ mod tests {
 
         let args = build_extra_volume_args(&cfg, &user, &ws, Some(Path::new("/home/alice")));
 
-        assert_eq!(args, vec!["-v", "ocx-data:/home/alice/my-app/data:ro"]);
+        assert_eq!(args, vec!["-v", "cast-data:/home/alice/my-app/data:ro"]);
     }
 
     #[test]
@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_data_volume_args_produces_cache_and_local_mounts() {
-        let cfg = Config::default(); // data_volumes_name = "ocx"
+        let cfg = Config::default(); // data_volumes_name = "cast"
         let user = make_user("alice");
 
         let args = build_data_volume_args(&cfg, &user);
@@ -228,9 +228,9 @@ mod tests {
             args,
             vec![
                 "-v",
-                "ocx-cache:/home/alice/.cache:rw",
+                "cast-cache:/home/alice/.cache:rw",
                 "-v",
-                "ocx-local:/home/alice/.local:rw",
+                "cast-local:/home/alice/.local:rw",
             ]
         );
     }

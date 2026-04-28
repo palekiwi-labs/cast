@@ -5,9 +5,9 @@ use crate::dev::opencode::OpenCode;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-/// ocx - a secure Docker wrapper for OpenCode
+/// cast - coding agent sandbox tool
 #[derive(Parser)]
-#[command(name = "ocx")]
+#[command(name = "cast")]
 #[command(about, long_about = None)]
 #[command(subcommand_required = true, arg_required_else_help = true)]
 pub struct Cli {
@@ -58,7 +58,7 @@ pub enum Commands {
         #[command(subcommand)]
         agent: BuildAgent,
     },
-    /// Manage OCX configuration
+    /// Manage cast configuration
     Config {
         #[command(subcommand)]
         command: Option<config::ConfigCommands>,

@@ -2,13 +2,13 @@
 const DOCKERFILE: &str = include_str!("../../assets/Dockerfile.nix-daemon");
 
 /// Base name for the nix daemon image
-const IMAGE_BASE: &str = "localhost/ocx-nix-daemon";
+const IMAGE_BASE: &str = "localhost/cast-nix-daemon";
 
 const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Get the full image tag for the nix daemon container
 ///
-/// Format: `localhost/ocx-nix-daemon:<version>`
+/// Format: `localhost/cast-nix-daemon:<version>`
 pub fn get_image_tag() -> String {
     format!("{}:{}", IMAGE_BASE, OCX_VERSION)
 }
@@ -26,7 +26,7 @@ mod tests {
     fn test_get_image_tag_format() {
         assert_eq!(
             get_image_tag(),
-            format!("localhost/ocx-nix-daemon:{}", env!("CARGO_PKG_VERSION"))
+            format!("localhost/cast-nix-daemon:{}", env!("CARGO_PKG_VERSION"))
         );
     }
 

@@ -7,14 +7,14 @@ use figment::{
 use std::path::PathBuf;
 
 /// Load configuration from all sources with proper precedence:
-/// 1. Environment variables (OCX_*)
-/// 2. Project config (./ocx.json)
-/// 3. Global config (~/.config/ocx/ocx.json)
+/// 1. Environment variables (CAST_*)
+/// 2. Project config (./cast.json)
+/// 3. Global config (~/.config/cast/cast.json)
 /// 4. Defaults
 ///
 /// Environment variable format:
-/// - Use single underscore for field names: OCX_NIX_VOLUME_NAME → nix_volume_name
-/// - Use double underscore for nesting: OCX_EXTRA_DATA_VOLUMES__CARGO__TARGET → extra_data_volumes.cargo.target
+/// - Use single underscore for field names: CAST_NIX_VOLUME_NAME → nix_volume_name
+/// - Use double underscore for nesting: CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET → extra_data_volumes.cargo.target
 pub fn load_config() -> Result<Config> {
     let mut figment = Figment::new().merge(Serialized::defaults(Config::default()));
 
@@ -23,16 +23,16 @@ pub fn load_config() -> Result<Config> {
     }
 
     figment
-        .merge(Json::file("ocx.json"))
-        .merge(Env::prefixed("OCX_").split("__"))
+        .merge(Json::file("cast.json"))
+        .merge(Env::prefixed("CAST_").split("__"))
         .extract()
         .context("Failed to load configuration")
 }
 
-/// Resolve the global config path (~/.config/ocx/ocx.json)
+/// Resolve the global config path (~/.config/cast/cast.json)
 /// Returns None if the system config directory cannot be determined
 fn global_config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("ocx").join("ocx.json"))
+    dirs::config_dir().map(|p| p.join("cast").join("cast.json"))
 }
 
 #[cfg(test)]

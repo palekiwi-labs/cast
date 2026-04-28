@@ -51,7 +51,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
 
     let user_flake_present = host_home_dir
         .as_ref()
-        .filter(|h| h.join(".config/ocx/nix/flake.nix").exists())
+        .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
         .is_some();
 
     let run_opts = RunOpts {
@@ -207,11 +207,11 @@ mod tests {
         assert!(run_args.contains(&"--workdir".to_string()));
 
         // Data volumes present by default
-        assert!(run_args.contains(&"ocx-cache:/home/alice/.cache:rw".to_string()));
+        assert!(run_args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()));
 
         // OpenCode-specific args must NOT be present
         assert!(!run_args.iter().any(|a| a.contains("opencode")));
-        assert!(!run_args.iter().any(|a| a.contains("ocx/nix")));
+        assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
     }
 
     #[test]

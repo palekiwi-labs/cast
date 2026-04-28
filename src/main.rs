@@ -1,5 +1,5 @@
+use cast::commands::{run, Cli};
 use clap::Parser;
-use ocx::commands::{run, Cli};
 
 fn main() {
     if let Err(e) = run_cli() {

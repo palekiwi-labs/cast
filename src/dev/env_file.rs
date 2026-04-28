@@ -1,24 +1,24 @@
 use std::path::Path;
 
-/// Returns --env-file <path> args for ocx.env files that exist on the host.
+/// Returns --env-file <path> args for cast.env files that exist on the host.
 ///
 /// Checks two hardcoded paths (includes both if both exist, global first):
-/// - Global:        ~/.config/ocx/ocx.env
-/// - Project-local: {cwd}/ocx.env
+/// - Global:        ~/.config/cast/cast.env
+/// - Project-local: {cwd}/cast.env
 pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<String> {
     let mut args = Vec::new();
 
-    // Global: ~/.config/ocx/ocx.env
+    // Global: ~/.config/cast/cast.env
     if let Some(home) = host_home_dir {
-        let global_env = home.join(".config/ocx/ocx.env");
+        let global_env = home.join(".config/cast/cast.env");
         if global_env.exists() {
             args.push("--env-file".to_string());
             args.push(global_env.to_string_lossy().into_owned());
         }
     }
 
-    // Project-local: {cwd}/ocx.env
-    let local_env = cwd.join("ocx.env");
+    // Project-local: {cwd}/cast.env
+    let local_env = cwd.join("cast.env");
     if local_env.exists() {
         args.push("--env-file".to_string());
         args.push(local_env.to_string_lossy().into_owned());
@@ -47,7 +47,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let cwd = temp.path();
         let home = temp.path().join("home");
-        let global_env = home.join(".config/ocx/ocx.env");
+        let global_env = home.join(".config/cast/cast.env");
         std::fs::create_dir_all(global_env.parent().unwrap()).unwrap();
         std::fs::write(&global_env, "FOO=bar").unwrap();
 
@@ -60,7 +60,7 @@ mod tests {
         let temp = TempDir::new().unwrap();
         let cwd = temp.path();
         let home = temp.path().join("home");
-        let local_env = cwd.join("ocx.env");
+        let local_env = cwd.join("cast.env");
         std::fs::write(&local_env, "FOO=bar").unwrap();
 
         let args = build_env_file_args(cwd, Some(&home));
@@ -73,11 +73,11 @@ mod tests {
         let cwd = temp.path();
         let home = temp.path().join("home");
 
-        let global_env = home.join(".config/ocx/ocx.env");
+        let global_env = home.join(".config/cast/cast.env");
         std::fs::create_dir_all(global_env.parent().unwrap()).unwrap();
         std::fs::write(&global_env, "GLOBAL=1").unwrap();
 
-        let local_env = cwd.join("ocx.env");
+        let local_env = cwd.join("cast.env");
         std::fs::write(&local_env, "LOCAL=1").unwrap();
 
         let args = build_env_file_args(cwd, Some(&home));

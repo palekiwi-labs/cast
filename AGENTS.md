@@ -1,5 +1,5 @@
 This is an ongoing Rust rewrite of the original `ocx` application prototype written
-in nushell.
+in nushell. This project is now named `cast`.
 
 Refences:
 - local clone of ocx repo: `.mem/master/ref/repos/palekiwi-labs/ocx`

@@ -16,7 +16,7 @@ pub struct CacheEntry {
 pub fn get_cache_path() -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from(".cache"))
-        .join("ocx")
+        .join("cast")
         .join("version-cache.json")
 }
 

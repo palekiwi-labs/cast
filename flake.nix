@@ -1,5 +1,5 @@
 {
-  description = "ocx - a secure Docker wrapper for OpenCode";
+  description = "cast - coding agent sandbox tool";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -18,7 +18,7 @@
       in
       {
         packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "ocx";
+          pname = "cast";
           version = "0.1.0";
           src = pkgs.lib.cleanSource ./.;
 
@@ -31,8 +31,8 @@
           buildInputs = [];
 
           meta = with pkgs.lib; {
-            description = "ocx - a secure Docker wrapper for OpenCode";
-            homepage = "https://github.com/palekiwi-labs/ocx-rs";
+            description = "cast - coding agent sandbox tool";
+            homepage = "https://github.com/palekiwi-labs/cast";
             license = licenses.mit;
             maintainers = [ ];
           };
@@ -40,7 +40,7 @@
 
         devShells.default = pkgs.mkShell
           {
-            name = "ocx";
+            name = "cast";
             buildInputs = [
               rustToolchain
               pkgs.rust-analyzer
