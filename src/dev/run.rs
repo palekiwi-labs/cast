@@ -1,5 +1,7 @@
-use anyhow::Result;
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use anyhow::Result;
 
 use crate::config::Config;
 use crate::dev;
@@ -44,6 +46,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
 
     let host_home_dir = dirs::home_dir();
+    let env: HashMap<String, String> = std::env::vars().collect();
 
     let run_opts = RunOpts {
         workspace,
@@ -54,7 +57,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
 
     // Build generic docker run flags, then append agent-specific ones.
     let mut opts = build_run_opts(config, &run_opts);
-    opts.extend(agent.extra_run_args(config, &run_opts)?);
+    opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
 
     // Build the full command and exec into the container.
     let cmd = agent.command(config, &run_opts.user, extra_args);

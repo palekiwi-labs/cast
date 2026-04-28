@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 /// Environment variables that should be passed through from the host to the container.
 ///
 /// This includes LLM provider API keys, core OpenCode configuration flags, and path settings.
@@ -40,13 +42,39 @@ pub const PASSTHROUGH_VARS: &[&str] = &[
 /// Generates docker run arguments for OpenCode environment variables.
 ///
 /// Only includes variables from `PASSTHROUGH_VARS` that are actually set in the
-/// host environment. Uses the Docker name-only syntax (`-e VAR_NAME`) which allows
+/// injected `env` map. Uses the Docker name-only syntax (`-e VAR_NAME`) which allows
 /// the container process to inherit the value directly from the host environment
 /// without the value ever appearing in the command-line arguments.
-pub fn build_passthrough_env_args() -> Vec<String> {
+pub fn build_passthrough_env_args(env: &HashMap<String, String>) -> Vec<String> {
     PASSTHROUGH_VARS
         .iter()
-        .filter(|&&var| std::env::var(var).is_ok())
+        .filter(|&&var| env.contains_key(var))
         .flat_map(|&var| ["-e".to_string(), var.to_string()])
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_passthrough_env_args() {
+        let mut env = HashMap::new();
+        env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
+        env.insert("UNKNOWN_VAR".to_string(), "foo".to_string());
+
+        let args = build_passthrough_env_args(&env);
+
+        assert_eq!(
+            args,
+            vec!["-e".to_string(), "ANTHROPIC_API_KEY".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_build_passthrough_env_args_empty() {
+        let env = HashMap::new();
+        let args = build_passthrough_env_args(&env);
+        assert!(args.is_empty());
+    }
 }

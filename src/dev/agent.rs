@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 
 use crate::config::Config;
@@ -30,7 +32,12 @@ pub trait Agent {
 
     /// Return agent-specific `docker run` arguments (env vars, mounts, etc.)
     /// that are appended after the generic arguments.
-    fn extra_run_args(&self, config: &Config, opts: &RunOpts) -> Result<Vec<String>>;
+    fn extra_run_args(
+        &self,
+        config: &Config,
+        opts: &RunOpts,
+        env: &HashMap<String, String>,
+    ) -> Result<Vec<String>>;
 
     /// Build the command vector that will be passed to `docker run` after all flags.
     fn command(&self, config: &Config, user: &ResolvedUser, extra_args: Vec<String>)

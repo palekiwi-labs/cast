@@ -4,8 +4,10 @@ pub mod env;
 pub mod image;
 pub mod version;
 
-use anyhow::Result;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+
+use anyhow::Result;
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
@@ -60,15 +62,20 @@ impl Agent for OpenCode {
         image::ensure_dev_image(docker, config, user, &version, opts)
     }
 
-    fn extra_run_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
+    fn extra_run_args(
+        &self,
+        _config: &Config,
+        opts: &RunOpts,
+        env: &HashMap<String, String>,
+    ) -> Result<Vec<String>> {
         let mut args: Vec<String> = vec![];
 
         // LLM API keys + OPENCODE_* env vars present on the host.
-        args.extend(env::build_passthrough_env_args());
+        args.extend(env::build_passthrough_env_args(env));
 
         // OPENCODE_CONFIG_DIR special case: bind-mount with container path rewrite.
         let opencode_config_dir_env = resolve_config_dir_env(
-            std::env::var("OPENCODE_CONFIG_DIR").ok(),
+            env.get("OPENCODE_CONFIG_DIR").cloned(),
             opts.host_home_dir.as_deref(),
         );
         if let Some(config_dir_env) = &opencode_config_dir_env {
@@ -189,8 +196,9 @@ mod tests {
     fn test_extra_run_args_user_flake_absent() {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
+        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         for arg in &args {
             assert!(!arg.contains("/.config/ocx/nix"), "unexpected flake mount: {}", arg);
@@ -199,13 +207,11 @@ mod tests {
 
     #[test]
     fn test_extra_run_args_opencode_config_dir_env_unset() {
-        // Ensure OPENCODE_CONFIG_DIR is not set for this test.
-        unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
-
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
+        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         for arg in &args {
             assert!(!arg.contains("/opencode-config-dir"), "unexpected env mount: {}", arg);
@@ -216,15 +222,16 @@ mod tests {
     fn test_extra_run_args_opencode_config_dir_env_set() {
         let temp_dir = tempfile::TempDir::new().unwrap();
         let config_dir_env = temp_dir.path().to_path_buf();
-        unsafe { std::env::set_var("OPENCODE_CONFIG_DIR", config_dir_env.to_str().unwrap()) };
+        let mut env = HashMap::new();
+        env.insert(
+            "OPENCODE_CONFIG_DIR".to_string(),
+            config_dir_env.to_str().unwrap().to_string(),
+        );
 
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
 
-        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
-
-        // Clean up env before any assertions that could panic.
-        unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         assert!(args.contains(&format!(
             "{}:/opencode-config-dir:ro",
@@ -239,7 +246,12 @@ mod tests {
         let home_dir = temp_dir.path().to_path_buf();
         let config_dir_env = home_dir.join(".config/opencode-custom");
         std::fs::create_dir_all(&config_dir_env).unwrap();
-        unsafe { std::env::set_var("OPENCODE_CONFIG_DIR", "~/.config/opencode-custom") };
+
+        let mut env = HashMap::new();
+        env.insert(
+            "OPENCODE_CONFIG_DIR".to_string(),
+            "~/.config/opencode-custom".to_string(),
+        );
 
         let config = Config::default();
         let opts = RunOpts {
@@ -252,9 +264,7 @@ mod tests {
             host_home_dir: Some(home_dir),
         };
 
-        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
-
-        unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         assert!(args.contains(&format!(
             "{}:/opencode-config-dir:ro",
@@ -264,8 +274,6 @@ mod tests {
 
     #[test]
     fn test_extra_run_args_workspace_conflict_no_double_mount() {
-        unsafe { std::env::remove_var("OPENCODE_CONFIG_DIR") };
-
         let config = Config::default();
         // workspace root == opencode config dir → no duplicate mount
         let workspace_root = dirs::config_dir().unwrap().join("opencode");
@@ -280,8 +288,9 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
         };
+        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts).unwrap();
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         // The opencode config dir mount must not appear (workspace covers it).
         let mount_count = args
