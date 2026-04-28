@@ -45,6 +45,13 @@ pub enum RunAgent {
 }
 
 #[derive(Subcommand)]
+#[command(subcommand_required = true)]
+pub enum ShellAgent {
+    /// Drop into an interactive shell in the OpenCode container
+    Opencode,
+}
+
+#[derive(Subcommand)]
 pub enum Commands {
     /// Build an agent's image
     Build {
@@ -69,8 +76,11 @@ pub enum Commands {
         #[command(subcommand)]
         agent: RunAgent,
     },
-    /// Drop into an interactive shell in the dev container
-    Shell,
+    /// Drop into an interactive shell in an agent's container
+    Shell {
+        #[command(subcommand)]
+        agent: ShellAgent,
+    },
 }
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -93,7 +103,9 @@ pub fn run(cli: Cli) -> Result<()> {
         Some(Commands::Run {
             agent: RunAgent::Opencode { extra_args },
         }) => dev::run_agent(&OpenCode, &cfg, extra_args),
-        Some(Commands::Shell) => dev::shell(&OpenCode, &cfg),
+        Some(Commands::Shell {
+            agent: ShellAgent::Opencode,
+        }) => dev::shell(&OpenCode, &cfg),
         None => unreachable!("Clap should handle required subcommands"),
     }
 }
