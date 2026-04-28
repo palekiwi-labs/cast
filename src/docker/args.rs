@@ -78,8 +78,8 @@ mod tests {
     #[test]
     fn test_build_run_args_with_minimal_params() {
         let args = build_run_args(
-            "ocx-nix-daemon",
-            "localhost/ocx-nix-daemon:sha-12345678",
+            "cast-nix-daemon",
+            "localhost/cast-nix-daemon:sha-12345678",
             vec![],
             None,
         );
@@ -89,8 +89,8 @@ mod tests {
             vec![
                 "run",
                 "--name",
-                "ocx-nix-daemon",
-                "localhost/ocx-nix-daemon:sha-12345678"
+                "cast-nix-daemon",
+                "localhost/cast-nix-daemon:sha-12345678"
             ]
         );
     }
@@ -98,9 +98,9 @@ mod tests {
     #[test]
     fn test_build_run_args_with_opts() {
         let args = build_run_args(
-            "ocx-nix-daemon",
-            "localhost/ocx-nix-daemon:sha-12345678",
-            vec!["-v".to_string(), "ocx-nix:/nix:rw".to_string()],
+            "cast-nix-daemon",
+            "localhost/cast-nix-daemon:sha-12345678",
+            vec!["-v".to_string(), "cast-nix:/nix:rw".to_string()],
             None,
         );
 
@@ -109,10 +109,10 @@ mod tests {
             vec![
                 "run",
                 "--name",
-                "ocx-nix-daemon",
+                "cast-nix-daemon",
                 "-v",
-                "ocx-nix:/nix:rw",
-                "localhost/ocx-nix-daemon:sha-12345678"
+                "cast-nix:/nix:rw",
+                "localhost/cast-nix-daemon:sha-12345678"
             ]
         );
     }
@@ -120,8 +120,8 @@ mod tests {
     #[test]
     fn test_build_run_args_with_cmd() {
         let args = build_run_args(
-            "ocx-nix-daemon",
-            "localhost/ocx-nix-daemon:sha-12345678",
+            "cast-nix-daemon",
+            "localhost/cast-nix-daemon:sha-12345678",
             vec![],
             Some(vec!["nix".to_string(), "develop".to_string()]),
         );
@@ -131,8 +131,8 @@ mod tests {
             vec![
                 "run",
                 "--name",
-                "ocx-nix-daemon",
-                "localhost/ocx-nix-daemon:sha-12345678",
+                "cast-nix-daemon",
+                "localhost/cast-nix-daemon:sha-12345678",
                 "nix",
                 "develop"
             ]

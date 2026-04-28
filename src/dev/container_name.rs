@@ -3,7 +3,7 @@ use crate::config::Config;
 /// Resolve the Docker container name for an agent session.
 ///
 /// - If `cfg.container_name` is set: `"{name}-{port}"`
-/// - Otherwise: `"ocx-{agent}-{basename}-{port}"` where `agent` is the
+/// - Otherwise: `"cast-{agent}-{basename}-{port}"` where `agent` is the
 ///   agent identifier and `basename` is the name of the current working directory.
 ///
 /// Both `agent_name` and `cwd_basename` are injected by the caller so that
@@ -16,7 +16,7 @@ pub fn resolve_container_name(
 ) -> String {
     match &cfg.container_name {
         Some(name) => format!("{}-{}", name, port),
-        None => format!("ocx-{}-{}-{}", agent_name, cwd_basename, port),
+        None => format!("cast-{}-{}-{}", agent_name, cwd_basename, port),
     }
 }
 
@@ -41,7 +41,7 @@ mod tests {
         let cfg = Config::default();
         assert_eq!(
             resolve_container_name(&cfg, "opencode", "my-app", 8080),
-            "ocx-opencode-my-app-8080",
+            "cast-opencode-my-app-8080",
         );
     }
 }

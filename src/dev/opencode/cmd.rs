@@ -17,7 +17,7 @@ pub fn resolve_opencode_command(
         .unwrap_or_else(|| cfg.opencode_command.clone());
 
     if user_flake_present {
-        let flake_dir = format!("/home/{}/.config/ocx/nix", user.username);
+        let flake_dir = format!("/home/{}/.config/cast/nix", user.username);
         let mut cmd = vec![
             "nix".to_string(),
             "develop".to_string(),
@@ -61,7 +61,7 @@ mod tests {
             vec![
                 "nix",
                 "develop",
-                "/home/alice/.config/ocx/nix",
+                "/home/alice/.config/cast/nix",
                 "-c",
                 "opencode",
             ]
@@ -90,7 +90,7 @@ mod tests {
             vec![
                 "nix",
                 "develop",
-                "/home/alice/.config/ocx/nix",
+                "/home/alice/.config/cast/nix",
                 "-c",
                 "my-opencode",
                 "--flag",

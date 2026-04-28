@@ -92,17 +92,17 @@ impl Agent for OpenCode {
             ]);
         }
 
-        // User flake mount (~/.config/ocx/nix).
+        // User flake mount (~/.config/cast/nix).
         let user_flake_host_dir = opts
             .host_home_dir
             .as_ref()
-            .filter(|h| h.join(".config/ocx/nix/flake.nix").exists())
-            .map(|h| h.join(".config/ocx/nix"));
+            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
+            .map(|h| h.join(".config/cast/nix"));
         if let Some(flake_dir) = &user_flake_host_dir {
             args.extend([
                 "-v".to_string(),
                 format!(
-                    "{}:/home/{}/.config/ocx/nix:rw",
+                    "{}:/home/{}/.config/cast/nix:rw",
                     flake_dir.display(),
                     opts.user.username
                 ),
@@ -217,7 +217,7 @@ mod tests {
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         for arg in &args {
-            assert!(!arg.contains("/.config/ocx/nix"), "unexpected flake mount: {}", arg);
+            assert!(!arg.contains("/.config/cast/nix"), "unexpected flake mount: {}", arg);
         }
     }
 

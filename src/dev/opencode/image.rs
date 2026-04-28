@@ -10,10 +10,10 @@ use crate::user::ResolvedUser;
 use anyhow::Result;
 
 const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.dev");
-const IMAGE_BASE: &str = "localhost/ocx";
+const IMAGE_BASE: &str = "localhost/cast";
 const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag: `localhost/ocx:{ocx_version}-opencode-{opencode_version}`
+/// Get the full image tag: `localhost/cast:{ocx_version}-opencode-{opencode_version}`
 pub fn get_image_tag(opencode_version: &str) -> String {
     format!(
         "{}:{}-opencode-{}",
@@ -100,7 +100,10 @@ mod tests {
     fn test_get_image_tag_format() {
         assert_eq!(
             get_image_tag("1.4.7"),
-            format!("localhost/ocx:{}-opencode-1.4.7", env!("CARGO_PKG_VERSION"))
+            format!(
+                "localhost/cast:{}-opencode-1.4.7",
+                env!("CARGO_PKG_VERSION")
+            )
         );
     }
 

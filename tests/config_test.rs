@@ -5,7 +5,7 @@ use tempfile::TempDir;
 
 #[test]
 fn test_config_has_defaults() {
-    let config = ocx::config::Config::default();
+    let config = cast::config::Config::default();
 
     // Should have sensible defaults
     assert_eq!(config.opencode_version, "latest");
@@ -17,7 +17,7 @@ fn test_config_has_defaults() {
 #[test]
 fn test_config_load_with_partial_json() {
     let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("ocx.json");
+    let config_path = temp_dir.path().join("cast.json");
 
     let json = json!({
         "memory": "4g",
@@ -28,7 +28,7 @@ fn test_config_load_with_partial_json() {
 
     // Load config from the temp directory
     std::env::set_current_dir(temp_dir.path()).unwrap();
-    let config = ocx::config::load_config().unwrap();
+    let config = cast::config::load_config().unwrap();
 
     // Should merge with defaults
     assert_eq!(config.memory, "4g");
@@ -38,7 +38,7 @@ fn test_config_load_with_partial_json() {
 #[test]
 fn test_config_env_vars_override() {
     let temp_dir = TempDir::new().unwrap();
-    let config_path = temp_dir.path().join("ocx.json");
+    let config_path = temp_dir.path().join("cast.json");
 
     let json = json!({
         "memory": "2g",
@@ -48,14 +48,14 @@ fn test_config_env_vars_override() {
 
     fs::write(&config_path, json.to_string()).unwrap();
 
-    // Run ocx config show with env vars set via subprocess
-    // Note: Use single underscore for field names (OCX_NIX_VOLUME_NAME)
-    let output = Command::cargo_bin("ocx")
+    // Run cast config show with env vars set via subprocess
+    // Note: Use single underscore for field names (CAST_NIX_VOLUME_NAME)
+    let output = Command::cargo_bin("cast")
         .unwrap()
         .current_dir(temp_dir.path())
-        .env("OCX_MEMORY", "8g")
-        .env("OCX_CPUS", "4.0")
-        .env("OCX_NIX_VOLUME_NAME", "from-env")
+        .env("CAST_MEMORY", "8g")
+        .env("CAST_CPUS", "4.0")
+        .env("CAST_NIX_VOLUME_NAME", "from-env")
         .args(["config", "show"])
         .output()
         .unwrap();
@@ -74,7 +74,7 @@ fn test_config_env_vars_override() {
 
 #[test]
 fn test_config_serialize_to_json() {
-    let config = ocx::config::Config::default();
+    let config = cast::config::Config::default();
 
     let json = serde_json::to_string_pretty(&config).unwrap();
 
