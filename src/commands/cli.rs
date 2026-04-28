@@ -1,4 +1,4 @@
-use super::{build, config, nix_daemon, port};
+use super::{config, nix_daemon, port};
 use crate::config::load_config;
 use crate::dev;
 use crate::dev::opencode::OpenCode;
@@ -17,6 +17,23 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 #[command(subcommand_required = true)]
+pub enum BuildAgent {
+    /// Build the agent's Docker image
+    Opencode {
+        /// Also build the Nix daemon base image
+        #[arg(long)]
+        base: bool,
+        /// Force rebuild even if image already exists
+        #[arg(short, long)]
+        force: bool,
+        /// Do not use Docker cache
+        #[arg(long)]
+        no_cache: bool,
+    },
+}
+
+#[derive(Subcommand)]
+#[command(subcommand_required = true)]
 pub enum RunAgent {
     /// Start an interactive OpenCode session
     #[command(alias = "o", disable_help_flag = true)]
@@ -29,14 +46,10 @@ pub enum RunAgent {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Build the Nix dev image (and optionally the daemon base image)
+    /// Build an agent's image
     Build {
-        #[arg(long)]
-        base: bool,
-        #[arg(short, long)]
-        force: bool,
-        #[arg(long)]
-        no_cache: bool,
+        #[command(subcommand)]
+        agent: BuildAgent,
     },
     /// Manage OCX configuration
     Config {
@@ -66,10 +79,14 @@ pub fn run(cli: Cli) -> Result<()> {
 
     match cli.command {
         Some(Commands::Build {
-            base,
-            force,
-            no_cache,
-        }) => build::handle_build(&cfg, base, force, no_cache),
+            agent:
+                BuildAgent::Opencode {
+                    base,
+                    force,
+                    no_cache,
+                },
+        }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
+
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port) => port::handle_port(&cfg),

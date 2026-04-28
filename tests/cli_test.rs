@@ -75,11 +75,22 @@ fn test_ocx_config_show_outputs_valid_json() {
 }
 
 #[test]
-fn test_ocx_run_help() {
+fn test_ocx_build_help() {
     ocx()
-        .args(["run", "--help"])
+        .args(["build", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: ocx run"))
+        .stdout(predicate::str::contains("Usage: ocx build"))
         .stdout(predicate::str::contains("opencode"));
+}
+
+#[test]
+fn test_ocx_build_opencode_help() {
+    ocx()
+        .args(["build", "opencode", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--base"))
+        .stdout(predicate::str::contains("--force"))
+        .stdout(predicate::str::contains("--no-cache"));
 }
