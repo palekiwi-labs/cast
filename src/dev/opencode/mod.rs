@@ -106,7 +106,7 @@ impl Agent for OpenCode {
 
         // OpenCode config directory bind mount.
         // Skip if the workspace root is the same as the config dir (workspace mount covers it).
-        let opencode_config_dir = config_dir::ensure_config_dir()?;
+        let opencode_config_dir = config_dir::get_config_dir()?;
         if opencode_config_dir != opts.workspace.root {
             args.extend([
                 "-v".to_string(),
