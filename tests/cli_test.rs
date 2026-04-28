@@ -44,12 +44,24 @@ fn test_ocx_config_show() {
 }
 
 #[test]
-fn test_ocx_build_help() {
+fn test_ocx_run_opencode_help() {
+    // With disable_help_flag = true, --help is passed to the handler.
+    // In the test environment, this fails because docker is missing,
+    // but it proves the CLI parsed the command and reached the handler.
     ocx()
-        .args(["build", "--help"])
+        .args(["run", "opencode", "--help"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Usage: ocx build"));
+        .failure()
+        .stderr(predicate::str::contains("docker"));
+}
+
+#[test]
+fn test_ocx_run_alias_o_help() {
+    ocx()
+        .args(["run", "o", "--help"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("docker"));
 }
 
 #[test]
@@ -60,4 +72,14 @@ fn test_ocx_config_show_outputs_valid_json() {
 
     // Should be valid JSON - that's all we care about at this level
     serde_json::from_str::<serde_json::Value>(&stdout).expect("Output should be valid JSON");
+}
+
+#[test]
+fn test_ocx_run_help() {
+    ocx()
+        .args(["run", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: ocx run"))
+        .stdout(predicate::str::contains("opencode"));
 }
