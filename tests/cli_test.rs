@@ -44,20 +44,57 @@ fn test_ocx_config_show() {
 }
 
 #[test]
+fn test_ocx_config_show_outputs_valid_json() {
+    let output = ocx().args(["config", "show"]).assert().success();
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    serde_json::from_str::<serde_json::Value>(&stdout).expect("Output should be valid JSON");
+}
+
+#[test]
+fn test_ocx_run_help() {
+    ocx()
+        .args(["run", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: ocx run"))
+        .stdout(predicate::str::contains("opencode"));
+}
+
+#[test]
 fn test_ocx_build_help() {
     ocx()
         .args(["build", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: ocx build"));
+        .stdout(predicate::str::contains("Usage: ocx build"))
+        .stdout(predicate::str::contains("opencode"));
 }
 
 #[test]
-fn test_ocx_config_show_outputs_valid_json() {
-    let output = ocx().args(["config", "show"]).assert().success();
+fn test_ocx_build_opencode_help() {
+    ocx()
+        .args(["build", "opencode", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--base"))
+        .stdout(predicate::str::contains("--force"))
+        .stdout(predicate::str::contains("--no-cache"));
+}
 
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+#[test]
+fn test_ocx_shell_help() {
+    ocx()
+        .args(["shell", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: ocx shell"))
+        .stdout(predicate::str::contains("opencode"));
+}
 
-    // Should be valid JSON - that's all we care about at this level
-    serde_json::from_str::<serde_json::Value>(&stdout).expect("Output should be valid JSON");
+#[test]
+fn test_ocx_shell_opencode_help() {
+    ocx()
+        .args(["shell", "opencode", "--help"])
+        .assert()
+        .success();
 }

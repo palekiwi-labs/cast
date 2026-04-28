@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use crate::config::Config;
+use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
 use crate::dev::workspace::get_workspace;
@@ -8,20 +9,20 @@ use crate::docker::client::DockerClient;
 use crate::user::get_user;
 
 /// Drop into an interactive shell in the dev container
-pub fn shell(config: &Config) -> Result<()> {
+pub fn shell(agent: &dyn Agent, config: &Config) -> Result<()> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
     let port = resolve_port(config)?;
 
     let cwd_basename = workspace.root_basename();
-
-    let container_name = resolve_container_name(config, cwd_basename, port);
+    let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
 
     if !docker.is_container_running(&container_name)? {
         println!(
-            "Dev container is not running: {}. Run 'ocx opencode' to start it.",
-            container_name
+            "Dev container is not running: {}. Run 'ocx run {}' to start it.",
+            container_name,
+            agent.name(),
         );
         return Ok(());
     }
