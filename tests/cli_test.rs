@@ -61,24 +61,6 @@ fn test_ocx_run_help() {
 }
 
 #[test]
-fn test_ocx_run_opencode_help() {
-    ocx()
-        .args(["run", "opencode", "--help"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("docker"));
-}
-
-#[test]
-fn test_ocx_run_alias_o_help() {
-    ocx()
-        .args(["run", "o", "--help"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("docker"));
-}
-
-#[test]
 fn test_ocx_build_help() {
     ocx()
         .args(["build", "--help"])

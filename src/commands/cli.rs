@@ -96,7 +96,6 @@ pub fn run(cli: Cli) -> Result<()> {
                     no_cache,
                 },
         }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
-
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port) => port::handle_port(&cfg),
