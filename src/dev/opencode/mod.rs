@@ -7,7 +7,7 @@ pub mod version;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
@@ -63,7 +63,8 @@ impl Agent for OpenCode {
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
-        config_dir::ensure_config_dir()?;
+        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
+        config_dir::ensure_config_dir(&base)?;
         Ok(())
     }
 
@@ -111,7 +112,8 @@ impl Agent for OpenCode {
 
         // OpenCode config directory bind mount.
         // Skip if the workspace root is the same as the config dir (workspace mount covers it).
-        let opencode_config_dir = config_dir::get_config_dir()?;
+        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
+        let opencode_config_dir = config_dir::get_config_dir(&base);
         if opencode_config_dir != opts.workspace.root {
             args.extend([
                 "-v".to_string(),
@@ -200,16 +202,13 @@ mod tests {
     #[test]
     fn test_prepare_host_creates_config_dir() {
         let temp = tempfile::TempDir::new().unwrap();
-        let config_home = temp.path().join(".config");
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", &config_home) };
+        let config_home = temp.path().to_path_buf();
 
-        let config = Config::default();
-        let opts = basic_opts(PathBuf::from("/home/alice/project"));
+        // We test ensure_config_dir directly with a temp path to avoid unsafe env mutation.
+        let result = config_dir::ensure_config_dir(&config_home).unwrap();
 
-        OpenCode.prepare_host(&config, &opts).unwrap();
-
-        assert!(config_home.join("opencode").exists());
-        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        assert!(result.exists());
+        assert_eq!(result, config_home.join("opencode"));
     }
 
     #[test]
