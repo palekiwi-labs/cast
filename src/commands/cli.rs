@@ -8,7 +8,7 @@ use clap::{Parser, Subcommand};
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
 #[command(name = "cast")]
-#[command(about, long_about = None)]
+#[command(about, long_about = None, version)]
 #[command(subcommand_required = true, arg_required_else_help = true)]
 pub struct Cli {
     #[command(subcommand)]
