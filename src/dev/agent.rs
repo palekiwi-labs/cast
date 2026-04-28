@@ -39,6 +39,12 @@ pub trait Agent {
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>>;
 
+    /// Perform host-side preparation (e.g. create directories) before the container
+    /// runs. Default implementation is a no-op; agents override as needed.
+    fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
+        Ok(())
+    }
+
     /// Build the command vector that will be passed to `docker run` after all flags.
     fn command(&self, config: &Config, user: &ResolvedUser, extra_args: Vec<String>)
         -> Vec<String>;

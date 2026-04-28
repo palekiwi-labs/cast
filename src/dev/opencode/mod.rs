@@ -62,6 +62,11 @@ impl Agent for OpenCode {
         image::ensure_dev_image(docker, config, user, &version, opts)
     }
 
+    fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
+        config_dir::ensure_config_dir()?;
+        Ok(())
+    }
+
     fn extra_run_args(
         &self,
         _config: &Config,
@@ -191,6 +196,21 @@ mod tests {
     }
 
     // --- extra_run_args ---
+
+    #[test]
+    fn test_prepare_host_creates_config_dir() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let config_home = temp.path().join(".config");
+        unsafe { std::env::set_var("XDG_CONFIG_HOME", &config_home) };
+
+        let config = Config::default();
+        let opts = basic_opts(PathBuf::from("/home/alice/project"));
+
+        OpenCode.prepare_host(&config, &opts).unwrap();
+
+        assert!(config_home.join("opencode").exists());
+        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+    }
 
     #[test]
     fn test_extra_run_args_user_flake_absent() {

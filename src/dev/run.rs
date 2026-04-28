@@ -55,6 +55,9 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
         host_home_dir,
     };
 
+    // Prepare host-side side effects before building arguments.
+    agent.prepare_host(config, &run_opts)?;
+
     // Build generic docker run flags, then append agent-specific ones.
     let mut opts = build_run_opts(config, &run_opts);
     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
