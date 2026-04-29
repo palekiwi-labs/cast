@@ -1,8 +1,9 @@
 use super::workspace::ResolvedWorkspace;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// A resolved shadow mount, ready to be translated into Docker CLI arguments.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ShadowMount {
     /// A directory to be masked with a read-only tmpfs overlay.
     Directory(PathBuf),
@@ -20,26 +21,41 @@ pub fn resolve_shadow_mounts(
     forbidden_paths: &[String],
     workspace: &ResolvedWorkspace,
 ) -> Vec<ShadowMount> {
-    forbidden_paths
-        .iter()
-        .filter_map(|rel| {
-            let host_path = workspace.root.join(rel);
+    let canonical_root = workspace
+        .root
+        .canonicalize()
+        .unwrap_or_else(|_| workspace.root.clone());
 
-            if !host_path.starts_with(&workspace.root) {
-                return None;
-            }
+    let mut unique_mounts = BTreeMap::new();
 
-            let container_path = workspace.container_path.join(rel);
+    for rel in forbidden_paths {
+        let host_path = workspace.root.join(rel);
 
-            if host_path.is_dir() {
-                Some(ShadowMount::Directory(container_path))
-            } else if host_path.is_file() {
-                Some(ShadowMount::File(container_path))
-            } else {
-                None
-            }
-        })
-        .collect()
+        let canonical_target = match host_path.canonicalize() {
+            Ok(path) => path,
+            Err(_) => continue,
+        };
+
+        if !canonical_target.starts_with(&canonical_root) {
+            continue;
+        }
+
+        let rel_target = canonical_target
+            .strip_prefix(&canonical_root)
+            .expect("Already checked starts_with");
+        let container_path = workspace.container_path.join(rel_target);
+
+        if canonical_target.is_dir() {
+            unique_mounts.insert(
+                container_path.clone(),
+                ShadowMount::Directory(container_path),
+            );
+        } else {
+            unique_mounts.insert(container_path.clone(), ShadowMount::File(container_path));
+        }
+    }
+
+    unique_mounts.into_values().collect()
 }
 
 /// Build Docker CLI arguments for a slice of resolved shadow mounts.
@@ -147,8 +163,8 @@ mod tests {
         assert_eq!(
             result,
             vec![
-                ShadowMount::Directory(PathBuf::from("/home/user/project/secrets")),
                 ShadowMount::File(PathBuf::from("/home/user/project/.env")),
+                ShadowMount::Directory(PathBuf::from("/home/user/project/secrets")),
             ]
         );
     }
@@ -169,6 +185,113 @@ mod tests {
         let ws = workspace(&tmp);
         let result = resolve_shadow_mounts(&["../outside".to_string()], &ws);
         assert_eq!(result, vec![]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_resolve_external_symlink_is_skipped() {
+        let tmp = TempDir::new().unwrap();
+        let external_tmp = TempDir::new().unwrap();
+        let external_file = external_tmp.path().join("external-secret");
+        std::fs::write(&external_file, "secret").unwrap();
+
+        let ws = workspace(&tmp);
+        let link_path = tmp.path().join("forbidden-link");
+        std::os::unix::fs::symlink(&external_file, &link_path).unwrap();
+
+        let result = resolve_shadow_mounts(&["forbidden-link".to_string()], &ws);
+
+        assert_eq!(result, vec![]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_resolve_internal_symlink_resolves_to_target() {
+        let tmp = TempDir::new().unwrap();
+        let ws = workspace(&tmp);
+
+        let target_file = tmp.path().join("real-secret");
+        std::fs::write(&target_file, "secret").unwrap();
+
+        let link_path = tmp.path().join("secret-link");
+        std::os::unix::fs::symlink("real-secret", &link_path).unwrap();
+
+        let result = resolve_shadow_mounts(&["secret-link".to_string()], &ws);
+
+        // It should shadow the TARGET path in the container
+        assert_eq!(
+            result,
+            vec![ShadowMount::File(PathBuf::from(
+                "/home/user/project/real-secret"
+            ))]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_resolve_symlink_to_directory() {
+        let tmp = TempDir::new().unwrap();
+        let ws = workspace(&tmp);
+
+        let target_dir = tmp.path().join("real-secrets-dir");
+        std::fs::create_dir(&target_dir).unwrap();
+
+        let link_path = tmp.path().join("secrets-link");
+        std::os::unix::fs::symlink("real-secrets-dir", &link_path).unwrap();
+
+        let result = resolve_shadow_mounts(&["secrets-link".to_string()], &ws);
+
+        assert_eq!(
+            result,
+            vec![ShadowMount::Directory(PathBuf::from(
+                "/home/user/project/real-secrets-dir"
+            ))]
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_resolve_broken_symlink_is_skipped() {
+        let tmp = TempDir::new().unwrap();
+        let ws = workspace(&tmp);
+
+        let link_path = tmp.path().join("broken-link");
+        std::os::unix::fs::symlink("does-not-exist", &link_path).unwrap();
+
+        let result = resolve_shadow_mounts(&["broken-link".to_string()], &ws);
+
+        assert_eq!(result, vec![]);
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_resolve_deduplicates_same_target() {
+        let tmp = TempDir::new().unwrap();
+        let ws = workspace(&tmp);
+
+        let target_file = tmp.path().join("secret");
+        std::fs::write(&target_file, "content").unwrap();
+
+        let link1 = tmp.path().join("link1");
+        let link2 = tmp.path().join("link2");
+        std::os::unix::fs::symlink("secret", &link1).unwrap();
+        std::os::unix::fs::symlink("secret", &link2).unwrap();
+
+        let result = resolve_shadow_mounts(
+            &[
+                "link1".to_string(),
+                "link2".to_string(),
+                "secret".to_string(),
+            ],
+            &ws,
+        );
+
+        assert_eq!(
+            result,
+            vec![ShadowMount::File(PathBuf::from(
+                "/home/user/project/secret"
+            ))]
+        );
     }
 
     // --- build_shadow_mount_args ---
