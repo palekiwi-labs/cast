@@ -163,6 +163,12 @@ pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
     run_args.push("--workdir".to_string());
     run_args.push(opts.workspace.container_path.to_string_lossy().into_owned());
 
+    // Host internal networking
+    if config.add_host_docker_internal {
+        run_args.push("--add-host".to_string());
+        run_args.push("host.docker.internal:host-gateway".to_string());
+    }
+
     run_args
 }
 
@@ -212,6 +218,70 @@ mod tests {
         // OpenCode-specific args must NOT be present
         assert!(!run_args.iter().any(|a| a.contains("opencode")));
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
+    }
+
+    #[test]
+    fn test_build_run_opts_add_host_enabled() {
+        let config = Config {
+            add_host_docker_internal: true,
+            ..Config::default()
+        };
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+
+        let add_host_pos = run_args.iter().position(|r| r == "--add-host");
+        assert!(add_host_pos.is_some(), "Should contain --add-host");
+        assert_eq!(
+            run_args[add_host_pos.unwrap() + 1],
+            "host.docker.internal:host-gateway"
+        );
+    }
+
+    #[test]
+    fn test_build_run_opts_add_host_disabled() {
+        let config = Config {
+            add_host_docker_internal: false,
+            ..Config::default()
+        };
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+
+        assert!(
+            !run_args.contains(&"--add-host".to_string()),
+            "Should NOT contain --add-host when disabled"
+        );
     }
 
     #[test]
