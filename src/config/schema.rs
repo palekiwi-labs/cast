@@ -15,8 +15,6 @@ pub struct Config {
     pub memory: String,
     pub cpus: f64,
     pub pids_limit: i32,
-    pub tmp_size: String,
-    pub workspace_tmp_size: String,
 
     // Networking
     pub network: String,
@@ -28,14 +26,7 @@ pub struct Config {
     pub add_host_docker_internal: bool,
 
     // Paths & Files
-    pub opencode_config_dir: String,
     pub opencode_command: Vec<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rgignore_file: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub custom_base_dockerfile: Option<String>,
 
     // Data Volumes
     pub data_volumes_name: String,
@@ -52,12 +43,7 @@ pub struct Config {
     pub nix_opencode_command: Option<Vec<String>>,
 
     // Security
-    pub read_only: bool,
     pub forbidden_paths: Vec<String>,
-
-    // Environment
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub timezone: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -85,16 +71,11 @@ impl Default for Config {
             memory: "1024m".to_string(),
             cpus: 1.0,
             pids_limit: 100,
-            tmp_size: "500m".to_string(),
-            workspace_tmp_size: "500m".to_string(),
             network: "bridge".to_string(),
             port: None,
             publish_port: true,
             add_host_docker_internal: true,
-            opencode_config_dir: "~/.config/opencode".to_string(),
             opencode_command: vec!["opencode".to_string()],
-            rgignore_file: None,
-            custom_base_dockerfile: None,
             data_volumes_name: "cast".to_string(),
             extra_data_volumes: HashMap::new(),
             nix_volume_name: "cast-nix".to_string(),
@@ -102,9 +83,7 @@ impl Default for Config {
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             nix_opencode_command: None,
-            read_only: false,
             forbidden_paths: Vec::new(),
-            timezone: None,
         }
     }
 }
