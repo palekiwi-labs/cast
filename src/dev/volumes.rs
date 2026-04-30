@@ -3,17 +3,6 @@ use crate::config::Config;
 use crate::user::ResolvedUser;
 use std::path::Path;
 
-pub fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
-    let name = &cfg.data_volumes_name;
-    let username = &user.username;
-    vec![
-        "-v".to_string(),
-        format!("{}-cache:/home/{}/.cache:rw", name, username),
-        "-v".to_string(),
-        format!("{}-local:/home/{}/.local:rw", name, username),
-    ]
-}
-
 pub fn build_extra_volume_args(
     cfg: &Config,
     user: &ResolvedUser,
@@ -72,7 +61,7 @@ fn build_mount_spec(
         format!("{}:{}:{}", source, resolved_target, vol.mode)
     } else {
         // named volume
-        let default_vol_name = format!("{}-{}", cfg.data_volumes_name, key);
+        let default_vol_name = format!("{}-{}", cfg.volumes_namespace, key);
         let vol_name = vol.source.as_deref().unwrap_or(&default_vol_name);
         format!("{}:{}:{}", vol_name, resolved_target, vol.mode)
     }
@@ -108,8 +97,6 @@ mod tests {
         }
     }
 
-    // --- build_data_volume_args ---
-
     // --- build_extra_volume_args ---
 
     #[test]
@@ -125,7 +112,7 @@ mod tests {
 
     #[test]
     fn test_extra_volume_args_named_volume_plain_target() {
-        let mut cfg = Config::default(); // data_volumes_name = "cast"
+        let mut cfg = Config::default(); // volumes_namespace = "cast"
         cfg.extra_data_volumes.insert(
             "cargo".to_string(),
             volume("/home/alice/.cargo", "volume", None, "rw"),
@@ -213,25 +200,5 @@ mod tests {
         let args = build_extra_volume_args(&cfg, &user, &ws, None);
 
         assert_eq!(args, vec!["-v", "~/.secrets:/container/secrets:ro"]);
-    }
-
-    // --- build_data_volume_args ---
-
-    #[test]
-    fn test_data_volume_args_produces_cache_and_local_mounts() {
-        let cfg = Config::default(); // data_volumes_name = "cast"
-        let user = make_user("alice");
-
-        let args = build_data_volume_args(&cfg, &user);
-
-        assert_eq!(
-            args,
-            vec![
-                "-v",
-                "cast-cache:/home/alice/.cache:rw",
-                "-v",
-                "cast-local:/home/alice/.local:rw",
-            ]
-        );
     }
 }

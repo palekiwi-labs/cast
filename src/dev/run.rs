@@ -9,7 +9,7 @@ use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
-use crate::dev::volumes::{build_data_volume_args, build_extra_volume_args};
+use crate::dev::volumes::build_extra_volume_args;
 use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
@@ -147,7 +147,6 @@ pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
     ]);
 
     // Data volumes.
-    run_args.extend(build_data_volume_args(config, &opts.user));
     run_args.extend(build_extra_volume_args(
         config,
         &opts.user,
@@ -212,8 +211,9 @@ mod tests {
         assert!(run_args.contains(&"/etc/localtime:/etc/localtime:ro".to_string()));
         assert!(run_args.contains(&"--workdir".to_string()));
 
-        // Data volumes present by default
-        assert!(run_args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()));
+        // Data volumes must NOT be present by default (agent-specific)
+        assert!(!run_args.iter().any(|a| a.contains("cast-cache")));
+        assert!(!run_args.iter().any(|a| a.contains("cast-local")));
 
         // OpenCode-specific args must NOT be present
         assert!(!run_args.iter().any(|a| a.contains("opencode")));

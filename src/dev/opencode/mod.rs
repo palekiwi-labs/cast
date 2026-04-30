@@ -31,18 +31,38 @@ pub fn resolve_version(config: &Config) -> Result<String> {
 
 /// Resolves the OPENCODE_CONFIG_DIR environment variable to an absolute host
 /// path, expanding leading tildes if necessary, and filtering on path existence.
-pub fn resolve_config_dir_env(env_val: Option<String>, home_dir: Option<&Path>) -> Option<PathBuf> {
-    env_val
-        .map(|p| utils::expand_tilde(&p, home_dir))
-        .filter(|p| p.exists())
+pub fn resolve_config_dir_env(
+    env_val: Option<String>,
+    home_dir: Option<&Path>,
+) -> Result<Option<PathBuf>> {
+    let path = match env_val {
+        Some(v) => utils::expand_tilde(&v, home_dir),
+        None => return Ok(None),
+    };
+
+    if path.exists() {
+        Ok(Some(path))
+    } else {
+        anyhow::bail!("OPENCODE_CONFIG_DIR path does not exist: {}", path.display())
+    }
 }
 
 /// Resolves the OPENCODE_CONFIG environment variable to an absolute host
 /// path, expanding leading tildes if necessary, and filtering on file existence.
-pub fn resolve_config_file_env(env_val: Option<String>, home_dir: Option<&Path>) -> Option<PathBuf> {
-    env_val
-        .map(|p| utils::expand_tilde(&p, home_dir))
-        .filter(|p| p.is_file())
+pub fn resolve_config_file_env(
+    env_val: Option<String>,
+    home_dir: Option<&Path>,
+) -> Result<Option<PathBuf>> {
+    let path = match env_val {
+        Some(v) => utils::expand_tilde(&v, home_dir),
+        None => return Ok(None),
+    };
+
+    if path.is_file() {
+        Ok(Some(path))
+    } else {
+        anyhow::bail!("OPENCODE_CONFIG path is not a file: {}", path.display())
+    }
 }
 
 /// The OpenCode agent — runs the `opencode` program inside the dev container.
@@ -77,7 +97,7 @@ impl Agent for OpenCode {
 
     fn extra_run_args(
         &self,
-        _config: &Config,
+        config: &Config,
         opts: &RunOpts,
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>> {
@@ -90,7 +110,7 @@ impl Agent for OpenCode {
         let opencode_config_dir_env = resolve_config_dir_env(
             env.get("OPENCODE_CONFIG_DIR").cloned(),
             opts.host_home_dir.as_deref(),
-        );
+        )?;
         if let Some(config_dir_env) = &opencode_config_dir_env {
             args.extend([
                 "-v".to_string(),
@@ -104,7 +124,7 @@ impl Agent for OpenCode {
         let opencode_config_env = resolve_config_file_env(
             env.get("OPENCODE_CONFIG").cloned(),
             opts.host_home_dir.as_deref(),
-        );
+        )?;
         if let Some(config_file_env) = &opencode_config_env {
             args.extend([
                 "-v".to_string(),
@@ -146,6 +166,9 @@ impl Agent for OpenCode {
             ]);
         }
 
+        // Persistent data volumes (~/.cache and ~/.local).
+        args.extend(build_data_volume_args(config, &opts.user));
+
         Ok(args)
     }
 
@@ -154,6 +177,18 @@ impl Agent for OpenCode {
         command.extend(extra_args);
         command
     }
+}
+
+/// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
+fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
+    let namespace = &cfg.volumes_namespace;
+    let username = &user.username;
+    vec![
+        "-v".to_string(),
+        format!("{}-opencode-cache:/home/{}/.cache:rw", namespace, username),
+        "-v".to_string(),
+        format!("{}-opencode-local:/home/{}/.local:rw", namespace, username),
+    ]
 }
 
 #[cfg(test)]
@@ -195,7 +230,7 @@ mod tests {
         std::fs::create_dir_all(&target_dir).unwrap();
 
         let result =
-            resolve_config_dir_env(Some("~/.config/my-opencode".to_string()), Some(home));
+            resolve_config_dir_env(Some("~/.config/my-opencode".to_string()), Some(home)).unwrap();
         assert_eq!(result, Some(target_dir));
     }
 
@@ -206,14 +241,14 @@ mod tests {
         std::fs::create_dir_all(&target_dir).unwrap();
 
         let result =
-            resolve_config_dir_env(Some(target_dir.to_string_lossy().to_string()), None);
+            resolve_config_dir_env(Some(target_dir.to_string_lossy().to_string()), None).unwrap();
         assert_eq!(result, Some(target_dir));
     }
 
     #[test]
     fn test_resolve_config_dir_env_missing() {
         let result = resolve_config_dir_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
-        assert_eq!(result, None);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -223,7 +258,7 @@ mod tests {
         std::fs::write(&target_file, "{}").unwrap();
 
         let result =
-            resolve_config_file_env(Some(target_file.to_string_lossy().to_string()), None);
+            resolve_config_file_env(Some(target_file.to_string_lossy().to_string()), None).unwrap();
         assert_eq!(result, Some(target_file));
     }
 
@@ -235,13 +270,13 @@ mod tests {
 
         let result =
             resolve_config_file_env(Some(target_dir.to_string_lossy().to_string()), None);
-        assert_eq!(result, None);
+        assert!(result.is_err());
     }
 
     #[test]
     fn test_resolve_config_file_env_missing() {
         let result = resolve_config_file_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
-        assert_eq!(result, None);
+        assert!(result.is_err());
     }
 
     // --- extra_run_args ---
@@ -389,5 +424,17 @@ mod tests {
             .filter(|a| a.contains("/.config/opencode:rw"))
             .count();
         assert_eq!(mount_count, 0);
+    }
+
+    #[test]
+    fn test_extra_run_args_includes_opencode_data_volumes() {
+        let config = Config::default(); // volumes_namespace = "cast"
+        let opts = basic_opts(PathBuf::from("/home/alice/project"));
+        let env = HashMap::new();
+
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+
+        assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
+        assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
     }
 }
