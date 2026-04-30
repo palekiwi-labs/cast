@@ -37,6 +37,14 @@ pub fn resolve_config_dir_env(env_val: Option<String>, home_dir: Option<&Path>) 
         .filter(|p| p.exists())
 }
 
+/// Resolves the OPENCODE_CONFIG environment variable to an absolute host
+/// path, expanding leading tildes if necessary, and filtering on file existence.
+pub fn resolve_config_file_env(env_val: Option<String>, home_dir: Option<&Path>) -> Option<PathBuf> {
+    env_val
+        .map(|p| utils::expand_tilde(&p, home_dir))
+        .filter(|p| p.is_file())
+}
+
 /// The OpenCode agent — runs the `opencode` program inside the dev container.
 pub struct OpenCode;
 
@@ -89,6 +97,20 @@ impl Agent for OpenCode {
                 format!("{}:/opencode-config-dir:ro", config_dir_env.display()),
                 "-e".to_string(),
                 "OPENCODE_CONFIG_DIR=/opencode-config-dir".to_string(),
+            ]);
+        }
+
+        // OPENCODE_CONFIG special case: bind-mount file with container path rewrite.
+        let opencode_config_env = resolve_config_file_env(
+            env.get("OPENCODE_CONFIG").cloned(),
+            opts.host_home_dir.as_deref(),
+        );
+        if let Some(config_file_env) = &opencode_config_env {
+            args.extend([
+                "-v".to_string(),
+                format!("{}:/opencode.json:ro", config_file_env.display()),
+                "-e".to_string(),
+                "OPENCODE_CONFIG=/opencode.json".to_string(),
             ]);
         }
 
@@ -194,6 +216,34 @@ mod tests {
         assert_eq!(result, None);
     }
 
+    #[test]
+    fn test_resolve_config_file_env_absolute() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let target_file = temp.path().join("config.json");
+        std::fs::write(&target_file, "{}").unwrap();
+
+        let result =
+            resolve_config_file_env(Some(target_file.to_string_lossy().to_string()), None);
+        assert_eq!(result, Some(target_file));
+    }
+
+    #[test]
+    fn test_resolve_config_file_env_not_file() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let target_dir = temp.path().join("not-a-file");
+        std::fs::create_dir_all(&target_dir).unwrap();
+
+        let result =
+            resolve_config_file_env(Some(target_dir.to_string_lossy().to_string()), None);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_resolve_config_file_env_missing() {
+        let result = resolve_config_file_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
+        assert_eq!(result, None);
+    }
+
     // --- extra_run_args ---
 
     #[test]
@@ -287,6 +337,30 @@ mod tests {
             "{}:/opencode-config-dir:ro",
             config_dir_env.display()
         )));
+    }
+
+    #[test]
+    fn test_extra_run_args_opencode_config_env_set() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let config_file_path = temp_dir.path().join("config.json");
+        std::fs::write(&config_file_path, "{}").unwrap();
+
+        let mut env = HashMap::new();
+        env.insert(
+            "OPENCODE_CONFIG".to_string(),
+            config_file_path.to_str().unwrap().to_string(),
+        );
+
+        let config = Config::default();
+        let opts = basic_opts(PathBuf::from("/home/alice/project"));
+
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+
+        assert!(args.contains(&format!(
+            "{}:/opencode.json:ro",
+            config_file_path.display()
+        )));
+        assert!(args.contains(&"OPENCODE_CONFIG=/opencode.json".to_string()));
     }
 
     #[test]
