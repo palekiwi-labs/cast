@@ -29,7 +29,7 @@ pub struct Config {
     pub opencode_command: Vec<String>,
 
     // Data Volumes
-    pub data_volumes_name: String,
+    pub volumes_namespace: String,
 
     pub extra_data_volumes: HashMap<String, VolumeConfig>,
 
@@ -76,7 +76,7 @@ impl Default for Config {
             publish_port: true,
             add_host_docker_internal: true,
             opencode_command: vec!["opencode".to_string()],
-            data_volumes_name: "cast".to_string(),
+            volumes_namespace: "cast".to_string(),
             extra_data_volumes: HashMap::new(),
             nix_volume_name: "cast-nix".to_string(),
             nix_daemon_container_name: "cast-nix-daemon".to_string(),

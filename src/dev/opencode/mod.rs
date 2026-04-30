@@ -77,7 +77,7 @@ impl Agent for OpenCode {
 
     fn extra_run_args(
         &self,
-        _config: &Config,
+        config: &Config,
         opts: &RunOpts,
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>> {
@@ -146,6 +146,9 @@ impl Agent for OpenCode {
             ]);
         }
 
+        // Persistent data volumes (~/.cache and ~/.local).
+        args.extend(build_data_volume_args(config, &opts.user));
+
         Ok(args)
     }
 
@@ -154,6 +157,18 @@ impl Agent for OpenCode {
         command.extend(extra_args);
         command
     }
+}
+
+/// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
+fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
+    let namespace = &cfg.volumes_namespace;
+    let username = &user.username;
+    vec![
+        "-v".to_string(),
+        format!("{}-opencode-cache:/home/{}/.cache:rw", namespace, username),
+        "-v".to_string(),
+        format!("{}-opencode-local:/home/{}/.local:rw", namespace, username),
+    ]
 }
 
 #[cfg(test)]
@@ -389,5 +404,17 @@ mod tests {
             .filter(|a| a.contains("/.config/opencode:rw"))
             .count();
         assert_eq!(mount_count, 0);
+    }
+
+    #[test]
+    fn test_extra_run_args_includes_opencode_data_volumes() {
+        let config = Config::default(); // volumes_namespace = "cast"
+        let opts = basic_opts(PathBuf::from("/home/alice/project"));
+        let env = HashMap::new();
+
+        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+
+        assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
+        assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
     }
 }
