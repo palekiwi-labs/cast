@@ -7,11 +7,11 @@ use crate::user::ResolvedUser;
 /// `nix develop <flake_dir> -c <base>` so the container uses the user's
 /// personal Nix flake environment.
 pub fn resolve_pi_command(
-    _cfg: &Config,
+    cfg: &Config,
     user: &ResolvedUser,
     user_flake_present: bool,
 ) -> Vec<String> {
-    let base = vec!["pi".to_string()];
+    let base = cfg.pi_command.clone();
 
     if user_flake_present {
         let flake_dir = format!("/home/{}/.config/cast/nix", user.username);

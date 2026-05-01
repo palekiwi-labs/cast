@@ -28,6 +28,7 @@ pub struct Config {
 
     // Paths & Files
     pub opencode_command: Vec<String>,
+    pub pi_command: Vec<String>,
 
     // Data Volumes
     pub volumes_namespace: String,
@@ -39,9 +40,6 @@ pub struct Config {
     pub nix_daemon_container_name: String,
     pub nix_extra_substituters: Vec<String>,
     pub nix_extra_trusted_public_keys: Vec<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub nix_opencode_command: Option<Vec<String>>,
 
     // Security
     pub forbidden_paths: Vec<String>,
@@ -77,13 +75,13 @@ impl Default for Config {
             publish_port: true,
             add_host_docker_internal: true,
             opencode_command: vec!["opencode".to_string()],
+            pi_command: vec!["pi".to_string()],
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: HashMap::new(),
             nix_volume_name: "cast-nix".to_string(),
             nix_daemon_container_name: "cast-nix-daemon".to_string(),
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
-            nix_opencode_command: None,
             forbidden_paths: Vec::new(),
         }
     }
