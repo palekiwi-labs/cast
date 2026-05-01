@@ -4,7 +4,8 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     // Container Identity & Version
-    pub opencode_version: String,
+    #[serde(default)]
+    pub agent_versions: HashMap<String, String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
@@ -65,7 +66,7 @@ pub struct VolumeConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            opencode_version: "latest".to_string(),
+            agent_versions: HashMap::new(),
             container_name: None,
             version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),

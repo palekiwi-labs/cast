@@ -46,7 +46,6 @@ mod tests {
         let config = load_config().unwrap();
 
         // Basic sanity checks - these fields should always have some value
-        assert!(!config.opencode_version.is_empty());
         assert!(!config.memory.is_empty());
         assert!(config.cpus > 0.0);
     }
@@ -56,7 +55,7 @@ mod tests {
         // Test the defaults in isolation
         let config = Config::default();
 
-        assert_eq!(config.opencode_version, "latest");
+        assert!(config.agent_versions.is_empty());
         assert_eq!(config.memory, "1024m");
         assert_eq!(config.cpus, 1.0);
     }

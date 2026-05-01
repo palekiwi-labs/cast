@@ -9,6 +9,7 @@ pub mod run;
 pub mod shell;
 pub mod shadow_mounts;
 pub mod utils;
+pub mod version;
 pub mod volumes;
 pub mod workspace;
 
