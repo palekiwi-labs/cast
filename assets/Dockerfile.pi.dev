@@ -22,6 +22,20 @@ RUN set -eux; \
     | tar -xz -C /usr/local/bin/; \
     chmod +x /usr/local/bin/pi;
 
+# Configure Nix system-wide to enable flakes
+# (Nix store will be mounted from nix-daemon volume)
+RUN mkdir -p /etc/nix && \
+    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
+
+# Add Nix to PATH (will be available if /nix is mounted)
+ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+
+# Limit GC marker threads for Nix commands running in the container
+ENV GC_NPROCS=1
+
+# Ensure Nix client communicates via daemon socket (store is mounted read-only)
+ENV NIX_REMOTE=daemon
+
 ARG USERNAME=user
 ARG UID=1000
 ARG GID=1000

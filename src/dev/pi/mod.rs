@@ -85,6 +85,23 @@ impl Agent for Pi {
             format!("PI_CODING_AGENT_DIR=/home/{}/.pi", opts.user.username),
         ]);
 
+        // User flake mount (~/.config/cast/nix).
+        let user_flake_host_dir = opts
+            .host_home_dir
+            .as_ref()
+            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
+            .map(|h| h.join(".config/cast/nix"));
+        if let Some(flake_dir) = &user_flake_host_dir {
+            args.extend([
+                "-v".to_string(),
+                format!(
+                    "{}:/home/{}/.config/cast/nix:rw",
+                    flake_dir.display(),
+                    opts.user.username
+                ),
+            ]);
+        }
+
         // Persistent data volumes (~/.cache and ~/.local).
         args.extend(build_data_volume_args(config, &opts.user));
 
@@ -92,7 +109,7 @@ impl Agent for Pi {
     }
 
     fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command = cmd::resolve_pi_command(config, &opts.user);
+        let mut command = cmd::resolve_pi_command(config, &opts.user, opts.user_flake_present);
         command.extend(extra_args);
         command
     }
