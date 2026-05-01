@@ -76,17 +76,7 @@ pub fn ensure_dev_image(
     version: &str,
     opts: BuildOptions,
 ) -> Result<()> {
-    let image_tag = get_image_tag(version);
-
-    if !docker.image_exists(&image_tag)? {
-        println!(
-            "Image {} not found, building pi dev environment...",
-            image_tag
-        );
-        build_dev(docker, config, user, version, opts)?;
-    }
-
-    Ok(())
+    build_dev(docker, config, user, version, opts)
 }
 
 #[cfg(test)]
