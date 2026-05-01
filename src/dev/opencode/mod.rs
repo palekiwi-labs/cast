@@ -93,7 +93,7 @@ impl Agent for OpenCode {
         opts: BuildOptions,
     ) -> Result<()> {
         let version = resolve_version(config)?;
-        image::ensure_dev_image(docker, config, user, &version, opts)
+        image::ensure_image(docker, config, user, &version, opts)
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {

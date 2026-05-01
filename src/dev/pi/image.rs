@@ -23,8 +23,8 @@ pub fn get_dockerfile() -> &'static str {
     DOCKERFILE
 }
 
-/// Build the pi dev image locally.
-pub fn build_dev(
+/// Ensure the pi dev image exists locally, building it if necessary.
+pub fn ensure_image(
     docker: &DockerClient,
     config: &Config,
     user: &ResolvedUser,
@@ -66,17 +66,6 @@ pub fn build_dev(
     docker.stream_command(docker_build_args)?;
 
     Ok(())
-}
-
-/// Ensure the dev image exists locally, building it if necessary.
-pub fn ensure_dev_image(
-    docker: &DockerClient,
-    config: &Config,
-    user: &ResolvedUser,
-    version: &str,
-    opts: BuildOptions,
-) -> Result<()> {
-    build_dev(docker, config, user, version, opts)
 }
 
 #[cfg(test)]
