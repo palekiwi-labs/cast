@@ -246,12 +246,52 @@ mod tests {
     }
 
     #[test]
+    fn test_validate_semver_accepts_zero_versions() {
+        assert!(validate_semver("0.0.0"));
+    }
+
+    #[test]
+    fn test_validate_semver_rejects_v_prefix() {
+        assert!(!validate_semver("v1.4.7"));
+    }
+
+    #[test]
+    fn test_validate_semver_rejects_two_parts() {
+        assert!(!validate_semver("1.4"));
+    }
+
+    #[test]
+    fn test_validate_semver_rejects_four_parts() {
+        assert!(!validate_semver("1.4.7.1"));
+    }
+
+    #[test]
+    fn test_validate_semver_rejects_non_numeric() {
+        assert!(!validate_semver("1.4.x"));
+    }
+
+    #[test]
+    fn test_validate_semver_rejects_empty_parts() {
+        assert!(!validate_semver("1..7"));
+    }
+
+    #[test]
     fn test_normalize_strips_v_prefix() {
         assert_eq!(normalize_version("v1.4.7"), "1.4.7");
     }
 
     #[test]
+    fn test_normalize_leaves_bare_version_unchanged() {
+        assert_eq!(normalize_version("1.4.7"), "1.4.7");
+    }
+
+    #[test]
     fn test_normalize_leaves_latest_unchanged() {
         assert_eq!(normalize_version("latest"), "latest");
+    }
+
+    #[test]
+    fn test_normalize_trims_whitespace() {
+        assert_eq!(normalize_version("  v1.2.3  "), "1.2.3");
     }
 }

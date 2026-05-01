@@ -17,6 +17,7 @@ pub fn get_cache_path(agent_name: &str) -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from(".cache"))
         .join("cast")
+        .join("versions")
         .join(format!("{}-version-cache.json", agent_name))
 }
 
