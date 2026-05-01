@@ -33,6 +33,9 @@ pub enum BuildAgent {
     },
     /// Build the Pi agent's Docker image
     Pi {
+        /// Also build the Nix daemon base image
+        #[arg(long)]
+        base: bool,
         /// Force rebuild even if image already exists
         #[arg(short, long)]
         force: bool,
@@ -116,8 +119,13 @@ pub fn run(cli: Cli) -> Result<()> {
                 },
         }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
         Some(Commands::Build {
-            agent: BuildAgent::Pi { force, no_cache },
-        }) => dev::build_agent(&Pi, &cfg, false, force, no_cache),
+            agent:
+                BuildAgent::Pi {
+                    base,
+                    force,
+                    no_cache,
+                },
+        }) => dev::build_agent(&Pi, &cfg, base, force, no_cache),
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port) => port::handle_port(&cfg),
