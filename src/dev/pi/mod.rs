@@ -65,10 +65,8 @@ impl Agent for Pi {
         opts: &RunOpts,
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>> {
-        let mut args: Vec<String> = vec![];
-
         // LLM API keys + PI_* env vars present on the host.
-        args.extend(env::build_passthrough_env_args(env));
+        let mut args = env::build_passthrough_env_args(env);
 
         // Pi config directory bind mount.
         let base = dirs::config_dir().context("Failed to resolve user config directory")?;
