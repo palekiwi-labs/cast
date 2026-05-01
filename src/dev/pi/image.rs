@@ -9,13 +9,13 @@ use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 
-const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.pi.dev");
+const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.dev.pi");
 const IMAGE_BASE: &str = "localhost/cast";
-const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag: `localhost/cast:{ocx_version}-pi-{pi_version}`
+/// Get the full image tag: `localhost/cast:{cast_version}-pi-{pi_version}`
 pub fn get_image_tag(pi_version: &str) -> String {
-    format!("{}:{}-pi-{}", IMAGE_BASE, OCX_VERSION, pi_version)
+    format!("{}:{}-pi-{}", IMAGE_BASE, CAST_VERSION, pi_version)
 }
 
 /// Get the embedded Dockerfile content for the pi dev image.

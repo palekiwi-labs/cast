@@ -4,13 +4,13 @@ const DOCKERFILE: &str = include_str!("../../assets/Dockerfile.nix-daemon");
 /// Base name for the nix daemon image
 const IMAGE_BASE: &str = "localhost/cast-nix-daemon";
 
-const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Get the full image tag for the nix daemon container
 ///
 /// Format: `localhost/cast-nix-daemon:<version>`
 pub fn get_image_tag() -> String {
-    format!("{}:{}", IMAGE_BASE, OCX_VERSION)
+    format!("{}:{}", IMAGE_BASE, CAST_VERSION)
 }
 
 /// Get the embedded Dockerfile content

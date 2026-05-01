@@ -9,15 +9,15 @@ use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 
-const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.dev");
+const DOCKERFILE: &str = include_str!("../../../assets/Dockerfile.dev.opencode");
 const IMAGE_BASE: &str = "localhost/cast";
-const OCX_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag: `localhost/cast:{ocx_version}-opencode-{opencode_version}`
+/// Get the full image tag: `localhost/cast:{cast_version}-opencode-{opencode_version}`
 pub fn get_image_tag(opencode_version: &str) -> String {
     format!(
         "{}:{}-opencode-{}",
-        IMAGE_BASE, OCX_VERSION, opencode_version
+        IMAGE_BASE, CAST_VERSION, opencode_version
     )
 }
 
