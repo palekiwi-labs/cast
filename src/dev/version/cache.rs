@@ -12,12 +12,12 @@ pub struct CacheEntry {
     pub fetched_at: u64,
 }
 
-/// Returns the standard path to the version cache file
-pub fn get_cache_path() -> PathBuf {
+/// Returns the standard path to the version cache file for a given agent
+pub fn get_cache_path(agent_name: &str) -> PathBuf {
     dirs::cache_dir()
         .unwrap_or_else(|| PathBuf::from(".cache"))
         .join("cast")
-        .join("version-cache.json")
+        .join(format!("{}-version-cache.json", agent_name))
 }
 
 /// Read a valid (non-expired) cache entry from the given path.
@@ -72,7 +72,13 @@ mod tests {
         dir.path().join("version-cache.json")
     }
 
-    // --- write_cache ---
+    #[test]
+    fn test_get_cache_path_contains_agent_name() {
+        let path = get_cache_path("test-agent");
+        assert!(path
+            .to_string_lossy()
+            .contains("test-agent-version-cache.json"));
+    }
 
     #[test]
     fn test_write_cache_creates_file() {
@@ -125,8 +131,6 @@ mod tests {
         assert!(path.exists());
     }
 
-    // --- read_cache ---
-
     #[test]
     fn test_read_cache_returns_none_when_file_missing() {
         let dir = TempDir::new().unwrap();
@@ -154,7 +158,6 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let path = cache_path(&dir);
 
-        // Write a stale entry: fetched_at = 48 hours ago in nanoseconds
         let stale_nanos = now_nanos() - (48u64 * 3600 * 1_000_000_000);
         let entry = CacheEntry {
             version: "1.0.0".to_string(),

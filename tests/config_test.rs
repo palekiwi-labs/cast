@@ -8,7 +8,7 @@ fn test_config_has_defaults() {
     let config = cast::config::Config::default();
 
     // Should have sensible defaults
-    assert_eq!(config.opencode_version, "latest");
+    assert!(config.agent_versions.is_empty());
     assert_eq!(config.memory, "1024m");
     assert_eq!(config.cpus, 1.0);
     assert_eq!(config.pids_limit, 100);
@@ -79,6 +79,6 @@ fn test_config_serialize_to_json() {
     let json = serde_json::to_string_pretty(&config).unwrap();
 
     // Should be valid JSON
-    assert!(json.contains("opencode_version"));
+    assert!(json.contains("agent_versions"));
     assert!(json.contains("memory"));
 }

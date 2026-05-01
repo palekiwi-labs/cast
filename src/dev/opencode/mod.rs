@@ -2,7 +2,6 @@ pub mod cmd;
 pub mod config_dir;
 pub mod env;
 pub mod image;
-pub mod version;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -11,22 +10,27 @@ use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
-use crate::dev::opencode::version::github::GithubVersionFetcher;
 use crate::dev::run::RunOpts;
 use crate::dev::utils;
+use crate::dev::version::fetcher::GithubReleaseFetcher;
+use crate::dev::version::{self, VersionResolver};
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 
 /// Resolve the concrete opencode version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
-    let cache_path = version::get_cache_path();
-    version::resolve_version(
-        &config.opencode_version,
-        config.version_cache_ttl_hours,
-        &cache_path,
-        &GithubVersionFetcher,
-    )
+    let requested = config
+        .agent_versions
+        .get("opencode")
+        .map(|s| s.as_str())
+        .unwrap_or("latest");
+    let cache_path = version::cache::get_cache_path("opencode");
+    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
+    let fetcher = GithubReleaseFetcher {
+        repo: "anomalyco/opencode".to_string(),
+    };
+    resolver.resolve(requested, &fetcher)
 }
 
 /// Resolves the OPENCODE_CONFIG_DIR environment variable to an absolute host
@@ -43,7 +47,10 @@ pub fn resolve_config_dir_env(
     if path.exists() {
         Ok(Some(path))
     } else {
-        anyhow::bail!("OPENCODE_CONFIG_DIR path does not exist: {}", path.display())
+        anyhow::bail!(
+            "OPENCODE_CONFIG_DIR path does not exist: {}",
+            path.display()
+        )
     }
 }
 
@@ -173,7 +180,8 @@ impl Agent for OpenCode {
     }
 
     fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command = cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
+        let mut command =
+            cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
         command.extend(extra_args);
         command
     }
@@ -247,7 +255,8 @@ mod tests {
 
     #[test]
     fn test_resolve_config_dir_env_missing() {
-        let result = resolve_config_dir_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
+        let result =
+            resolve_config_dir_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
         assert!(result.is_err());
     }
 
@@ -268,14 +277,14 @@ mod tests {
         let target_dir = temp.path().join("not-a-file");
         std::fs::create_dir_all(&target_dir).unwrap();
 
-        let result =
-            resolve_config_file_env(Some(target_dir.to_string_lossy().to_string()), None);
+        let result = resolve_config_file_env(Some(target_dir.to_string_lossy().to_string()), None);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_resolve_config_file_env_missing() {
-        let result = resolve_config_file_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
+        let result =
+            resolve_config_file_env(Some("/does/not/exist/anywhere/12345".to_string()), None);
         assert!(result.is_err());
     }
 
@@ -302,7 +311,11 @@ mod tests {
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         for arg in &args {
-            assert!(!arg.contains("/.config/cast/nix"), "unexpected flake mount: {}", arg);
+            assert!(
+                !arg.contains("/.config/cast/nix"),
+                "unexpected flake mount: {}",
+                arg
+            );
         }
     }
 
@@ -315,7 +328,11 @@ mod tests {
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
         for arg in &args {
-            assert!(!arg.contains("/opencode-config-dir"), "unexpected env mount: {}", arg);
+            assert!(
+                !arg.contains("/opencode-config-dir"),
+                "unexpected env mount: {}",
+                arg
+            );
         }
     }
 
@@ -391,10 +408,7 @@ mod tests {
 
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
 
-        assert!(args.contains(&format!(
-            "{}:/opencode.json:ro",
-            config_file_path.display()
-        )));
+        assert!(args.contains(&format!("{}:/opencode.json:ro", config_file_path.display())));
         assert!(args.contains(&"OPENCODE_CONFIG=/opencode.json".to_string()));
     }
 
