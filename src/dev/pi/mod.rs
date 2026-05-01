@@ -10,6 +10,7 @@ use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
+pub mod cmd;
 pub mod image;
 
 /// Resolve the concrete pi version based on config.
@@ -59,8 +60,10 @@ impl Agent for Pi {
         unimplemented!()
     }
 
-    fn command(&self, _config: &Config, _opts: &RunOpts, _extra_args: Vec<String>) -> Vec<String> {
-        unimplemented!()
+    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
+        let mut command = cmd::resolve_pi_command(config, &opts.user);
+        command.extend(extra_args);
+        command
     }
 }
 
