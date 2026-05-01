@@ -23,7 +23,8 @@ pub fn build_agent(
         nix_daemon::build(&docker, opts)?;
     }
 
-    agent.ensure_image(&docker, cfg, &user, opts)?;
+    let version = agent.resolve_version(cfg)?;
+    agent.ensure_image(&docker, cfg, &user, &version, opts)?;
 
     Ok(())
 }

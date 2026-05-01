@@ -37,9 +37,10 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
 
-    // Resolve the image for this agent and ensure it exists locally.
-    let image_tag = agent.image_tag(config)?;
-    agent.ensure_image(&docker, config, &user, BuildOptions::default())?;
+    // Resolve the version and image for this agent, and ensure it exists locally.
+    let version = agent.resolve_version(config)?;
+    let image_tag = agent.image_tag(&version);
+    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
     // Resolve port and container name.
     let port = dev::port::resolve_port(config)?;

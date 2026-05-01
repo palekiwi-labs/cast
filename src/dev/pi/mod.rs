@@ -5,15 +5,12 @@ use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
 use crate::dev::version::fetcher::GithubReleaseFetcher;
 use crate::dev::version::{self, VersionResolver};
-use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
 pub mod cmd;
 pub mod config_dir;
 pub mod env;
-pub mod image;
 
 /// Resolve the concrete pi version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
@@ -33,24 +30,16 @@ pub fn resolve_version(config: &Config) -> Result<String> {
 pub struct Pi;
 
 impl Agent for Pi {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pi"
     }
 
-    fn image_tag(&self, config: &Config) -> Result<String> {
-        let version = resolve_version(config)?;
-        Ok(image::get_image_tag(&version))
+    fn dockerfile(&self) -> &'static str {
+        include_str!("../../../assets/Dockerfile.dev.pi")
     }
 
-    fn ensure_image(
-        &self,
-        docker: &DockerClient,
-        config: &Config,
-        user: &ResolvedUser,
-        opts: BuildOptions,
-    ) -> Result<()> {
-        let version = resolve_version(config)?;
-        image::ensure_image(docker, config, user, &version, opts)
+    fn resolve_version(&self, config: &Config) -> Result<String> {
+        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
@@ -157,5 +146,18 @@ mod tests {
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
         assert!(args.contains(&"PI_CODING_AGENT_DIR=/home/testuser/.pi".to_string()));
+    }
+
+    #[test]
+    fn test_image_tag_format() {
+        assert_eq!(
+            Pi.image_tag("0.71.0"),
+            format!("localhost/cast:{}-pi-0.71.0", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn test_dockerfile_has_correct_base_image() {
+        assert!(Pi.dockerfile().contains("FROM debian:trixie-slim"));
     }
 }
