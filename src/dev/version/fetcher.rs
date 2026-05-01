@@ -7,7 +7,7 @@ pub trait VersionFetcher {
 
 /// Fetches the latest version from GitHub releases.
 pub struct GithubReleaseFetcher {
-    pub repo: String,
+    pub repo: &'static str,
 }
 
 impl VersionFetcher for GithubReleaseFetcher {

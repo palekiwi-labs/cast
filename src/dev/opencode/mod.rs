@@ -28,7 +28,7 @@ pub fn resolve_version(config: &Config) -> Result<String> {
     let cache_path = version::cache::get_cache_path("opencode");
     let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
     let fetcher = GithubReleaseFetcher {
-        repo: "anomalyco/opencode".to_string(),
+        repo: "anomalyco/opencode",
     };
     resolver.resolve(requested, &fetcher)
 }
