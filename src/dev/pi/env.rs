@@ -18,9 +18,6 @@ pub const PASSTHROUGH_VARS: &[&str] = &[
     "FIREWORKS_API_KEY",
     "CLOUDFLARE_API_KEY",
     // Pi-specific variables
-    "PI_CODING_AGENT_DIR",
-    "PI_CODING_AGENT_SESSION_DIR",
-    "PI_PACKAGE_DIR",
     "PI_OFFLINE",
     "PI_TELEMETRY",
     // AWS Bedrock
