@@ -19,7 +19,8 @@ RUN set -eux; \
         *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/v${PI_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
-    | tar -xz -C /usr/local/bin/; \
+    | tar -xz -C /opt/; \
+    ln -s /opt/pi/pi /usr/local/bin/pi; \
     chmod +x /usr/local/bin/pi;
 
 # Configure Nix system-wide to enable flakes
