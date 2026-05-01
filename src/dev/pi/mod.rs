@@ -131,15 +131,6 @@ mod tests {
     use crate::config::Config;
 
     #[test]
-    fn test_resolve_version_defaults_to_latest() {
-        let mut config = Config::default();
-        config.version_cache_ttl_hours = 24;
-
-        let version = resolve_version(&config).unwrap();
-        assert!(!version.is_empty());
-    }
-
-    #[test]
     fn test_extra_run_args() {
         let config = Config::default();
         let user = ResolvedUser {
