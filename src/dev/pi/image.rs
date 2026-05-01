@@ -96,8 +96,8 @@ mod tests {
     #[test]
     fn test_get_image_tag_format() {
         assert_eq!(
-            get_image_tag("v0.71.0"),
-            format!("localhost/cast:{}-pi-v0.71.0", env!("CARGO_PKG_VERSION"))
+            get_image_tag("0.71.0"),
+            format!("localhost/cast:{}-pi-0.71.0", env!("CARGO_PKG_VERSION"))
         );
     }
 

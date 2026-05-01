@@ -18,13 +18,7 @@ RUN set -eux; \
         arm64) BIN_ARCH="arm64" ;; \
         *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
     esac; \
-    # Ensure PI_VERSION starts with 'v' if it is a numeric version (not 'latest')
-    if [ "${PI_VERSION}" != "latest" ] && ! echo "${PI_VERSION}" | grep -q "^v"; then \
-        DOWNLOAD_VERSION="v${PI_VERSION}"; \
-    else \
-        DOWNLOAD_VERSION="${PI_VERSION}"; \
-    fi; \
-    curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/${DOWNLOAD_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
+    curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/v${PI_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
     | tar -xz -C /usr/local/bin/; \
     chmod +x /usr/local/bin/pi;
 

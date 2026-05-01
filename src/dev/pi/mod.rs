@@ -39,7 +39,7 @@ impl Agent for Pi {
 
     fn image_tag(&self, config: &Config) -> Result<String> {
         let version = resolve_version(config)?;
-        Ok(image::get_image_tag(&format!("v{}", version)))
+        Ok(image::get_image_tag(&version))
     }
 
     fn ensure_image(
@@ -50,7 +50,7 @@ impl Agent for Pi {
         opts: BuildOptions,
     ) -> Result<()> {
         let version = resolve_version(config)?;
-        image::ensure_dev_image(docker, config, user, &format!("v{}", version), opts)
+        image::ensure_dev_image(docker, config, user, &version, opts)
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
