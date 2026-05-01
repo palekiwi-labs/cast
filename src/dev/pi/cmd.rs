@@ -6,12 +6,12 @@ use crate::user::ResolvedUser;
 /// If `user_flake_present` is true, the base command is wrapped inside
 /// `nix develop <flake_dir> -c <base>` so the container uses the user's
 /// personal Nix flake environment.
-pub fn resolve_opencode_command(
+pub fn resolve_pi_command(
     cfg: &Config,
     user: &ResolvedUser,
     user_flake_present: bool,
 ) -> Vec<String> {
-    let base = cfg.opencode_command.clone();
+    let base = cfg.pi_command.clone();
 
     if user_flake_present {
         let flake_dir = format!("/home/{}/.config/cast/nix", user.username);
@@ -31,36 +31,40 @@ pub fn resolve_opencode_command(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
     use crate::user::ResolvedUser;
 
-    fn alice() -> ResolvedUser {
-        ResolvedUser {
-            username: "alice".to_string(),
+    #[test]
+    fn test_resolve_pi_command_no_flake() {
+        let cfg = Config::default();
+        let user = ResolvedUser {
             uid: 1000,
             gid: 1000,
-        }
-    }
+            username: "testuser".to_string(),
+        };
 
-    #[test]
-    fn test_default_cmd_no_flake() {
-        let cfg = Config::default();
-        let cmd = resolve_opencode_command(&cfg, &alice(), false);
-        assert_eq!(cmd, vec!["opencode"]);
-    }
-
-    #[test]
-    fn test_default_cmd_with_flake() {
-        let cfg = Config::default();
-        let cmd = resolve_opencode_command(&cfg, &alice(), true);
         assert_eq!(
-            cmd,
+            resolve_pi_command(&cfg, &user, false),
+            vec!["pi".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_resolve_pi_command_with_flake() {
+        let cfg = Config::default();
+        let user = ResolvedUser {
+            uid: 1000,
+            gid: 1000,
+            username: "testuser".to_string(),
+        };
+
+        assert_eq!(
+            resolve_pi_command(&cfg, &user, true),
             vec![
-                "nix",
-                "develop",
-                "/home/alice/.config/cast/nix",
-                "-c",
-                "opencode",
+                "nix".to_string(),
+                "develop".to_string(),
+                "/home/testuser/.config/cast/nix".to_string(),
+                "-c".to_string(),
+                "pi".to_string()
             ]
         );
     }

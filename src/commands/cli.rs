@@ -2,6 +2,7 @@ use super::{config, nix_daemon, port};
 use crate::config::load_config;
 use crate::dev;
 use crate::dev::opencode::OpenCode;
+use crate::dev::pi::Pi;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -30,6 +31,18 @@ pub enum BuildAgent {
         #[arg(long)]
         no_cache: bool,
     },
+    /// Build the Pi agent's Docker image
+    Pi {
+        /// Also build the Nix daemon base image
+        #[arg(long)]
+        base: bool,
+        /// Force rebuild even if image already exists
+        #[arg(short, long)]
+        force: bool,
+        /// Do not use Docker cache
+        #[arg(long)]
+        no_cache: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -42,6 +55,13 @@ pub enum RunAgent {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         extra_args: Vec<String>,
     },
+    /// Start an interactive Pi session
+    #[command(alias = "p", disable_help_flag = true)]
+    Pi {
+        /// Extra arguments to pass to the pi command
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
+        extra_args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -49,6 +69,8 @@ pub enum RunAgent {
 pub enum ShellAgent {
     /// Drop into an interactive shell in the OpenCode container
     Opencode,
+    /// Drop into an interactive shell in the Pi container
+    Pi,
 }
 
 #[derive(Subcommand)]
@@ -96,15 +118,29 @@ pub fn run(cli: Cli) -> Result<()> {
                     no_cache,
                 },
         }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
+        Some(Commands::Build {
+            agent:
+                BuildAgent::Pi {
+                    base,
+                    force,
+                    no_cache,
+                },
+        }) => dev::build_agent(&Pi, &cfg, base, force, no_cache),
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port) => port::handle_port(&cfg),
         Some(Commands::Run {
             agent: RunAgent::Opencode { extra_args },
         }) => dev::run_agent(&OpenCode, &cfg, extra_args),
+        Some(Commands::Run {
+            agent: RunAgent::Pi { extra_args },
+        }) => dev::run_agent(&Pi, &cfg, extra_args),
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
         }) => dev::shell(&OpenCode, &cfg),
+        Some(Commands::Shell {
+            agent: ShellAgent::Pi,
+        }) => dev::shell(&Pi, &cfg),
         None => unreachable!("Clap should handle required subcommands"),
     }
 }
