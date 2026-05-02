@@ -44,7 +44,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
     // Resolve port and container name.
-    let port = dev::port::resolve_port(config)?;
+    let port = dev::port::resolve_port(config, agent.name())?;
     let cwd_basename = workspace.root_basename();
     let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
 
