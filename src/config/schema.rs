@@ -70,7 +70,7 @@ impl Default for Config {
             version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
             cpus: 1.0,
-            pids_limit: 100,
+            pids_limit: 512,
             network: "bridge".to_string(),
             port: None,
             publish_port: true,
