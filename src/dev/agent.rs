@@ -76,8 +76,28 @@ pub trait Agent {
         opts: &RunOpts,
         extra_args: Vec<String>,
     ) -> Vec<String> {
-        let mut cmd: Vec<String> = vec![self.base_command().to_string()];
-        cmd.extend(extra_args);
+        // Calculate estimated capacity to avoid reallocations.
+        // Each flake layer adds 4 arguments.
+        let mut capacity = 1 + extra_args.len();
+        if opts.user_flake_present {
+            capacity += 4;
+        }
+        if config.use_flake && (config.use_flake_path.is_some() || opts.project_flake_present) {
+            capacity += 4;
+        }
+
+        let mut cmd = Vec::with_capacity(capacity);
+
+        // Global flake (outer layer - always applies if present)
+        if opts.user_flake_present {
+            let global_flake = format!("/home/{}/.config/cast/nix", opts.user.username);
+            cmd.extend([
+                "nix".to_string(),
+                "develop".to_string(),
+                global_flake,
+                "-c".to_string(),
+            ]);
+        }
 
         // Project flake (inner layer)
         if config.use_flake {
@@ -90,23 +110,18 @@ pub trait Agent {
             };
 
             if let Some(flake_ref) = project_flake {
-                cmd = ["nix", "develop", flake_ref, "-c"]
-                    .iter()
-                    .map(|s| s.to_string())
-                    .chain(cmd)
-                    .collect();
+                cmd.extend([
+                    "nix".to_string(),
+                    "develop".to_string(),
+                    flake_ref.to_string(),
+                    "-c".to_string(),
+                ]);
             }
         }
 
-        // Global flake (outer layer - always applies if present)
-        if opts.user_flake_present {
-            let global_flake = format!("/home/{}/.config/cast/nix", opts.user.username);
-            cmd = ["nix", "develop", global_flake.as_str(), "-c"]
-                .iter()
-                .map(|s| s.to_string())
-                .chain(cmd)
-                .collect();
-        }
+        // Base command and extra args
+        cmd.push(self.base_command().to_string());
+        cmd.extend(extra_args);
 
         cmd
     }
@@ -167,9 +182,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_false_no_global() {
-        let mut config = Config::default();
-        config.use_flake = false;
-        config.use_flake_path = Some(".#my-shell".to_string());
+        let config = Config {
+            use_flake: false,
+            use_flake_path: Some(".#my-shell".to_string()),
+            ..Default::default()
+        };
 
         // Scenario 1: use_flake false, no global flake -> bare command
         let opts = run_opts(false, true);
@@ -179,9 +196,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_false_with_global() {
-        let mut config = Config::default();
-        config.use_flake = false;
-        config.use_flake_path = Some(".#my-shell".to_string());
+        let config = Config {
+            use_flake: false,
+            use_flake_path: Some(".#my-shell".to_string()),
+            ..Default::default()
+        };
 
         // Scenario 2: use_flake false, global flake present -> wrapped ONLY in global flake
         let opts = run_opts(true, true);
@@ -201,9 +220,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_true_no_global_no_project() {
-        let mut config = Config::default();
-        config.use_flake = true;
-        config.use_flake_path = None;
+        let config = Config {
+            use_flake: true,
+            use_flake_path: None,
+            ..Default::default()
+        };
 
         // Scenario 3: use_flake true, no global, no project flake -> bare command
         let opts = run_opts(false, false);
@@ -213,9 +234,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_true_no_global_with_project_auto() {
-        let mut config = Config::default();
-        config.use_flake = true;
-        config.use_flake_path = None;
+        let config = Config {
+            use_flake: true,
+            use_flake_path: None,
+            ..Default::default()
+        };
 
         // Scenario 4: use_flake true, no global, project flake present (auto-detect)
         let opts = run_opts(false, true);
@@ -225,9 +248,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_true_no_global_with_project_path() {
-        let mut config = Config::default();
-        config.use_flake = true;
-        config.use_flake_path = Some(".#shell".to_string());
+        let config = Config {
+            use_flake: true,
+            use_flake_path: Some(".#shell".to_string()),
+            ..Default::default()
+        };
 
         // Scenario 5: use_flake true, no global, explicit project flake path
         let opts = run_opts(false, false); // project_flake_present false to prove path overrides it
@@ -237,9 +262,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_true_with_global_and_project_auto() {
-        let mut config = Config::default();
-        config.use_flake = true;
-        config.use_flake_path = None;
+        let config = Config {
+            use_flake: true,
+            use_flake_path: None,
+            ..Default::default()
+        };
 
         // Scenario 6: use_flake true, global present, project auto-detected -> nested wrap
         let opts = run_opts(true, true);
@@ -263,9 +290,11 @@ mod tests {
 
     #[test]
     fn test_build_command_use_flake_true_with_global_and_project_path() {
-        let mut config = Config::default();
-        config.use_flake = true;
-        config.use_flake_path = Some(".#shell".to_string());
+        let config = Config {
+            use_flake: true,
+            use_flake_path: Some(".#shell".to_string()),
+            ..Default::default()
+        };
 
         // Scenario 7: use_flake true, global present, explicit project path -> nested wrap
         let opts = run_opts(true, false);
