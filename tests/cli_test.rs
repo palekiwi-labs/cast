@@ -51,6 +51,41 @@ fn test_cast_config_show_outputs_valid_json() {
 }
 
 #[test]
+fn test_cast_port_different_for_different_agents() {
+    let output_o = cast().args(["port", "opencode"]).assert().success();
+    let stdout_o = String::from_utf8_lossy(&output_o.get_output().stdout);
+    let port_o: u16 = stdout_o.trim().parse().unwrap();
+
+    let output_p = cast().args(["port", "pi"]).assert().success();
+    let stdout_p = String::from_utf8_lossy(&output_p.get_output().stdout);
+    let port_p: u16 = stdout_p.trim().parse().unwrap();
+
+    assert_ne!(
+        port_o, port_p,
+        "Different agents should have different ports"
+    );
+}
+
+#[test]
+fn test_cast_port_ignores_extra_args() {
+    let output1 = cast().args(["port", "pi"]).assert().success();
+    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
+    let port1: u16 = stdout1.trim().parse().unwrap();
+
+    let output2 = cast()
+        .args(["port", "pi", "--some-flag", "value"])
+        .assert()
+        .success();
+    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
+    let port2: u16 = stdout2.trim().parse().unwrap();
+
+    assert_eq!(
+        port1, port2,
+        "Extra args should not affect port computation"
+    );
+}
+
+#[test]
 fn test_cast_run_help() {
     cast()
         .args(["run", "--help"])

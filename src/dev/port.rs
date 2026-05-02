@@ -7,18 +7,19 @@ use crate::config::Config;
 /// The POSIX cksum algorithm implementation
 const CKSUM: Crc<u32> = Crc::<u32>::new(&CRC_32_CKSUM);
 
-/// Calculate a deterministic port based on the current working directory
-pub fn calculate_port() -> Result<u16> {
+/// Calculate a deterministic port based on the current working directory and agent name
+pub fn calculate_port(agent_name: &str) -> Result<u16> {
     let pwd = env::current_dir()?;
     let pwd_str = pwd.to_string_lossy();
 
     // The POSIX cksum algorithm includes the length of the string
     // appended as little-endian bytes to the end of the digest calculation
     let mut digest = CKSUM.digest();
-    digest.update(pwd_str.as_bytes());
+    let seed = format!("{}:{}", pwd_str, agent_name);
+    digest.update(seed.as_bytes());
 
     // cksum requires appending the length in a specific way
-    let mut len = pwd_str.len();
+    let mut len = seed.len();
     while len > 0 {
         digest.update(&[(len & 0xFF) as u8]);
         len >>= 8;
@@ -33,10 +34,10 @@ pub fn calculate_port() -> Result<u16> {
 }
 
 /// Resolve the port to use, either from config or by calculating it
-pub fn resolve_port(config: &Config) -> Result<u16> {
+pub fn resolve_port(config: &Config, agent_name: &str) -> Result<u16> {
     match config.port {
         Some(port) => Ok(port),
-        None => calculate_port(),
+        None => calculate_port(agent_name),
     }
 }
 
@@ -46,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_calculate_port_in_range() {
-        let port = calculate_port().expect("Should calculate port");
+        let port = calculate_port("opencode").expect("Should calculate port");
         assert!(
             port >= 32768,
             "Port should be in ephemeral range (>= 32768)"
@@ -56,8 +57,8 @@ mod tests {
     #[test]
     fn test_calculate_port_deterministic() {
         // Same directory should always give same port
-        let port1 = calculate_port().expect("Should calculate port");
-        let port2 = calculate_port().expect("Should calculate port");
+        let port1 = calculate_port("opencode").expect("Should calculate port");
+        let port2 = calculate_port("opencode").expect("Should calculate port");
         assert_eq!(port1, port2, "Port should be deterministic");
     }
 
@@ -67,14 +68,14 @@ mod tests {
             port: Some(12345),
             ..Default::default()
         };
-        assert_eq!(resolve_port(&config).unwrap(), 12345);
+        assert_eq!(resolve_port(&config, "opencode").unwrap(), 12345);
     }
 
     #[test]
     fn test_resolve_port_without_config_uses_calculated() {
         let config = Config::default();
-        let calculated = calculate_port().unwrap();
-        assert_eq!(resolve_port(&config).unwrap(), calculated);
+        let calculated = calculate_port("opencode").unwrap();
+        assert_eq!(resolve_port(&config, "opencode").unwrap(), calculated);
     }
 
     #[test]

@@ -1,7 +1,5 @@
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
-pub mod image;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -14,8 +12,6 @@ use crate::dev::run::RunOpts;
 use crate::dev::utils;
 use crate::dev::version::fetcher::GithubReleaseFetcher;
 use crate::dev::version::{self, VersionResolver};
-use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 
 /// Resolve the concrete opencode version based on config.
@@ -76,30 +72,26 @@ pub fn resolve_config_file_env(
 pub struct OpenCode;
 
 impl Agent for OpenCode {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "opencode"
     }
 
-    fn image_tag(&self, config: &Config) -> Result<String> {
-        let version = resolve_version(config)?;
-        Ok(image::get_image_tag(&version))
+    fn dockerfile(&self) -> &'static str {
+        include_str!("../../../assets/Dockerfile.dev.opencode")
     }
 
-    fn ensure_image(
-        &self,
-        docker: &DockerClient,
-        config: &Config,
-        user: &ResolvedUser,
-        opts: BuildOptions,
-    ) -> Result<()> {
-        let version = resolve_version(config)?;
-        image::ensure_dev_image(docker, config, user, &version, opts)
+    fn resolve_version(&self, config: &Config) -> Result<String> {
+        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
         let base = dirs::config_dir().context("Failed to resolve user config directory")?;
         config_dir::ensure_config_dir(&base)?;
         Ok(())
+    }
+
+    fn base_command(&self) -> &'static str {
+        "opencode"
     }
 
     fn extra_run_args(
@@ -178,13 +170,6 @@ impl Agent for OpenCode {
 
         Ok(args)
     }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command =
-            cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
-    }
 }
 
 /// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
@@ -224,6 +209,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         }
     }
 
@@ -381,6 +367,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(home_dir),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
@@ -427,6 +414,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let env = HashMap::new();
 
@@ -450,5 +438,21 @@ mod tests {
 
         assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
         assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
+    }
+
+    #[test]
+    fn test_image_tag_format() {
+        assert_eq!(
+            OpenCode.image_tag("1.4.7"),
+            format!(
+                "localhost/cast:{}-opencode-1.4.7",
+                env!("CARGO_PKG_VERSION")
+            )
+        );
+    }
+
+    #[test]
+    fn test_dockerfile_has_correct_base_image() {
+        assert!(OpenCode.dockerfile().contains("FROM debian:trixie-slim"));
     }
 }

@@ -13,7 +13,7 @@ pub fn shell(agent: &dyn Agent, config: &Config) -> Result<()> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
-    let port = resolve_port(config)?;
+    let port = resolve_port(config, agent.name())?;
 
     let cwd_basename = workspace.root_basename();
     let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);

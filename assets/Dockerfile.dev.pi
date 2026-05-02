@@ -1,6 +1,6 @@
 FROM debian:trixie-slim
 
-ARG PI_VERSION=latest
+ARG AGENT_VERSION=latest
 ARG TARGETARCH
 
 # Install essential tools for development
@@ -18,7 +18,7 @@ RUN set -eux; \
         arm64) BIN_ARCH="arm64" ;; \
         *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
     esac; \
-    curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/v${PI_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
+    curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/v${AGENT_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
     | tar -xz -C /opt/; \
     ln -s /opt/pi/pi /usr/local/bin/pi; \
     chmod +x /usr/local/bin/pi;

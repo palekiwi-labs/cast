@@ -5,15 +5,11 @@ use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
 use crate::dev::version::fetcher::GithubReleaseFetcher;
 use crate::dev::version::{self, VersionResolver};
-use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
-pub mod image;
 
 /// Resolve the concrete pi version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
@@ -33,30 +29,26 @@ pub fn resolve_version(config: &Config) -> Result<String> {
 pub struct Pi;
 
 impl Agent for Pi {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "pi"
     }
 
-    fn image_tag(&self, config: &Config) -> Result<String> {
-        let version = resolve_version(config)?;
-        Ok(image::get_image_tag(&version))
+    fn dockerfile(&self) -> &'static str {
+        include_str!("../../../assets/Dockerfile.dev.pi")
     }
 
-    fn ensure_image(
-        &self,
-        docker: &DockerClient,
-        config: &Config,
-        user: &ResolvedUser,
-        opts: BuildOptions,
-    ) -> Result<()> {
-        let version = resolve_version(config)?;
-        image::ensure_dev_image(docker, config, user, &version, opts)
+    fn resolve_version(&self, config: &Config) -> Result<String> {
+        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
         let base = dirs::config_dir().context("Failed to resolve user config directory")?;
         config_dir::ensure_config_dir(&base)?;
         Ok(())
+    }
+
+    fn base_command(&self) -> &'static str {
+        "pi"
     }
 
     fn extra_run_args(
@@ -105,12 +97,6 @@ impl Agent for Pi {
 
         Ok(args)
     }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command = cmd::resolve_pi_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
-    }
 }
 
 /// Persistent data volumes for Pi: <namespace>-pi-cache and <namespace>-pi-local.
@@ -147,6 +133,7 @@ mod tests {
             port: 8080,
             host_home_dir: Some(std::path::PathBuf::from("/home/testuser")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let mut env = HashMap::new();
         env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
@@ -157,5 +144,18 @@ mod tests {
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
         assert!(args.contains(&"PI_CODING_AGENT_DIR=/home/testuser/.pi".to_string()));
+    }
+
+    #[test]
+    fn test_image_tag_format() {
+        assert_eq!(
+            Pi.image_tag("0.71.0"),
+            format!("localhost/cast:{}-pi-0.71.0", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn test_dockerfile_has_correct_base_image() {
+        assert!(Pi.dockerfile().contains("FROM debian:trixie-slim"));
     }
 }

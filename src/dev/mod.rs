@@ -1,8 +1,10 @@
 pub mod agent;
 pub mod build;
+pub mod build_command;
 pub mod container_name;
 pub mod env_file;
 pub mod extra_dirs;
+pub mod image;
 pub mod opencode;
 pub mod pi;
 pub mod port;
