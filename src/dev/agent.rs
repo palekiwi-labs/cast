@@ -65,6 +65,37 @@ pub trait Agent {
         Ok(())
     }
 
+    /// The fundamental command vector from config (e.g. `&config.opencode_command`).
+    fn base_command<'a>(&self, config: &'a Config) -> &'a [String];
+
+    /// Hook to enable/disable the nix develop wrapper.
+    fn use_nix_develop_wrapper(&self) -> bool {
+        true
+    }
+
     /// Build the command vector that will be passed to `docker run` after all flags.
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String>;
+    /// Default implementation handles the shared Nix develop wrapping logic.
+    fn build_command(
+        &self,
+        config: &Config,
+        opts: &RunOpts,
+        extra_args: Vec<String>,
+    ) -> Vec<String> {
+        let base = self.base_command(config);
+        let mut full_cmd = if self.use_nix_develop_wrapper() && opts.user_flake_present {
+            let flake_dir = format!("/home/{}/.config/cast/nix", opts.user.username);
+            let mut c = vec![
+                "nix".to_string(),
+                "develop".to_string(),
+                flake_dir,
+                "-c".to_string(),
+            ];
+            c.extend(base.iter().cloned());
+            c
+        } else {
+            base.to_vec()
+        };
+        full_cmd.extend(extra_args);
+        full_cmd
+    }
 }
