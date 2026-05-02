@@ -127,7 +127,7 @@ impl Agent for OpenCode {
         if let Some(config_file_env) = &opencode_config_env {
             args.extend([
                 "-v".to_string(),
-                format!("{}:/opencode.json:ro", config_file_path.display()),
+                format!("{}:/opencode.json:ro", config_file_env.display()),
                 "-e".to_string(),
                 "OPENCODE_CONFIG=/opencode.json".to_string(),
             ]);
