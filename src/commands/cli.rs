@@ -1,6 +1,7 @@
 use super::{config, nix_daemon, port};
 use crate::config::load_config;
 use crate::dev;
+use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
 use anyhow::Result;
@@ -92,7 +93,10 @@ pub enum Commands {
         command: nix_daemon::NixDaemonCommands,
     },
     /// Print the port that the container will publish
-    Port,
+    Port {
+        #[command(subcommand)]
+        agent: RunAgent,
+    },
     /// Run an agent
     Run {
         #[command(subcommand)]
@@ -103,6 +107,15 @@ pub enum Commands {
         #[command(subcommand)]
         agent: ShellAgent,
     },
+}
+
+impl RunAgent {
+    pub fn as_agent(&self) -> &'static dyn Agent {
+        match self {
+            RunAgent::Opencode { .. } => &OpenCode,
+            RunAgent::Pi { .. } => &Pi,
+        }
+    }
 }
 
 pub fn run(cli: Cli) -> Result<()> {
@@ -128,13 +141,15 @@ pub fn run(cli: Cli) -> Result<()> {
         }) => dev::build_agent(&Pi, &cfg, base, force, no_cache),
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
-        Some(Commands::Port) => port::handle_port(&cfg),
-        Some(Commands::Run {
-            agent: RunAgent::Opencode { extra_args },
-        }) => dev::run_agent(&OpenCode, &cfg, extra_args),
-        Some(Commands::Run {
-            agent: RunAgent::Pi { extra_args },
-        }) => dev::run_agent(&Pi, &cfg, extra_args),
+        Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
+        Some(Commands::Run { agent }) => dev::run_agent(
+            agent.as_agent(),
+            &cfg,
+            match &agent {
+                RunAgent::Opencode { extra_args } => extra_args.clone(),
+                RunAgent::Pi { extra_args } => extra_args.clone(),
+            },
+        ),
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
         }) => dev::shell(&OpenCode, &cfg),
