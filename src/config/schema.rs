@@ -75,7 +75,7 @@ impl Default for Config {
             port: None,
             publish_port: true,
             add_host_docker_internal: true,
-            use_flake: true,
+            use_flake: false,
             use_flake_path: None,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: HashMap::new(),

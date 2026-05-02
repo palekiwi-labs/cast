@@ -12,6 +12,7 @@ fn test_config_has_defaults() {
     assert_eq!(config.memory, "1024m");
     assert_eq!(config.cpus, 1.0);
     assert_eq!(config.pids_limit, 100);
+    assert!(!config.use_flake);
 }
 
 #[test]
