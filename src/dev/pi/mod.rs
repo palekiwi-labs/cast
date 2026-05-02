@@ -41,9 +41,12 @@ impl Agent for Pi {
         resolve_version(config)
     }
 
-    fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
-        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
-        config_dir::ensure_config_dir(&base)?;
+    fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        config_dir::ensure_config_dir(home)?;
         Ok(())
     }
 
@@ -61,8 +64,11 @@ impl Agent for Pi {
         let mut args = env::build_passthrough_env_args(env);
 
         // Pi config directory bind mount.
-        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
-        let pi_config_host_dir = config_dir::get_config_dir(&base);
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        let pi_config_host_dir = config_dir::get_config_dir(home);
 
         args.extend([
             "-v".to_string(),
@@ -141,6 +147,8 @@ mod tests {
         let pi = Pi;
         let args = pi.extra_run_args(&config, &run_opts, &env).unwrap();
 
+        assert!(args.contains(&"-v".to_string()));
+        assert!(args.contains(&"/home/testuser/.pi:/home/testuser/.pi:rw".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
         assert!(args.contains(&"PI_CODING_AGENT_DIR=/home/testuser/.pi".to_string()));
