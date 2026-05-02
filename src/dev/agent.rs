@@ -65,38 +65,44 @@ pub trait Agent {
         Ok(())
     }
 
-    /// The fundamental command vector from config (e.g. `&config.opencode_command`).
-    fn base_command<'a>(&self, config: &'a Config) -> &'a [String];
-
-    /// Hook to enable/disable the nix develop wrapper.
-    fn use_nix_develop_wrapper(&self) -> bool {
-        true
-    }
+    /// The fundamental binary command of the agent (e.g. `"opencode"` or `"pi"`).
+    fn base_command(&self) -> &'static str;
 
     /// Build the command vector that will be passed to `docker run` after all flags.
-    /// Default implementation handles the shared Nix develop wrapping logic.
+    /// Default implementation handles the nested Nix develop wrapping logic.
     fn build_command(
         &self,
         config: &Config,
         opts: &RunOpts,
         extra_args: Vec<String>,
     ) -> Vec<String> {
-        let base = self.base_command(config);
-        let mut full_cmd = if self.use_nix_develop_wrapper() && opts.user_flake_present {
-            let flake_dir = format!("/home/{}/.config/cast/nix", opts.user.username);
-            let mut c = vec![
-                "nix".to_string(),
-                "develop".to_string(),
-                flake_dir,
-                "-c".to_string(),
-            ];
-            c.extend(base.iter().cloned());
-            c
-        } else {
-            base.to_vec()
-        };
-        full_cmd.extend(extra_args);
-        full_cmd
+        let mut cmd: Vec<String> = vec![self.base_command().to_string()];
+        cmd.extend(extra_args);
+
+        if !config.use_flake {
+            return cmd;
+        }
+
+        // Wrap with project flake if specified (inner layer)
+        if let Some(project_flake) = &config.use_flake_path {
+            cmd = ["nix", "develop", project_flake.as_str(), "-c"]
+                .iter()
+                .map(|s| s.to_string())
+                .chain(cmd)
+                .collect();
+        }
+
+        // Wrap with global flake if detected (outer layer)
+        if opts.user_flake_present {
+            let global_flake = format!("/home/{}/.config/cast/nix", opts.user.username);
+            cmd = ["nix", "develop", global_flake.as_str(), "-c"]
+                .iter()
+                .map(|s| s.to_string())
+                .chain(cmd)
+                .collect();
+        }
+
+        cmd
     }
 }
 
@@ -126,8 +132,8 @@ mod tests {
         ) -> Result<Vec<String>> {
             Ok(vec![])
         }
-        fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
-            &config.opencode_command
+        fn base_command(&self) -> &'static str {
+            "test"
         }
     }
 
@@ -153,16 +159,36 @@ mod tests {
     }
 
     #[test]
-    fn test_build_command_no_flake() {
-        let config = Config::default();
-        let opts = run_opts(false);
+    fn test_build_command_use_flake_false() {
+        let mut config = Config::default();
+        config.use_flake = false;
+        config.use_flake_path = Some(".#my-shell".to_string());
+
+        // Scenario 1: use_flake is false, so it ignores both the path and the global flake presence
+        let opts = run_opts(true);
         let cmd = TestAgent.build_command(&config, &opts, vec!["arg1".to_string()]);
-        assert_eq!(cmd, vec!["opencode", "arg1"]);
+        assert_eq!(cmd, vec!["test", "arg1"]);
     }
 
     #[test]
-    fn test_build_command_with_flake() {
-        let config = Config::default();
+    fn test_build_command_use_flake_true_no_global_no_path() {
+        let mut config = Config::default();
+        config.use_flake = true;
+        config.use_flake_path = None;
+
+        // Scenario 2: use_flake true, no global flake, no path -> bare command
+        let opts = run_opts(false);
+        let cmd = TestAgent.build_command(&config, &opts, vec!["arg1".to_string()]);
+        assert_eq!(cmd, vec!["test", "arg1"]);
+    }
+
+    #[test]
+    fn test_build_command_use_flake_true_global_no_path() {
+        let mut config = Config::default();
+        config.use_flake = true;
+        config.use_flake_path = None;
+
+        // Scenario 3: use_flake true, global flake detected, no path -> wrapped in global flake
         let opts = run_opts(true);
         let cmd = TestAgent.build_command(&config, &opts, vec!["arg1".to_string()]);
         assert_eq!(
@@ -172,44 +198,50 @@ mod tests {
                 "develop",
                 "/home/alice/.config/cast/nix",
                 "-c",
-                "opencode",
+                "test",
                 "arg1"
             ]
         );
     }
 
     #[test]
-    fn test_build_command_no_nix_wrapper() {
-        struct NoNixAgent;
-        impl Agent for NoNixAgent {
-            fn name(&self) -> &'static str {
-                "nonix"
-            }
-            fn dockerfile(&self) -> &'static str {
-                ""
-            }
-            fn resolve_version(&self, _config: &Config) -> Result<String> {
-                Ok("1.0.0".to_string())
-            }
-            fn extra_run_args(
-                &self,
-                _config: &Config,
-                _opts: &RunOpts,
-                _env: &HashMap<String, String>,
-            ) -> Result<Vec<String>> {
-                Ok(vec![])
-            }
-            fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
-                &config.pi_command
-            }
-            fn use_nix_develop_wrapper(&self) -> bool {
-                false
-            }
-        }
+    fn test_build_command_use_flake_true_no_global_with_path() {
+        let mut config = Config::default();
+        config.use_flake = true;
+        config.use_flake_path = Some(".#my-shell".to_string());
 
-        let config = Config::default();
+        // Scenario 4: use_flake true, no global flake, path provided -> wrapped in project flake
+        let opts = run_opts(false);
+        let cmd = TestAgent.build_command(&config, &opts, vec!["arg1".to_string()]);
+        assert_eq!(
+            cmd,
+            vec!["nix", "develop", ".#my-shell", "-c", "test", "arg1"]
+        );
+    }
+
+    #[test]
+    fn test_build_command_use_flake_true_global_with_path() {
+        let mut config = Config::default();
+        config.use_flake = true;
+        config.use_flake_path = Some(".#my-shell".to_string());
+
+        // Scenario 5: use_flake true, global flake detected, path provided -> nested wrapping (global wraps project)
         let opts = run_opts(true);
-        let cmd = NoNixAgent.build_command(&config, &opts, vec![]);
-        assert_eq!(cmd, vec!["pi"]);
+        let cmd = TestAgent.build_command(&config, &opts, vec!["arg1".to_string()]);
+        assert_eq!(
+            cmd,
+            vec![
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix",
+                "-c",
+                "nix",
+                "develop",
+                ".#my-shell",
+                "-c",
+                "test",
+                "arg1"
+            ]
+        );
     }
 }

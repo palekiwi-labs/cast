@@ -90,8 +90,8 @@ impl Agent for OpenCode {
         Ok(())
     }
 
-    fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
-        &config.opencode_command
+    fn base_command(&self) -> &'static str {
+        "opencode"
     }
 
     fn extra_run_args(

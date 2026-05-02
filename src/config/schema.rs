@@ -27,8 +27,9 @@ pub struct Config {
     pub add_host_docker_internal: bool,
 
     // Paths & Files
-    pub opencode_command: Vec<String>,
-    pub pi_command: Vec<String>,
+    pub use_flake: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub use_flake_path: Option<String>,
 
     // Data Volumes
     pub volumes_namespace: String,
@@ -74,8 +75,8 @@ impl Default for Config {
             port: None,
             publish_port: true,
             add_host_docker_internal: true,
-            opencode_command: vec!["opencode".to_string()],
-            pi_command: vec!["pi".to_string()],
+            use_flake: true,
+            use_flake_path: None,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: HashMap::new(),
             nix_volume_name: "cast-nix".to_string(),

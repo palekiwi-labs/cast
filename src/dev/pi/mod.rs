@@ -47,8 +47,8 @@ impl Agent for Pi {
         Ok(())
     }
 
-    fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
-        &config.pi_command
+    fn base_command(&self) -> &'static str {
+        "pi"
     }
 
     fn extra_run_args(
