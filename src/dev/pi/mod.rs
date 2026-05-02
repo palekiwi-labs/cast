@@ -8,7 +8,6 @@ use crate::dev::version::{self, VersionResolver};
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
 
@@ -46,6 +45,10 @@ impl Agent for Pi {
         let base = dirs::config_dir().context("Failed to resolve user config directory")?;
         config_dir::ensure_config_dir(&base)?;
         Ok(())
+    }
+
+    fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
+        &config.pi_command
     }
 
     fn extra_run_args(
@@ -93,12 +96,6 @@ impl Agent for Pi {
         args.extend(build_data_volume_args(config, &opts.user));
 
         Ok(args)
-    }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command = cmd::resolve_pi_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
     }
 }
 
