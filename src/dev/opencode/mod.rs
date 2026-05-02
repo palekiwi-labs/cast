@@ -1,4 +1,3 @@
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
 
@@ -91,6 +90,10 @@ impl Agent for OpenCode {
         Ok(())
     }
 
+    fn base_command<'a>(&self, config: &'a Config) -> &'a [String] {
+        &config.opencode_command
+    }
+
     fn extra_run_args(
         &self,
         config: &Config,
@@ -124,7 +127,7 @@ impl Agent for OpenCode {
         if let Some(config_file_env) = &opencode_config_env {
             args.extend([
                 "-v".to_string(),
-                format!("{}:/opencode.json:ro", config_file_env.display()),
+                format!("{}:/opencode.json:ro", config_file_path.display()),
                 "-e".to_string(),
                 "OPENCODE_CONFIG=/opencode.json".to_string(),
             ]);
@@ -166,13 +169,6 @@ impl Agent for OpenCode {
         args.extend(build_data_volume_args(config, &opts.user));
 
         Ok(args)
-    }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command =
-            cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
     }
 }
 
