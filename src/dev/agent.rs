@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use anyhow::Result;
 
 use crate::config::Config;
+use crate::dev::build_command;
 use crate::dev::image;
 use crate::dev::run::RunOpts;
 use crate::docker::client::DockerClient;
@@ -65,6 +66,17 @@ pub trait Agent {
         Ok(())
     }
 
+    /// The fundamental binary command of the agent (e.g. `"opencode"` or `"pi"`).
+    fn base_command(&self) -> &'static str;
+
     /// Build the command vector that will be passed to `docker run` after all flags.
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String>;
+    /// Default implementation handles the nested Nix develop wrapping logic.
+    fn build_command(
+        &self,
+        config: &Config,
+        opts: &RunOpts,
+        extra_args: Vec<String>,
+    ) -> Vec<String> {
+        build_command::build_command(config, opts, self.base_command(), extra_args)
+    }
 }

@@ -8,7 +8,6 @@ use crate::dev::version::{self, VersionResolver};
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
 
@@ -46,6 +45,10 @@ impl Agent for Pi {
         let base = dirs::config_dir().context("Failed to resolve user config directory")?;
         config_dir::ensure_config_dir(&base)?;
         Ok(())
+    }
+
+    fn base_command(&self) -> &'static str {
+        "pi"
     }
 
     fn extra_run_args(
@@ -94,12 +97,6 @@ impl Agent for Pi {
 
         Ok(args)
     }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command = cmd::resolve_pi_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
-    }
 }
 
 /// Persistent data volumes for Pi: <namespace>-pi-cache and <namespace>-pi-local.
@@ -136,6 +133,7 @@ mod tests {
             port: 8080,
             host_home_dir: Some(std::path::PathBuf::from("/home/testuser")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let mut env = HashMap::new();
         env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());

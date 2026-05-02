@@ -1,4 +1,3 @@
-pub mod cmd;
 pub mod config_dir;
 pub mod env;
 
@@ -91,6 +90,10 @@ impl Agent for OpenCode {
         Ok(())
     }
 
+    fn base_command(&self) -> &'static str {
+        "opencode"
+    }
+
     fn extra_run_args(
         &self,
         config: &Config,
@@ -167,13 +170,6 @@ impl Agent for OpenCode {
 
         Ok(args)
     }
-
-    fn command(&self, config: &Config, opts: &RunOpts, extra_args: Vec<String>) -> Vec<String> {
-        let mut command =
-            cmd::resolve_opencode_command(config, &opts.user, opts.user_flake_present);
-        command.extend(extra_args);
-        command
-    }
 }
 
 /// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
@@ -213,6 +209,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         }
     }
 
@@ -370,6 +367,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(home_dir),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
@@ -416,6 +414,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let env = HashMap::new();
 
