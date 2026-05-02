@@ -26,6 +26,7 @@ pub struct RunOpts {
     pub port: u16,
     pub host_home_dir: Option<PathBuf>,
     pub user_flake_present: bool,
+    pub project_flake_present: bool,
 }
 
 /// Orchestrate and run an agent session inside the dev container.
@@ -55,12 +56,15 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
         .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
         .is_some();
 
+    let project_flake_present = workspace.root.join("flake.nix").exists();
+
     let run_opts = RunOpts {
         workspace,
         user,
         port,
         host_home_dir,
         user_flake_present,
+        project_flake_present,
     };
 
     // Prepare host-side side effects before building arguments.
@@ -196,6 +200,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -242,6 +247,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -275,6 +281,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);
@@ -313,6 +320,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let run_args = build_run_opts(&config, &opts);

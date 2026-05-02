@@ -209,6 +209,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         }
     }
 
@@ -366,6 +367,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(home_dir),
             user_flake_present: false,
+            project_flake_present: false,
         };
 
         let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
@@ -412,6 +414,7 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let env = HashMap::new();
 

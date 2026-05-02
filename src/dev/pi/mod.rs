@@ -133,6 +133,7 @@ mod tests {
             port: 8080,
             host_home_dir: Some(std::path::PathBuf::from("/home/testuser")),
             user_flake_present: false,
+            project_flake_present: false,
         };
         let mut env = HashMap::new();
         env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
