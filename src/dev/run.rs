@@ -71,7 +71,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
 
     // Build the full command and exec into the container.
-    let cmd = agent.command(config, &run_opts, extra_args);
+    let cmd = agent.build_command(config, &run_opts, extra_args);
     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
     Err(docker.exec_command(docker_args))
 }
