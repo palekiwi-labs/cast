@@ -1,3 +1,5 @@
+use std::process::ExitStatus;
+
 use super::{config, nix_daemon, port};
 use crate::config::load_config;
 use crate::dev;
@@ -151,20 +153,32 @@ pub fn run(cli: Cli) -> Result<()> {
                     RunAgent::Pi { extra_args } => extra_args.clone(),
                 },
             )?;
-            std::process::exit(status.code().unwrap_or(1));
+            exit_with_status(status);
         }
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
         }) => {
             let status = dev::shell(&OpenCode, &cfg)?;
-            std::process::exit(status.code().unwrap_or(1));
+            exit_with_status(status);
         }
         Some(Commands::Shell {
             agent: ShellAgent::Pi,
         }) => {
             let status = dev::shell(&Pi, &cfg)?;
-            std::process::exit(status.code().unwrap_or(1));
+            exit_with_status(status);
         }
         None => unreachable!("Clap should handle required subcommands"),
     }
+}
+
+/// Exit the process with the given ExitStatus, following Unix conventions.
+pub fn exit_with_status(status: ExitStatus) -> ! {
+    use std::os::unix::process::ExitStatusExt;
+
+    let code = status.code().unwrap_or_else(|| {
+        // If terminated by a signal, follow the 128 + signal shell convention
+        status.signal().map(|s| 128 + s).unwrap_or(1)
+    });
+
+    std::process::exit(code);
 }

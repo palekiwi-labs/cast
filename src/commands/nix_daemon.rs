@@ -38,7 +38,7 @@ pub fn handle_nix_daemon(cfg: &Config, command: NixDaemonCommands) -> Result<()>
         NixDaemonCommands::Shell => {
             let docker = DockerClient;
             let status = nix_daemon::shell(&docker, cfg)?;
-            std::process::exit(status.code().unwrap_or(1));
+            crate::commands::cli::exit_with_status(status);
         }
         NixDaemonCommands::Start => {
             let docker = DockerClient;

@@ -1,4 +1,4 @@
-mod cli;
+pub mod cli;
 mod config;
 mod nix_daemon;
 mod port;
