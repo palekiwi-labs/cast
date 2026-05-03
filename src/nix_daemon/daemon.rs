@@ -1,4 +1,5 @@
 use std::fs;
+use std::process::ExitStatus;
 use tempfile::TempDir;
 
 use crate::config::Config;
@@ -6,7 +7,7 @@ use crate::docker::args;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::nix_daemon::{config as nix_config, image};
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 /// Ensure the nix daemon container is running
 pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
@@ -101,16 +102,15 @@ pub fn stop(docker: &DockerClient, config: &Config) -> Result<()> {
 }
 
 /// Drop into an interactive shell in the nix daemon container
-pub fn shell(docker: &DockerClient, config: &Config) -> Result<()> {
+pub fn shell(docker: &DockerClient, config: &Config) -> Result<ExitStatus> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if it's actually running
     if !docker.is_container_running(container_name)? {
-        println!(
+        bail!(
             "Nix daemon is not running: {}. Run 'ocx nix-daemon start' first.",
             container_name
         );
-        return Ok(());
     }
 
     let exec_args = vec![
@@ -120,5 +120,5 @@ pub fn shell(docker: &DockerClient, config: &Config) -> Result<()> {
         "/bin/sh".to_string(),
     ];
 
-    Err(docker.exec_command(exec_args))
+    docker.interactive_command(exec_args)
 }

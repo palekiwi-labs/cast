@@ -142,20 +142,29 @@ pub fn run(cli: Cli) -> Result<()> {
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
-        Some(Commands::Run { agent }) => dev::run_agent(
-            agent.as_agent(),
-            &cfg,
-            match &agent {
-                RunAgent::Opencode { extra_args } => extra_args.clone(),
-                RunAgent::Pi { extra_args } => extra_args.clone(),
-            },
-        ),
+        Some(Commands::Run { agent }) => {
+            let status = dev::run_agent(
+                agent.as_agent(),
+                &cfg,
+                match &agent {
+                    RunAgent::Opencode { extra_args } => extra_args.clone(),
+                    RunAgent::Pi { extra_args } => extra_args.clone(),
+                },
+            )?;
+            std::process::exit(status.code().unwrap_or(1));
+        }
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
-        }) => dev::shell(&OpenCode, &cfg),
+        }) => {
+            let status = dev::shell(&OpenCode, &cfg)?;
+            std::process::exit(status.code().unwrap_or(1));
+        }
         Some(Commands::Shell {
             agent: ShellAgent::Pi,
-        }) => dev::shell(&Pi, &cfg),
+        }) => {
+            let status = dev::shell(&Pi, &cfg)?;
+            std::process::exit(status.code().unwrap_or(1));
+        }
         None => unreachable!("Clap should handle required subcommands"),
     }
 }

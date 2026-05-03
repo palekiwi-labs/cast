@@ -29,8 +29,14 @@ pub struct RunOpts {
     pub project_flake_present: bool,
 }
 
+use std::process::ExitStatus;
+
 /// Orchestrate and run an agent session inside the dev container.
-pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) -> Result<()> {
+pub fn run_agent(
+    agent: &dyn Agent,
+    config: &Config,
+    extra_args: Vec<String>,
+) -> Result<ExitStatus> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -77,7 +83,7 @@ pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) ->
     // Build the full command and exec into the container.
     let cmd = agent.build_command(config, &run_opts, extra_args);
     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
-    Err(docker.exec_command(docker_args))
+    docker.interactive_command(docker_args)
 }
 
 /// Build the generic set of Docker run flags that apply to every agent.

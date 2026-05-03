@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use std::process::Command;
+use std::process::{Command, ExitStatus};
 
 use crate::docker::args;
 
@@ -69,14 +69,43 @@ impl DockerClient {
         Ok(())
     }
 
-    /// Replace the current process with `docker <args>` via execvp.
+    /// Run `docker <args>` as a supervised child process with TTY inheritance.
     ///
-    /// This function never returns on success — the OS replaces the process
-    /// image. It returns an `anyhow::Error` only if the exec syscall itself
-    /// fails (e.g. docker not found in PATH).
-    pub fn exec_command(&self, args: Vec<String>) -> anyhow::Error {
+    /// This keeps `cast` alive to monitor the container's lifecycle and capture
+    /// its exit code. It ignores SIGINT and SIGQUIT in the parent to allow
+    /// Docker to handle them, resetting them to SIG_DFL in the child.
+    pub fn interactive_command(&self, args: Vec<String>) -> Result<ExitStatus> {
         use std::os::unix::process::CommandExt;
-        let err = Command::new("docker").args(&args).exec();
-        anyhow::Error::from(err)
+
+        // Ignore SIGINT (Ctrl+C) and SIGQUIT (Ctrl+\) in cast so we can
+        // wait for Docker to handle them and exit gracefully.
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_IGN);
+            libc::signal(libc::SIGQUIT, libc::SIG_IGN);
+        }
+
+        let mut cmd = Command::new("docker");
+        cmd.args(&args);
+
+        // Reset signals to default in the child process so Docker handles them.
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::signal(libc::SIGINT, libc::SIG_DFL);
+                libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+
+        // Restore default signal handlers in cast.
+        unsafe {
+            libc::signal(libc::SIGINT, libc::SIG_DFL);
+            libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+        }
+
+        Ok(status)
     }
 }
