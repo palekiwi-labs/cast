@@ -51,7 +51,9 @@ mod tests {
         assert!(conf.contains("trusted-users = root *"));
         assert!(conf.contains("substituters = https://cache.nixos.org\n"));
         assert!(conf.contains("trusted-substituters = https://cache.nixos.org\n"));
-        assert!(conf.contains("trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=\n"));
+        assert!(conf.contains(
+            "trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=\n"
+        ));
     }
 
     #[test]

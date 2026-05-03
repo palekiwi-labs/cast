@@ -76,9 +76,10 @@ mod tests {
     #[test]
     fn test_get_cache_path_contains_agent_name() {
         let path = get_cache_path("test-agent");
-        assert!(path
-            .to_string_lossy()
-            .contains("test-agent-version-cache.json"));
+        assert!(
+            path.to_string_lossy()
+                .contains("test-agent-version-cache.json")
+        );
     }
 
     #[test]

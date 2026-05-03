@@ -9,13 +9,13 @@ pub mod opencode;
 pub mod pi;
 pub mod port;
 pub mod run;
-pub mod shell;
 pub mod shadow_mounts;
+pub mod shell;
 pub mod utils;
 pub mod version;
 pub mod volumes;
 pub mod workspace;
 
+pub use build::build_agent;
 pub use run::run_agent;
 pub use shell::shell;
-pub use build::build_agent;

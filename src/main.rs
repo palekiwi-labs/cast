@@ -1,4 +1,4 @@
-use cast::commands::{run, Cli};
+use cast::commands::{Cli, run};
 use clap::Parser;
 
 fn main() {

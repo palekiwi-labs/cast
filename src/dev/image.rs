@@ -3,9 +3,9 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
+use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 
@@ -32,7 +32,9 @@ pub fn ensure_image(
     if !opts.force && docker.image_exists(&image_tag)? {
         println!("{} dev image already exists: {}", agent_name, image_tag);
         if opts.no_cache {
-            println!("Hint: You passed --no-cache. If you want to force a rebuild of the existing image, use --force.");
+            println!(
+                "Hint: You passed --no-cache. If you want to force a rebuild of the existing image, use --force."
+            );
         }
         return Ok(());
     }

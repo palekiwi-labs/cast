@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crc::{Crc, CRC_32_CKSUM};
+use crc::{CRC_32_CKSUM, Crc};
 use std::env;
 
 use crate::config::Config;

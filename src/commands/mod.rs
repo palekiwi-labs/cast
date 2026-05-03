@@ -3,4 +3,4 @@ mod config;
 mod nix_daemon;
 mod port;
 
-pub use cli::{run, Cli};
+pub use cli::{Cli, run};

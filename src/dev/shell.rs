@@ -1,6 +1,6 @@
 use std::process::ExitStatus;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;

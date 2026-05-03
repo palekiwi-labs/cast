@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 /// tilde expansion in `nix_daemon::extra_dirs`, which uses a username string instead.
 pub fn expand_tilde(path: &str, home_dir: Option<&Path>) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/")
-        && let Some(home) = home_dir {
-            return home.join(rest);
-        }
+        && let Some(home) = home_dir
+    {
+        return home.join(rest);
+    }
     PathBuf::from(path)
 }
 

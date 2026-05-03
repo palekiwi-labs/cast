@@ -36,13 +36,13 @@ pub fn get_workspace(username: &str) -> Result<ResolvedWorkspace> {
 ///   outside home_dir → /workspace/<abs_without_leading_slash>
 fn map_container_path(root: &Path, home_dir: Option<&Path>, username: &str) -> PathBuf {
     if let Some(home) = home_dir
-        && let Ok(rel) = root.strip_prefix(home) {
-            PathBuf::from("/home").join(username).join(rel)
+        && let Ok(rel) = root.strip_prefix(home)
+    {
+        PathBuf::from("/home").join(username).join(rel)
     } else {
         let stripped = root.strip_prefix("/").unwrap_or(root);
         PathBuf::from("/workspace").join(stripped)
     }
-
 }
 
 #[cfg(test)]
