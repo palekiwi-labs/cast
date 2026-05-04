@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::Result;
+use tracing::{debug, info, info_span};
 
 use crate::config::Config;
 use crate::dev;
@@ -10,12 +12,12 @@ use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent resolves its own
@@ -37,9 +39,25 @@ pub fn run_agent(
     config: &Config,
     extra_args: Vec<String>,
 ) -> Result<ExitStatus> {
+    let start_time = Instant::now();
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
+
+    // Resolve port and container name early for span.
+    let port = dev::port::resolve_port(config, agent.name())?;
+    let cwd_basename = workspace.root_basename();
+    let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
+
+    let span = info_span!(
+        "agent_session",
+        agent = agent.name(),
+        container = %container_name,
+        port = port
+    );
+    let _guard = span.enter();
+
+    debug!(port, %container_name, "resolved session parameters");
 
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
@@ -47,12 +65,15 @@ pub fn run_agent(
     // Resolve the version and image for this agent, and ensure it exists locally.
     let version = agent.resolve_version(config)?;
     let image_tag = agent.image_tag(&version);
-    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
-    // Resolve port and container name.
-    let port = dev::port::resolve_port(config, agent.name())?;
-    let cwd_basename = workspace.root_basename();
-    let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
+    info!(
+        %image_tag,
+        %container_name,
+        port,
+        "starting agent session"
+    );
+
+    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
     let host_home_dir = dirs::home_dir();
     let env: HashMap<String, String> = std::env::vars().collect();
@@ -83,7 +104,16 @@ pub fn run_agent(
     // Build the full command and exec into the container.
     let cmd = agent.build_command(config, &run_opts, extra_args);
     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
-    docker.interactive_command(docker_args)
+    let status = docker.interactive_command(docker_args)?;
+
+    let duration = start_time.elapsed();
+    info!(
+        exit_code = status.code(),
+        duration_secs = duration.as_secs(),
+        "agent session ended"
+    );
+
+    Ok(status)
 }
 
 /// Build the generic set of Docker run flags that apply to every agent.

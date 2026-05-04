@@ -1,10 +1,11 @@
 use super::Config;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
+use tracing::info;
 
 /// Load configuration from all sources with proper precedence:
 /// 1. Environment variables (CAST_*)
@@ -22,11 +23,21 @@ pub fn load_config() -> Result<Config> {
         figment = figment.merge(Json::file(global_path));
     }
 
-    figment
+    let config: Config = figment
         .merge(Json::file("cast.json"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
-        .context("Failed to load configuration")
+        .context("Failed to load configuration")?;
+
+    info!(
+        memory = %config.memory,
+        cpus = config.cpus,
+        pids_limit = config.pids_limit,
+        network = %config.network,
+        "config loaded"
+    );
+
+    Ok(config)
 }
 
 /// Resolve the global config path (~/.config/cast/cast.json)

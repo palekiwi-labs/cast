@@ -1,5 +1,6 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::process::{Command, ExitStatus};
+use tracing::debug;
 
 use crate::docker::args;
 
@@ -42,6 +43,7 @@ impl DockerClient {
     }
 
     pub fn run_command(&self, args: Vec<String>) -> Result<()> {
+        debug!(command = "docker", args = ?args, "executing command");
         let output = Command::new("docker")
             .args(&args)
             .output()
@@ -61,6 +63,7 @@ impl DockerClient {
     }
 
     pub fn query_command(&self, args: Vec<String>) -> Result<String> {
+        debug!(command = "docker", args = ?args, "querying command");
         let output = Command::new("docker")
             .args(&args)
             .output()
@@ -80,6 +83,7 @@ impl DockerClient {
     }
 
     pub fn stream_command(&self, args: Vec<String>) -> Result<()> {
+        debug!(command = "docker", args = ?args, "streaming command");
         let status = Command::new("docker")
             .args(&args)
             .status()
@@ -100,6 +104,7 @@ impl DockerClient {
     pub fn interactive_command(&self, args: Vec<String>) -> Result<ExitStatus> {
         use std::os::unix::process::CommandExt;
 
+        debug!(command = "docker", args = ?args, "starting interactive command");
         // Ignore SIGINT (Ctrl+C) and SIGQUIT (Ctrl+\) in cast so we can
         // wait for Docker to handle them and exit gracefully.
         let _guard = SignalGuard::new();

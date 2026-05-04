@@ -6,8 +6,10 @@ use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
+use crate::logging::{generate_invocation_id, init_file_logger};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use tracing::info_span;
 
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
@@ -123,6 +125,13 @@ impl RunAgent {
 pub fn run(cli: Cli) -> Result<()> {
     // Load config once at startup for efficiency and consistency
     let cfg = load_config()?;
+
+    // Initialize file logger
+    init_file_logger()?;
+
+    let invocation_id = generate_invocation_id();
+    let root = info_span!("cast", id = %invocation_id, pid = std::process::id());
+    let _root_guard = root.enter();
 
     match cli.command {
         Some(Commands::Build {

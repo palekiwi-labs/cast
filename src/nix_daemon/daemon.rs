@@ -3,11 +3,12 @@ use std::process::ExitStatus;
 use tempfile::TempDir;
 
 use crate::config::Config;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon::{config as nix_config, image};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
+use tracing::info;
 
 /// Ensure the nix daemon container is running
 pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
@@ -15,6 +16,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
 
     // Check if already running
     if docker.is_container_running(container_name)? {
+        info!(%container_name, "nix daemon already running");
         return Ok(());
     }
 
@@ -31,6 +33,11 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     let nix_conf_content = nix_config::generate_nix_conf(config);
 
     // Start the daemon container
+    info!(
+        %container_name,
+        %image_tag,
+        "starting nix daemon container"
+    );
     println!(
         "Starting nix daemon container: {} ({})",
         container_name, image_tag
@@ -49,6 +56,7 @@ pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
     let run_args = args::build_run_args(container_name, &image_tag, opts, None);
     docker.run_command(run_args)?;
 
+    info!(%container_name, "nix daemon started successfully");
     println!("Nix daemon started successfully");
     Ok(())
 }

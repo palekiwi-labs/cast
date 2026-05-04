@@ -3,11 +3,12 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
+use tracing::info;
 
 const IMAGE_BASE: &str = "localhost/cast";
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -30,6 +31,7 @@ pub fn ensure_image(
     let image_tag = image_tag(agent_name, version);
 
     if !opts.force && docker.image_exists(&image_tag)? {
+        info!(%image_tag, "image exists, skipping build");
         println!("{} dev image already exists: {}", agent_name, image_tag);
         if opts.no_cache {
             println!(
@@ -39,6 +41,7 @@ pub fn ensure_image(
         return Ok(());
     }
 
+    info!(%image_tag, "image not found or force rebuild, building");
     println!("Building {} dev image: {}", agent_name, image_tag);
 
     let temp_dir = TempDir::new()?;
