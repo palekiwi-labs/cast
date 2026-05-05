@@ -7,24 +7,28 @@ use crate::docker::args;
 pub struct DockerClient;
 
 /// RAII guard to ignore SIGINT and SIGQUIT in the parent process and restore
-/// them to SIG_DFL when dropped.
-struct SignalGuard;
+/// them to their previous handlers when dropped.
+struct SignalGuard {
+    old_int: libc::sighandler_t,
+    old_quit: libc::sighandler_t,
+}
 
 impl SignalGuard {
     fn new() -> Self {
         unsafe {
-            libc::signal(libc::SIGINT, libc::SIG_IGN);
-            libc::signal(libc::SIGQUIT, libc::SIG_IGN);
+            Self {
+                old_int: libc::signal(libc::SIGINT, libc::SIG_IGN),
+                old_quit: libc::signal(libc::SIGQUIT, libc::SIG_IGN),
+            }
         }
-        Self
     }
 }
 
 impl Drop for SignalGuard {
     fn drop(&mut self) {
         unsafe {
-            libc::signal(libc::SIGINT, libc::SIG_DFL);
-            libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+            libc::signal(libc::SIGINT, self.old_int);
+            libc::signal(libc::SIGQUIT, self.old_quit);
         }
     }
 }
