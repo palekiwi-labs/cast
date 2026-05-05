@@ -8,7 +8,6 @@ use tracing_subscriber::EnvFilter;
 pub fn generate_invocation_id() -> String {
     let s = RandomState::new();
     let mut hasher = s.build_hasher();
-    hasher.write_u64(0); // Add some entropy if needed, but build_hasher is already seeded
     let hash = hasher.finish();
     format!("{:08x}", hash as u32)
 }
