@@ -7,7 +7,7 @@ use tracing_subscriber::EnvFilter;
 
 pub fn generate_invocation_id() -> String {
     let s = RandomState::new();
-    let mut hasher = s.build_hasher();
+    let hasher = s.build_hasher();
     let hash = hasher.finish();
     format!("{:08x}", hash as u32)
 }

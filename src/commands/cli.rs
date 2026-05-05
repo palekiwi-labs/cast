@@ -1,4 +1,4 @@
-use std::process::ExitStatus;
+use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
 use crate::config::load_config;
@@ -122,7 +122,7 @@ impl RunAgent {
     }
 }
 
-pub fn run(cli: Cli) -> Result<()> {
+pub fn run(cli: Cli) -> Result<ExitCode> {
     // Load config once at startup for efficiency and consistency
     let cfg = load_config()?;
 
@@ -141,7 +141,10 @@ pub fn run(cli: Cli) -> Result<()> {
                     force,
                     no_cache,
                 },
-        }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
+        }) => {
+            dev::build_agent(&OpenCode, &cfg, base, force, no_cache)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Build {
             agent:
                 BuildAgent::Pi {
@@ -149,7 +152,10 @@ pub fn run(cli: Cli) -> Result<()> {
                     force,
                     no_cache,
                 },
-        }) => dev::build_agent(&Pi, &cfg, base, force, no_cache),
+        }) => {
+            dev::build_agent(&Pi, &cfg, base, force, no_cache)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
@@ -162,26 +168,26 @@ pub fn run(cli: Cli) -> Result<()> {
                     RunAgent::Pi { extra_args } => extra_args.clone(),
                 },
             )?;
-            exit_with_status(status);
+            Ok(to_exit_code(status))
         }
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
         }) => {
             let status = dev::shell(&OpenCode, &cfg)?;
-            exit_with_status(status);
+            Ok(to_exit_code(status))
         }
         Some(Commands::Shell {
             agent: ShellAgent::Pi,
         }) => {
             let status = dev::shell(&Pi, &cfg)?;
-            exit_with_status(status);
+            Ok(to_exit_code(status))
         }
         None => unreachable!("Clap should handle required subcommands"),
     }
 }
 
-/// Exit the process with the given ExitStatus, following Unix conventions.
-pub fn exit_with_status(status: ExitStatus) -> ! {
+/// Convert an ExitStatus into an ExitCode, following Unix conventions.
+pub fn to_exit_code(status: ExitStatus) -> ExitCode {
     use std::os::unix::process::ExitStatusExt;
 
     let code = status.code().unwrap_or_else(|| {
@@ -189,5 +195,5 @@ pub fn exit_with_status(status: ExitStatus) -> ! {
         status.signal().map(|s| 128 + s).unwrap_or(1)
     });
 
-    std::process::exit(code);
+    ExitCode::from(code as u8)
 }
