@@ -54,6 +54,7 @@ fn test_config_env_vars_override() {
     let output = Command::cargo_bin("cast")
         .unwrap()
         .current_dir(temp_dir.path())
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
