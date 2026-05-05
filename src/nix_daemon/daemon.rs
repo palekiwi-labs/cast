@@ -3,11 +3,11 @@ use std::process::ExitStatus;
 use tempfile::TempDir;
 
 use crate::config::Config;
+use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon::{config as nix_config, image};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use tracing::info;
 
 /// Ensure the nix daemon container is running

@@ -2,7 +2,9 @@ use assert_cmd::Command;
 use predicates::prelude::*;
 
 fn cast() -> Command {
-    Command::cargo_bin("cast").unwrap()
+    let mut cmd = Command::cargo_bin("cast").unwrap();
+    cmd.env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    cmd
 }
 
 #[test]
