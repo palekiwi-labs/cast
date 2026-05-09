@@ -5,7 +5,7 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, info_span};
 
-use crate::config::Config;
+use crate::config::{ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
@@ -36,7 +36,7 @@ use std::process::ExitStatus;
 /// Orchestrate and run an agent session inside the dev container.
 pub fn run_agent(
     agent: &dyn Agent,
-    config: &Config,
+    config: &ApprovedConfig,
     extra_args: Vec<String>,
 ) -> Result<ExitStatus> {
     let start_time = Instant::now();

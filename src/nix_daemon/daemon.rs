@@ -2,16 +2,16 @@ use std::fs;
 use std::process::ExitStatus;
 use tempfile::TempDir;
 
-use crate::config::Config;
-use crate::docker::BuildOptions;
+use crate::config::ApprovedConfig;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon::{config as nix_config, image};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use tracing::info;
 
 /// Ensure the nix daemon container is running
-pub fn ensure_running(docker: &DockerClient, config: &Config) -> Result<()> {
+pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if already running
@@ -92,7 +92,7 @@ pub fn build(docker: &DockerClient, opts: BuildOptions) -> Result<()> {
 }
 
 /// Stop the nix daemon container
-pub fn stop(docker: &DockerClient, config: &Config) -> Result<()> {
+pub fn stop(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if it's actually running
@@ -110,7 +110,7 @@ pub fn stop(docker: &DockerClient, config: &Config) -> Result<()> {
 }
 
 /// Drop into an interactive shell in the nix daemon container
-pub fn shell(docker: &DockerClient, config: &Config) -> Result<ExitStatus> {
+pub fn shell(docker: &DockerClient, config: &ApprovedConfig) -> Result<ExitStatus> {
     let container_name = &config.nix_daemon_container_name;
 
     // Check if it's actually running

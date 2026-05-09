@@ -1,8 +1,8 @@
 use super::Config;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
 use tracing::info;
