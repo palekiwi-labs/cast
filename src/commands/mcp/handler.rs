@@ -1,17 +1,17 @@
 use crate::commands::mcp::exec;
 use crate::config::{McpConfig, McpToolConfig};
-use tracing::{error, info, warn};
 use rmcp::{
+    ErrorData as McpError, RoleServer, ServerHandler,
     model::{
         CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
         PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
     },
     service::RequestContext,
-    ErrorData as McpError, RoleServer, ServerHandler,
 };
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tracing::{error, info, warn};
 
 /// A dynamic MCP handler that serves tools defined in `cast.json` at runtime.
 ///
@@ -41,9 +41,8 @@ impl McpHandler {
         let mut cached_tools = Vec::new();
 
         for (name, tool) in &config.tools {
-            let validator = jsonschema::validator_for(&tool.parameters).map_err(|e| {
-                anyhow::anyhow!("Invalid JSON schema for tool '{}': {}", name, e)
-            })?;
+            let validator = jsonschema::validator_for(&tool.parameters)
+                .map_err(|e| anyhow::anyhow!("Invalid JSON schema for tool '{}': {}", name, e))?;
             validators.insert(name.clone(), validator);
             cached_tools.push(tool_config_to_rmcp_tool(name, tool));
         }
@@ -137,7 +136,11 @@ pub fn tool_config_to_rmcp_tool(name: &str, config: &McpToolConfig) -> Tool {
         Value::Object(map) => map.clone(),
         _ => serde_json::Map::new(),
     };
-    Tool::new_with_raw(name.to_string(), Some(config.description.clone().into()), schema)
+    Tool::new_with_raw(
+        name.to_string(),
+        Some(config.description.clone().into()),
+        schema,
+    )
 }
 
 impl ServerHandler for McpHandler {
@@ -275,7 +278,10 @@ mod tests {
         let args = json!({});
         let validator = jsonschema::validator_for(&config.parameters).unwrap();
         let errors: Vec<_> = validator.iter_errors(&args).collect();
-        assert!(!errors.is_empty(), "missing required field should produce errors");
+        assert!(
+            !errors.is_empty(),
+            "missing required field should produce errors"
+        );
     }
 
     #[test]
@@ -284,7 +290,10 @@ mod tests {
         let args = json!({ "message": 42 });
         let validator = jsonschema::validator_for(&config.parameters).unwrap();
         let errors: Vec<_> = validator.iter_errors(&args).collect();
-        assert!(!errors.is_empty(), "wrong type should produce a validation error");
+        assert!(
+            !errors.is_empty(),
+            "wrong type should produce a validation error"
+        );
     }
 
     // --- execute_tool pipeline integration tests ---
@@ -311,10 +320,7 @@ mod tests {
         tools.insert("echo".to_string(), echo_tool_config());
         let handler = make_handler(tools);
 
-        let args = json!({ "message": "hello" })
-            .as_object()
-            .unwrap()
-            .clone();
+        let args = json!({ "message": "hello" }).as_object().unwrap().clone();
         let request = CallToolRequestParams::new("echo").with_arguments(args);
 
         let result = handler.execute_tool(request).await.expect("should succeed");
@@ -330,10 +336,16 @@ mod tests {
         let handler = make_handler(BTreeMap::new());
 
         let request = CallToolRequestParams::new("no_such_tool");
-        let err = handler.execute_tool(request).await.expect_err("should fail");
+        let err = handler
+            .execute_tool(request)
+            .await
+            .expect_err("should fail");
 
         // -32602 is the JSON-RPC code for InvalidParams
-        assert_eq!(err.code.0, -32602, "unknown tool should yield InvalidParams (-32602)");
+        assert_eq!(
+            err.code.0, -32602,
+            "unknown tool should yield InvalidParams (-32602)"
+        );
     }
 
     #[test]
@@ -352,7 +364,10 @@ mod tests {
             tools,
         };
         let res = McpHandler::new(mcp_config, HashMap::new());
-        assert!(res.is_err(), "McpHandler::new should fail with invalid schema");
+        assert!(
+            res.is_err(),
+            "McpHandler::new should fail with invalid schema"
+        );
         let err = res.unwrap_err().to_string();
         assert!(err.contains("Invalid JSON schema for tool 'broken'"));
     }
@@ -365,7 +380,10 @@ mod tests {
 
         // Omit the required `message` field to trigger schema validation failure
         let request = CallToolRequestParams::new("echo");
-        let err = handler.execute_tool(request).await.expect_err("should fail");
+        let err = handler
+            .execute_tool(request)
+            .await
+            .expect_err("should fail");
 
         // -32602 is the JSON-RPC code for InvalidParams
         assert_eq!(

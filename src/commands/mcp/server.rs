@@ -8,7 +8,11 @@ use tracing::warn;
 
 use super::handler::McpHandler;
 
-pub async fn run_http_server(host: String, port: u16, approved: ApprovedConfig) -> anyhow::Result<()> {
+pub async fn run_http_server(
+    host: String,
+    port: u16,
+    approved: ApprovedConfig,
+) -> anyhow::Result<()> {
     let mcp_config = approved.mcp.clone();
     let host_env: std::collections::HashMap<String, String> = std::env::vars().collect();
 
