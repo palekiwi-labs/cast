@@ -194,8 +194,10 @@ mod tests {
         let path = tmp.path();
 
         let c1 = Config::default();
-        let mut c2 = Config::default();
-        c2.memory = "2048m".to_string();
+        let c2 = Config {
+            memory: "2048m".to_string(),
+            ..Config::default()
+        };
 
         let h1 = compute_config_hash(&c1, path).unwrap();
         let h2 = compute_config_hash(&c2, path).unwrap();
