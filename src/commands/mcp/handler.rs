@@ -17,17 +17,34 @@ use std::sync::Arc;
 ///
 /// Implements [`ServerHandler`] manually (bypassing `#[tool_router]`) so that tools
 /// can be loaded from config rather than being known at compile time.
+///
+/// JSON Schema validators are pre-compiled at construction time so that each
+/// `call_tool` invocation only performs validation, never compilation.
 #[derive(Clone)]
 pub struct McpHandler {
     config: Arc<McpConfig>,
     host_env: Arc<HashMap<String, String>>,
+    /// Pre-compiled validators, keyed by tool name.
+    /// An `Err` entry means the schema in `cast.json` was invalid at startup.
+    validators: Arc<HashMap<String, Result<jsonschema::Validator, String>>>,
 }
 
 impl McpHandler {
     pub fn new(config: McpConfig, host_env: HashMap<String, String>) -> Self {
+        let validators = config
+            .tools
+            .iter()
+            .map(|(name, tool)| {
+                let result = jsonschema::validator_for(&tool.parameters)
+                    .map_err(|e| e.to_string());
+                (name.clone(), result)
+            })
+            .collect();
+
         Self {
             config: Arc::new(config),
             host_env: Arc::new(host_env),
+            validators: Arc::new(validators),
         }
     }
 
@@ -56,14 +73,19 @@ impl McpHandler {
         let args_map = request.arguments.unwrap_or_default();
         let args_value = Value::Object(args_map);
 
-        // 3. Compile and validate against the tool's JSON schema
-        let validator = jsonschema::validator_for(&tool_config.parameters).map_err(|e| {
-            error!(tool = %request.name, err = %e, "invalid JSON schema in config");
-            McpError::internal_error(
-                format!("Invalid schema for tool '{}': {}", request.name, e),
-                None,
-            )
-        })?;
+        // 3. Retrieve pre-compiled validator (compiled once in McpHandler::new)
+        let validator = self
+            .validators
+            .get(&*request.name)
+            .expect("validator map is always in sync with config.tools")
+            .as_ref()
+            .map_err(|e| {
+                error!(tool = %request.name, err = %e, "invalid JSON schema in config");
+                McpError::internal_error(
+                    format!("Invalid schema for tool '{}': {}", request.name, e),
+                    None,
+                )
+            })?;
 
         let validation_errors: Vec<String> = validator
             .iter_errors(&args_value)
