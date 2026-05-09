@@ -30,48 +30,15 @@ impl McpHandler {
             host_env: Arc::new(host_env),
         }
     }
-}
 
-/// Converts a [`McpToolConfig`] into an [`rmcp::model::Tool`] for `list_tools` responses.
-///
-/// If `parameters` is not a JSON object, an empty schema map is used as a safe fallback.
-pub fn tool_config_to_rmcp_tool(name: &str, config: &McpToolConfig) -> Tool {
-    let schema = match &config.parameters {
-        Value::Object(map) => map.clone(),
-        _ => serde_json::Map::new(),
-    };
-    Tool::new_with_raw(name.to_string(), Some(config.description.clone().into()), schema)
-}
-
-impl ServerHandler for McpHandler {
-    fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("cast-mcp", env!("CARGO_PKG_VERSION")))
-    }
-
-    async fn list_tools(
-        &self,
-        _request: Option<PaginatedRequestParams>,
-        _context: RequestContext<RoleServer>,
-    ) -> Result<ListToolsResult, McpError> {
-        let tools = self
-            .config
-            .tools
-            .iter()
-            .map(|(name, config)| tool_config_to_rmcp_tool(name, config))
-            .collect();
-
-        Ok(ListToolsResult {
-            tools,
-            next_cursor: None,
-            meta: Default::default(),
-        })
-    }
-
-    async fn call_tool(
+    /// Core tool-execution pipeline, decoupled from the MCP transport layer.
+    ///
+    /// Extracted from [`ServerHandler::call_tool`] so that integration tests can
+    /// drive the full request → validation → exec → response path without
+    /// constructing an `rmcp` `RequestContext`.
+    pub(crate) async fn execute_tool(
         &self,
         request: CallToolRequestParams,
-        _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
         info!(tool = %request.name, "call_tool requested");
 
@@ -140,6 +107,51 @@ impl ServerHandler for McpHandler {
         } else {
             Ok(CallToolResult::success(content))
         }
+    }
+}
+
+/// Converts a [`McpToolConfig`] into an [`rmcp::model::Tool`] for `list_tools` responses.
+///
+/// If `parameters` is not a JSON object, an empty schema map is used as a safe fallback.
+pub fn tool_config_to_rmcp_tool(name: &str, config: &McpToolConfig) -> Tool {
+    let schema = match &config.parameters {
+        Value::Object(map) => map.clone(),
+        _ => serde_json::Map::new(),
+    };
+    Tool::new_with_raw(name.to_string(), Some(config.description.clone().into()), schema)
+}
+
+impl ServerHandler for McpHandler {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            .with_server_info(Implementation::new("cast-mcp", env!("CARGO_PKG_VERSION")))
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<ListToolsResult, McpError> {
+        let tools = self
+            .config
+            .tools
+            .iter()
+            .map(|(name, config)| tool_config_to_rmcp_tool(name, config))
+            .collect();
+
+        Ok(ListToolsResult {
+            tools,
+            next_cursor: None,
+            meta: Default::default(),
+        })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        self.execute_tool(request).await
     }
 }
 
