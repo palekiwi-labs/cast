@@ -1,5 +1,6 @@
 use crate::commands::mcp::exec;
 use crate::config::{McpConfig, McpToolConfig};
+use tracing::{error, info, warn};
 use rmcp::{
     model::{
         CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
@@ -72,12 +73,17 @@ impl ServerHandler for McpHandler {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, McpError> {
+        info!(tool = %request.name, "call_tool requested");
+
         // 1. Look up the tool in config
         let tool_config = self
             .config
             .tools
             .get(&*request.name)
-            .ok_or_else(|| McpError::invalid_params(format!("Unknown tool: '{}'", request.name), None))?;
+            .ok_or_else(|| {
+                warn!(tool = %request.name, "unknown tool requested");
+                McpError::invalid_params(format!("Unknown tool: '{}'", request.name), None)
+            })?;
 
         // 2. Extract arguments as a JSON Value
         let args_map = request.arguments.unwrap_or_default();
@@ -85,6 +91,7 @@ impl ServerHandler for McpHandler {
 
         // 3. Compile and validate against the tool's JSON schema
         let validator = jsonschema::validator_for(&tool_config.parameters).map_err(|e| {
+            error!(tool = %request.name, err = %e, "invalid JSON schema in config");
             McpError::internal_error(
                 format!("Invalid schema for tool '{}': {}", request.name, e),
                 None,
@@ -97,6 +104,7 @@ impl ServerHandler for McpHandler {
             .collect();
 
         if !validation_errors.is_empty() {
+            warn!(tool = %request.name, errors = ?validation_errors, "argument validation failed");
             return Err(McpError::invalid_request(
                 format!("Invalid arguments: {}", validation_errors.join("; ")),
                 None,
@@ -105,6 +113,7 @@ impl ServerHandler for McpHandler {
 
         // 4. Map argument templates to concrete CLI arguments
         let mapped_args = exec::map_args(&tool_config.args, &args_value).map_err(|e| {
+            error!(tool = %request.name, err = %e, "argument mapping failed");
             McpError::internal_error(format!("Argument mapping error: {}", e), None)
         })?;
 
@@ -112,6 +121,7 @@ impl ServerHandler for McpHandler {
         let exec_result = exec::run_command(tool_config, mapped_args, &self.host_env)
             .await
             .map_err(|e| {
+                error!(tool = %request.name, err = %e, "command execution failed");
                 McpError::internal_error(format!("Command execution error: {}", e), None)
             })?;
 
