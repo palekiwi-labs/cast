@@ -4,6 +4,7 @@ use axum::Router;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::handler::McpHandler;
@@ -21,14 +22,17 @@ pub async fn run_http_server(
 
     // SSE keep-alives are enabled by default (every 15 s) in StreamableHttpServerConfig,
     // preventing Docker's virtual network from silently dropping idle SSE connections.
-    let config = StreamableHttpServerConfig::default().with_allowed_hosts([
-        "localhost",
-        "127.0.0.1",
-        "::1",
-        // Allows agents running in Docker containers to reach the host.
-        // Requires `--add-host host.docker.internal:host-gateway` on Linux.
-        "host.docker.internal",
-    ]);
+    let cancel_token = CancellationToken::new();
+    let config = StreamableHttpServerConfig::default()
+        .with_cancellation_token(cancel_token.clone())
+        .with_allowed_hosts([
+            "localhost",
+            "127.0.0.1",
+            "::1",
+            // Allows agents running in Docker containers to reach the host.
+            // Requires `--add-host host.docker.internal:host-gateway` on Linux.
+            "host.docker.internal",
+        ]);
 
     let service = StreamableHttpService::new(
         move || Ok(handler.clone()),
@@ -52,7 +56,7 @@ pub async fn run_http_server(
     eprintln!("Connect from container:   http://host.docker.internal:{port}/mcp");
 
     axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+        .with_graceful_shutdown(shutdown_signal(cancel_token))
         .await
         .context("MCP server encountered a fatal error")?;
 
@@ -60,9 +64,10 @@ pub async fn run_http_server(
     Ok(())
 }
 
-async fn shutdown_signal() {
+async fn shutdown_signal(ct: CancellationToken) {
     tokio::signal::ctrl_c()
         .await
         .expect("Failed to install Ctrl+C signal handler");
     tracing::info!("Shutdown signal received, stopping MCP server");
+    ct.cancel();
 }
