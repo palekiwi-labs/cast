@@ -11,11 +11,7 @@ pub fn build_extra_volume_args(
 ) -> Vec<String> {
     let mut args = Vec::new();
 
-    let mut entries: Vec<(&String, &crate::config::VolumeConfig)> =
-        cfg.extra_data_volumes.iter().collect();
-    entries.sort_by_key(|(k, _)| *k);
-
-    for (key, vol) in entries {
+    for (key, vol) in &cfg.extra_data_volumes {
         let target = expand_container_target(&vol.target, &user.username, &ws.container_path);
         let mount_spec = build_mount_spec(cfg, key, vol, &target, host_home_dir);
         args.push("-v".to_string());

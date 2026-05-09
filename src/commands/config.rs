@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use crate::config::{compute_config_hash, load_approval_store, Config};
+use crate::config::{Config, compute_config_hash, load_approval_store};
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;

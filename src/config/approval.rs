@@ -7,25 +7,6 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::NamedTempFile;
 
-/// Recursively sort all JSON object keys for deterministic serialization.
-fn canonicalize_value(v: serde_json::Value) -> serde_json::Value {
-    match v {
-        serde_json::Value::Object(map) => {
-            let sorted: serde_json::Map<_, _> = map
-                .into_iter()
-                .map(|(k, v)| (k, canonicalize_value(v)))
-                .collect::<BTreeMap<_, _>>()
-                .into_iter()
-                .collect();
-            serde_json::Value::Object(sorted)
-        }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.into_iter().map(canonicalize_value).collect())
-        }
-        other => other,
-    }
-}
-
 pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
     use std::os::unix::ffi::OsStrExt;
@@ -33,9 +14,7 @@ pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<Str
     let canonical_root = std::fs::canonicalize(workspace_root)
         .context("Failed to canonicalize workspace root path")?;
 
-    let json_value = serde_json::to_value(config)?;
-    let canonical_json = canonicalize_value(json_value);
-    let config_bytes = serde_json::to_vec(&canonical_json)?;
+    let config_bytes = serde_json::to_vec(config)?;
 
     let mut hasher = Sha256::new();
     hasher.update(canonical_root.as_os_str().as_bytes());
@@ -180,7 +159,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_map_ordering_invariance() {
+    fn test_config_hash_determinism() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path();
 

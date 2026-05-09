@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     // Container Identity & Version
     #[serde(default)]
-    pub agent_versions: HashMap<String, String>,
+    pub agent_versions: BTreeMap<String, String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
@@ -34,7 +34,7 @@ pub struct Config {
     // Data Volumes
     pub volumes_namespace: String,
 
-    pub extra_data_volumes: HashMap<String, VolumeConfig>,
+    pub extra_data_volumes: BTreeMap<String, VolumeConfig>,
 
     // Nix Workflow
     pub nix_volume_name: String,
@@ -65,7 +65,7 @@ pub struct VolumeConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            agent_versions: HashMap::new(),
+            agent_versions: BTreeMap::new(),
             container_name: None,
             version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
@@ -78,7 +78,7 @@ impl Default for Config {
             use_flake: false,
             use_flake_path: None,
             volumes_namespace: "cast".to_string(),
-            extra_data_volumes: HashMap::new(),
+            extra_data_volumes: BTreeMap::new(),
             nix_volume_name: "cast-nix".to_string(),
             nix_daemon_container_name: "cast-nix-daemon".to_string(),
             nix_extra_substituters: Vec::new(),

@@ -5,19 +5,19 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, info_span};
 
-use crate::config::{compute_config_hash, load_approval_store, Config};
+use crate::config::{Config, compute_config_hash, load_approval_store};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{get_user, ResolvedUser};
+use crate::user::{ResolvedUser, get_user};
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent resolves its own
