@@ -308,7 +308,11 @@ mod tests {
             hostname: None,
             tools,
         };
-        McpHandler::new(config, HashMap::new())
+        let mut host_env = HashMap::new();
+        if let Ok(path) = std::env::var("PATH") {
+            host_env.insert("PATH".to_string(), path);
+        }
+        McpHandler::new(config, host_env)
     }
 
     #[tokio::test]
