@@ -5,7 +5,7 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, info_span};
 
-use crate::config::Config;
+use crate::config::{Config, compute_config_hash, load_approval_store};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
@@ -43,6 +43,18 @@ pub fn run_agent(
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
+
+    // Config approval gate — must precede all side effects.
+    let hash = compute_config_hash(config, &workspace.root)?;
+    let store = load_approval_store()?;
+    if !store.is_approved(&hash) {
+        anyhow::bail!(
+            "Configuration has not been approved for this project (hash: {}).\n\
+             Note: env-var overrides (CAST_*) affect the hash.\n\
+             Review with `cast config show`, then run `cast config allow` to approve.",
+            &hash[..8]
+        );
+    }
 
     // Resolve port and container name early for span.
     let port = dev::port::resolve_port(config, agent.name())?;

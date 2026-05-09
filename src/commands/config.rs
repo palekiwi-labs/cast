@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use crate::config::{compute_config_hash, load_approval_store, Config};
+use crate::config::{Config, compute_config_hash, load_approval_store};
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;
@@ -26,11 +26,11 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
             let hash = compute_config_hash(config, &workspace.root)?;
             let store = load_approval_store()?;
 
-            println!("\nHash:   {}", hash);
+            eprintln!("\nHash:   {}", hash);
             if store.is_approved(&hash) {
-                println!("Status: APPROVED");
+                eprintln!("Status: APPROVED");
             } else {
-                println!("Status: NOT APPROVED — run `cast config allow` to approve");
+                eprintln!("Status: NOT APPROVED — run `cast config allow` to approve");
             }
 
             Ok(ExitCode::SUCCESS)
