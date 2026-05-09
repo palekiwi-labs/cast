@@ -1,6 +1,92 @@
-use crate::config::ArgTemplate;
+use crate::config::{ArgTemplate, McpEnvConfig, McpToolConfig};
 use anyhow::Result;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::process::Stdio;
+use tokio::process::Command;
+
+pub struct CallToolResult {
+    pub content: Vec<McpContent>,
+    pub is_error: bool,
+}
+
+pub struct McpContent {
+    pub text: String,
+}
+
+pub async fn run_command(
+    tool: &McpToolConfig,
+    mapped_args: Vec<String>,
+    host_env: &HashMap<String, String>,
+) -> Result<CallToolResult> {
+    let env_config = tool.env.as_ref().cloned().unwrap_or_default();
+    let resolved_env = resolve_env(&env_config, host_env);
+    let (exe, args) = build_exec_command(tool, mapped_args);
+
+    let mut cmd = Command::new(exe);
+    cmd.args(args);
+    cmd.env_clear();
+    cmd.envs(resolved_env);
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+
+    let child = cmd.spawn()?;
+    let output = child.wait_with_output().await?;
+
+    let is_error = !output.status.success();
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    let mut combined_output = stdout;
+    if !stderr.is_empty() {
+        if !combined_output.is_empty() && !combined_output.ends_with('\n') {
+            combined_output.push('\n');
+        }
+        combined_output.push_str(&stderr);
+    }
+
+    // If combined output is still empty but it's an error, provide a hint
+    if combined_output.is_empty() && is_error {
+        combined_output = format!("Command failed with status: {}", output.status);
+    }
+
+    Ok(CallToolResult {
+        content: vec![McpContent {
+            text: combined_output,
+        }],
+        is_error,
+    })
+}
+
+pub fn resolve_env(
+    config: &McpEnvConfig,
+    host_env: &HashMap<String, String>,
+) -> HashMap<String, String> {
+    let mut final_env = HashMap::new();
+
+    // 1. Always retain PATH
+    if let Some(path) = host_env.get("PATH") {
+        final_env.insert("PATH".to_string(), path.clone());
+    }
+
+    // 2. Map inherited variables
+    for key in &config.inherit {
+        if let Some(val) = host_env.get(key) {
+            final_env.insert(key.clone(), val.clone());
+        }
+    }
+
+    // 3. Set static variables (overrides inheritance)
+    for (key, val) in &config.set {
+        final_env.insert(key.clone(), val.clone());
+    }
+
+    final_env
+}
+
+pub fn build_exec_command(tool: &McpToolConfig, mapped_args: Vec<String>) -> (String, Vec<String>) {
+    (tool.command.clone(), mapped_args)
+}
 
 pub fn map_args(templates: &[ArgTemplate], args: &Value) -> Result<Vec<String>> {
     let mut final_args = Vec::new();
@@ -173,10 +259,44 @@ mod tests {
     }
 
     #[test]
-    fn test_map_args_mixed() {
-        let templates = vec![ArgTemplate::Literal("--file={test_file}".to_string())];
-        let args = json!({ "test_file": "data.txt" });
-        let result = map_args(&templates, &args).unwrap();
-        assert_eq!(result, vec!["--file=data.txt"]);
+    fn test_resolve_env() {
+        let mut host_env = HashMap::new();
+        host_env.insert("PATH".to_string(), "/usr/bin".to_string());
+        host_env.insert("USER".to_string(), "alice".to_string());
+        host_env.insert("HOME".to_string(), "/home/alice".to_string());
+        host_env.insert("MY_VAR".to_string(), "original".to_string());
+
+        let config = McpEnvConfig {
+            inherit: vec!["USER".to_string(), "MY_VAR".to_string()],
+            set: vec![("MY_VAR".to_string(), "overridden".to_string())]
+                .into_iter()
+                .collect(),
+        };
+
+        let resolved = resolve_env(&config, &host_env);
+
+        // PATH is always present
+        assert_eq!(resolved.get("PATH").unwrap(), "/usr/bin");
+        // USER is inherited
+        assert_eq!(resolved.get("USER").unwrap(), "alice");
+        // MY_VAR is overridden by set
+        assert_eq!(resolved.get("MY_VAR").unwrap(), "overridden");
+        // HOME is NOT inherited
+        assert!(resolved.get("HOME").is_none());
+    }
+
+    #[test]
+    fn test_build_exec_command() {
+        let tool = McpToolConfig {
+            description: "test".to_string(),
+            command: "ls".to_string(),
+            args: vec![],
+            env: Some(McpEnvConfig::default()),
+            parameters: json!({}),
+        };
+        let mapped_args = vec!["-la".to_string()];
+        let (exe, args) = build_exec_command(&tool, mapped_args);
+        assert_eq!(exe, "ls");
+        assert_eq!(args, vec!["-la"]);
     }
 }

@@ -70,7 +70,7 @@ pub struct McpToolConfig {
     pub parameters: serde_json::Value,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
 pub struct McpEnvConfig {
     #[serde(default)]
     pub inherit: Vec<String>,
