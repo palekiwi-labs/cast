@@ -20,32 +20,42 @@ use std::sync::Arc;
 ///
 /// JSON Schema validators are pre-compiled at construction time so that each
 /// `call_tool` invocation only performs validation, never compilation.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct McpHandler {
-    config: Arc<McpConfig>,
-    host_env: Arc<HashMap<String, String>>,
+    inner: Arc<McpHandlerInner>,
+}
+
+#[derive(Debug)]
+struct McpHandlerInner {
+    config: McpConfig,
+    host_env: HashMap<String, String>,
     /// Pre-compiled validators, keyed by tool name.
-    /// An `Err` entry means the schema in `cast.json` was invalid at startup.
-    validators: Arc<HashMap<String, Result<jsonschema::Validator, String>>>,
+    validators: HashMap<String, jsonschema::Validator>,
+    /// Pre-computed tools for list_tools responses.
+    cached_tools: Vec<Tool>,
 }
 
 impl McpHandler {
-    pub fn new(config: McpConfig, host_env: HashMap<String, String>) -> Self {
-        let validators = config
-            .tools
-            .iter()
-            .map(|(name, tool)| {
-                let result = jsonschema::validator_for(&tool.parameters)
-                    .map_err(|e| e.to_string());
-                (name.clone(), result)
-            })
-            .collect();
+    pub fn new(config: McpConfig, host_env: HashMap<String, String>) -> anyhow::Result<Self> {
+        let mut validators = HashMap::new();
+        let mut cached_tools = Vec::new();
 
-        Self {
-            config: Arc::new(config),
-            host_env: Arc::new(host_env),
-            validators: Arc::new(validators),
+        for (name, tool) in &config.tools {
+            let validator = jsonschema::validator_for(&tool.parameters).map_err(|e| {
+                anyhow::anyhow!("Invalid JSON schema for tool '{}': {}", name, e)
+            })?;
+            validators.insert(name.clone(), validator);
+            cached_tools.push(tool_config_to_rmcp_tool(name, tool));
         }
+
+        Ok(Self {
+            inner: Arc::new(McpHandlerInner {
+                config,
+                host_env,
+                validators,
+                cached_tools,
+            }),
+        })
     }
 
     /// Core tool-execution pipeline, decoupled from the MCP transport layer.
@@ -60,32 +70,19 @@ impl McpHandler {
         info!(tool = %request.name, "call_tool requested");
 
         // 1. Look up the tool in config
-        let tool_config = self
-            .config
-            .tools
-            .get(&*request.name)
-            .ok_or_else(|| {
-                warn!(tool = %request.name, "unknown tool requested");
-                McpError::invalid_params(format!("Unknown tool: '{}'", request.name), None)
-            })?;
+        let tool_config = self.inner.config.tools.get(&*request.name).ok_or_else(|| {
+            warn!(tool = %request.name, "unknown tool requested");
+            McpError::invalid_params(format!("Unknown tool: '{}'", request.name), None)
+        })?;
 
         // 2. Extract arguments as a JSON Value
         let args_map = request.arguments.unwrap_or_default();
         let args_value = Value::Object(args_map);
 
         // 3. Retrieve pre-compiled validator (compiled once in McpHandler::new)
-        let validator = self
-            .validators
-            .get(&*request.name)
-            .expect("validator map is always in sync with config.tools")
-            .as_ref()
-            .map_err(|e| {
-                error!(tool = %request.name, err = %e, "invalid JSON schema in config");
-                McpError::internal_error(
-                    format!("Invalid schema for tool '{}': {}", request.name, e),
-                    None,
-                )
-            })?;
+        let validator = self.inner.validators.get(&*request.name).expect(
+            "validator map is always in sync with config.tools (enforced by fail-fast McpHandler::new)",
+        );
 
         let validation_errors: Vec<String> = validator
             .iter_errors(&args_value)
@@ -94,7 +91,7 @@ impl McpHandler {
 
         if !validation_errors.is_empty() {
             warn!(tool = %request.name, errors = ?validation_errors, "argument validation failed");
-            return Err(McpError::invalid_request(
+            return Err(McpError::invalid_params(
                 format!("Invalid arguments: {}", validation_errors.join("; ")),
                 None,
             ));
@@ -107,7 +104,7 @@ impl McpHandler {
         })?;
 
         // 5. Execute the command via the secure execution engine
-        let exec_result = exec::run_command(tool_config, mapped_args, &self.host_env)
+        let exec_result = exec::run_command(tool_config, mapped_args, &self.inner.host_env)
             .await
             .map_err(|e| {
                 error!(tool = %request.name, err = %e, "command execution failed");
@@ -154,15 +151,8 @@ impl ServerHandler for McpHandler {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let tools = self
-            .config
-            .tools
-            .iter()
-            .map(|(name, config)| tool_config_to_rmcp_tool(name, config))
-            .collect();
-
         Ok(ListToolsResult {
-            tools,
+            tools: self.inner.cached_tools.clone(),
             next_cursor: None,
             meta: Default::default(),
         })
@@ -312,7 +302,7 @@ mod tests {
         if let Ok(path) = std::env::var("PATH") {
             host_env.insert("PATH".to_string(), path);
         }
-        McpHandler::new(config, host_env)
+        McpHandler::new(config, host_env).expect("failed to create McpHandler in test")
     }
 
     #[tokio::test]
@@ -346,8 +336,29 @@ mod tests {
         assert_eq!(err.code.0, -32602, "unknown tool should yield InvalidParams (-32602)");
     }
 
+    #[test]
+    fn test_new_with_invalid_schema_fails_fast() {
+        let mut tools = BTreeMap::new();
+        let mut config = echo_tool_config();
+        // Set an invalid JSON Schema (type should be a string or array of strings)
+        config.parameters = json!({
+            "type": 123
+        });
+        tools.insert("broken".to_string(), config);
+
+        let mcp_config = McpConfig {
+            port: None,
+            hostname: None,
+            tools,
+        };
+        let res = McpHandler::new(mcp_config, HashMap::new());
+        assert!(res.is_err(), "McpHandler::new should fail with invalid schema");
+        let err = res.unwrap_err().to_string();
+        assert!(err.contains("Invalid JSON schema for tool 'broken'"));
+    }
+
     #[tokio::test]
-    async fn test_pipeline_invalid_args_returns_invalid_request() {
+    async fn test_pipeline_invalid_args_returns_invalid_params() {
         let mut tools = BTreeMap::new();
         tools.insert("echo".to_string(), echo_tool_config());
         let handler = make_handler(tools);
@@ -356,7 +367,10 @@ mod tests {
         let request = CallToolRequestParams::new("echo");
         let err = handler.execute_tool(request).await.expect_err("should fail");
 
-        // -32600 is the JSON-RPC code for InvalidRequest
-        assert_eq!(err.code.0, -32600, "schema violation should yield InvalidRequest (-32600)");
+        // -32602 is the JSON-RPC code for InvalidParams
+        assert_eq!(
+            err.code.0, -32602,
+            "schema violation should yield InvalidParams (-32602)"
+        );
     }
 }
