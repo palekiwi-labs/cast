@@ -337,9 +337,11 @@ mod tests {
         let store = ApprovalStore::default();
         let result = store.verify(config, path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Configuration has not been approved"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Configuration has not been approved")
+        );
     }
 }

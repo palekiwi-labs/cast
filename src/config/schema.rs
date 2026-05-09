@@ -44,6 +44,51 @@ pub struct Config {
 
     // Security
     pub forbidden_paths: Vec<String>,
+
+    #[serde(default)]
+    pub mcp: McpConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct McpConfig {
+    #[serde(default)]
+    pub port: Option<u16>,
+    #[serde(default)]
+    pub hostname: Option<String>,
+    #[serde(default)]
+    pub tools: BTreeMap<String, McpToolConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct McpToolConfig {
+    pub description: String,
+    pub command: String,
+    pub args: Vec<ArgTemplate>,
+    #[serde(default)]
+    pub env: Option<McpEnvConfig>,
+    pub parameters: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct McpEnvConfig {
+    #[serde(default)]
+    pub inherit: Vec<String>,
+    #[serde(default)]
+    pub set: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum ArgTemplate {
+    Literal(String),
+    Conditional(ConditionalBlock),
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ConditionalBlock {
+    pub if_present: Option<String>,
+    pub if_true: Option<String>,
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -84,6 +129,7 @@ impl Default for Config {
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             forbidden_paths: Vec::new(),
+            mcp: McpConfig::default(),
         }
     }
 }
@@ -94,4 +140,70 @@ fn default_volume_mode() -> String {
 
 fn default_volume_type() -> String {
     "volume".to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn test_mcp_config_deserialization() {
+        let json = json!({
+            "port": 32123,
+            "tools": {
+                "run_rspec": {
+                    "description": "Run RSpec",
+                    "command": "rspec",
+                    "args": [
+                        "--format",
+                        "{format}",
+                        { "if_true": "fail_fast", "args": ["--fail-fast"] },
+                        "{...test_paths}"
+                    ],
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "test_paths": { "type": "array" }
+                        }
+                    }
+                }
+            }
+        });
+
+        let config: McpConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.port, Some(32123));
+        let tool = config.tools.get("run_rspec").unwrap();
+        assert_eq!(tool.command, "rspec");
+        assert_eq!(tool.args.len(), 4);
+
+        match &tool.args[2] {
+            ArgTemplate::Conditional(c) => {
+                assert_eq!(c.if_true, Some("fail_fast".to_string()));
+                assert_eq!(c.args, vec!["--fail-fast".to_string()]);
+            }
+            _ => panic!("Expected conditional block"),
+        }
+    }
+
+    #[test]
+    fn test_mcp_config_with_env_and_optional_args() {
+        let json = json!({
+            "description": "Test Tool",
+            "command": "ls",
+            "args": [
+                { "if_present": "dir", "args": ["{dir}"] }
+            ],
+            "env": {
+                "inherit": ["HOME"],
+                "set": { "DEBUG": "1" }
+            },
+            "parameters": {}
+        });
+
+        let tool: McpToolConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(tool.command, "ls");
+        assert_eq!(tool.env.as_ref().unwrap().inherit, vec!["HOME"]);
+        assert_eq!(tool.env.as_ref().unwrap().set.get("DEBUG").unwrap(), "1");
+    }
 }
