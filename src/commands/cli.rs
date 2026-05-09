@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
@@ -175,12 +175,12 @@ pub enum McpCommands {
     /// Start the MCP HTTP server
     Start {
         /// Port to listen on (overrides cast.json mcp.port)
-        #[arg(long, default_value = "8080")]
-        port: u16,
+        #[arg(long)]
+        port: Option<u16>,
 
-        /// Host to bind to (default: 127.0.0.1)
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
+        /// Host to bind to (overrides cast.json mcp.hostname)
+        #[arg(long)]
+        host: Option<String>,
     },
 }
 

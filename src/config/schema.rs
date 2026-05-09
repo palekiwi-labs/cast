@@ -49,14 +49,35 @@ pub struct Config {
     pub mcp: McpConfig,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub const DEFAULT_MCP_PORT: u16 = 8080;
+pub const DEFAULT_MCP_HOSTNAME: &str = "127.0.0.1";
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct McpConfig {
-    #[serde(default)]
-    pub port: Option<u16>,
-    #[serde(default)]
-    pub hostname: Option<String>,
+    #[serde(default = "default_mcp_port")]
+    pub port: u16,
+    #[serde(default = "default_mcp_hostname")]
+    pub hostname: String,
     #[serde(default)]
     pub tools: BTreeMap<String, McpToolConfig>,
+}
+
+impl Default for McpConfig {
+    fn default() -> Self {
+        Self {
+            port: DEFAULT_MCP_PORT,
+            hostname: DEFAULT_MCP_HOSTNAME.to_string(),
+            tools: BTreeMap::new(),
+        }
+    }
+}
+
+fn default_mcp_port() -> u16 {
+    DEFAULT_MCP_PORT
+}
+
+fn default_mcp_hostname() -> String {
+    DEFAULT_MCP_HOSTNAME.to_string()
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -176,7 +197,7 @@ mod tests {
         });
 
         let config: McpConfig = serde_json::from_value(json).unwrap();
-        assert_eq!(config.port, Some(32123));
+        assert_eq!(config.port, 32123);
         let tool = config.tools.get("run_rspec").unwrap();
         assert_eq!(tool.command, "rspec");
         assert_eq!(tool.args.len(), 4);

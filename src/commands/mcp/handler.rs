@@ -245,8 +245,8 @@ mod tests {
         tools.insert("tool_a".to_string(), echo_tool_config());
         tools.insert("tool_b".to_string(), echo_tool_config());
         let config = McpConfig {
-            port: None,
-            hostname: None,
+            port: 8080,
+            hostname: "localhost".to_string(),
             tools,
         };
 
@@ -303,8 +303,8 @@ mod tests {
 
     fn make_handler(tools: BTreeMap<String, McpToolConfig>) -> McpHandler {
         let config = McpConfig {
-            port: None,
-            hostname: None,
+            port: 8080,
+            hostname: "localhost".to_string(),
             tools,
         };
         let mut host_env = HashMap::new();
@@ -359,8 +359,8 @@ mod tests {
         tools.insert("broken".to_string(), config);
 
         let mcp_config = McpConfig {
-            port: None,
-            hostname: None,
+            port: 8080,
+            hostname: "localhost".to_string(),
             tools,
         };
         let res = McpHandler::new(mcp_config, HashMap::new());
