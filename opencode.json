@@ -4,5 +4,12 @@
     "bash": {
       "cargo *": "allow"
     }
-  }
+  },
+  "mcp": {
+    "mcp-cast": {
+      "type": "remote",
+      "url": "http://host.docker.internal:30305/mcp",
+      "enabled": true
+    }
+  },
 }
