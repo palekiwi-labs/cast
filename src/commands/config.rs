@@ -20,6 +20,19 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
         Some(ConfigCommands::Show) | None => {
             let json = serde_json::to_string_pretty(&config)?;
             println!("{}", json);
+
+            let user = get_user()?;
+            let workspace = get_workspace(&user.username)?;
+            let hash = compute_config_hash(config, &workspace.root)?;
+            let store = load_approval_store()?;
+
+            println!("\nHash:   {}", hash);
+            if store.is_approved(&hash) {
+                println!("Status: APPROVED");
+            } else {
+                println!("Status: NOT APPROVED — run `cast config allow` to approve");
+            }
+
             Ok(ExitCode::SUCCESS)
         }
         Some(ConfigCommands::Allow) => {
