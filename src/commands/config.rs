@@ -1,3 +1,5 @@
+use std::process::ExitCode;
+
 use crate::config::Config;
 use anyhow::Result;
 
@@ -7,12 +9,12 @@ pub enum ConfigCommands {
     Show,
 }
 
-pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result<()> {
+pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result<ExitCode> {
     match command {
         Some(ConfigCommands::Show) | None => {
             let json = serde_json::to_string_pretty(&config)?;
             println!("{}", json);
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
     }
 }

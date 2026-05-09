@@ -1,4 +1,6 @@
-use anyhow::Result;
+use std::process::ExitStatus;
+
+use anyhow::{Result, bail};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
@@ -9,7 +11,7 @@ use crate::docker::client::DockerClient;
 use crate::user::get_user;
 
 /// Drop into an interactive shell in the dev container
-pub fn shell(agent: &dyn Agent, config: &Config) -> Result<()> {
+pub fn shell(agent: &dyn Agent, config: &Config) -> Result<ExitStatus> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -19,12 +21,11 @@ pub fn shell(agent: &dyn Agent, config: &Config) -> Result<()> {
     let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
 
     if !docker.is_container_running(&container_name)? {
-        println!(
+        bail!(
             "Dev container is not running: {}. Run 'ocx run {}' to start it.",
             container_name,
             agent.name(),
         );
-        return Ok(());
     }
 
     let exec_args = vec![
@@ -34,5 +35,5 @@ pub fn shell(agent: &dyn Agent, config: &Config) -> Result<()> {
         "/bin/bash".to_string(),
     ];
 
-    Err(docker.exec_command(exec_args))
+    docker.interactive_command(exec_args)
 }

@@ -1,9 +1,11 @@
+use std::process::ExitCode;
+
 use anyhow::Result;
 use clap::Subcommand;
 
 use crate::config::Config;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 
 #[derive(Subcommand)]
@@ -27,28 +29,28 @@ pub enum NixDaemonCommands {
     Stop,
 }
 
-pub fn handle_nix_daemon(cfg: &Config, command: NixDaemonCommands) -> Result<()> {
+pub fn handle_nix_daemon(cfg: &Config, command: NixDaemonCommands) -> Result<ExitCode> {
     match command {
         NixDaemonCommands::Build { force, no_cache } => {
             let docker = DockerClient;
             let opts = BuildOptions { force, no_cache };
             nix_daemon::build(&docker, opts)?;
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         NixDaemonCommands::Shell => {
             let docker = DockerClient;
-            nix_daemon::shell(&docker, cfg)?;
-            Ok(())
+            let status = nix_daemon::shell(&docker, cfg)?;
+            Ok(crate::commands::cli::to_exit_code(status))
         }
         NixDaemonCommands::Start => {
             let docker = DockerClient;
             nix_daemon::ensure_running(&docker, cfg)?;
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
         NixDaemonCommands::Stop => {
             let docker = DockerClient;
             nix_daemon::stop(&docker, cfg)?;
-            Ok(())
+            Ok(ExitCode::SUCCESS)
         }
     }
 }

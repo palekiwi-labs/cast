@@ -1,11 +1,15 @@
+use std::process::{ExitCode, ExitStatus};
+
 use super::{config, nix_daemon, port};
 use crate::config::load_config;
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
+use crate::logging::{generate_invocation_id, init_file_logger};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use tracing::info_span;
 
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
@@ -118,9 +122,16 @@ impl RunAgent {
     }
 }
 
-pub fn run(cli: Cli) -> Result<()> {
+pub fn run(cli: Cli) -> Result<ExitCode> {
     // Load config once at startup for efficiency and consistency
     let cfg = load_config()?;
+
+    // Initialize file logger
+    init_file_logger()?;
+
+    let invocation_id = generate_invocation_id();
+    let root = info_span!("cast", id = %invocation_id, pid = std::process::id());
+    let _root_guard = root.enter();
 
     match cli.command {
         Some(Commands::Build {
@@ -130,7 +141,10 @@ pub fn run(cli: Cli) -> Result<()> {
                     force,
                     no_cache,
                 },
-        }) => dev::build_agent(&OpenCode, &cfg, base, force, no_cache),
+        }) => {
+            dev::build_agent(&OpenCode, &cfg, base, force, no_cache)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Build {
             agent:
                 BuildAgent::Pi {
@@ -138,24 +152,48 @@ pub fn run(cli: Cli) -> Result<()> {
                     force,
                     no_cache,
                 },
-        }) => dev::build_agent(&Pi, &cfg, base, force, no_cache),
+        }) => {
+            dev::build_agent(&Pi, &cfg, base, force, no_cache)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
-        Some(Commands::Run { agent }) => dev::run_agent(
-            agent.as_agent(),
-            &cfg,
-            match &agent {
-                RunAgent::Opencode { extra_args } => extra_args.clone(),
-                RunAgent::Pi { extra_args } => extra_args.clone(),
-            },
-        ),
+        Some(Commands::Run { agent }) => {
+            let status = dev::run_agent(
+                agent.as_agent(),
+                &cfg,
+                match &agent {
+                    RunAgent::Opencode { extra_args } => extra_args.clone(),
+                    RunAgent::Pi { extra_args } => extra_args.clone(),
+                },
+            )?;
+            Ok(to_exit_code(status))
+        }
         Some(Commands::Shell {
             agent: ShellAgent::Opencode,
-        }) => dev::shell(&OpenCode, &cfg),
+        }) => {
+            let status = dev::shell(&OpenCode, &cfg)?;
+            Ok(to_exit_code(status))
+        }
         Some(Commands::Shell {
             agent: ShellAgent::Pi,
-        }) => dev::shell(&Pi, &cfg),
+        }) => {
+            let status = dev::shell(&Pi, &cfg)?;
+            Ok(to_exit_code(status))
+        }
         None => unreachable!("Clap should handle required subcommands"),
     }
+}
+
+/// Convert an ExitStatus into an ExitCode, following Unix conventions.
+pub fn to_exit_code(status: ExitStatus) -> ExitCode {
+    use std::os::unix::process::ExitStatusExt;
+
+    let code = status.code().unwrap_or_else(|| {
+        // If terminated by a signal, follow the 128 + signal shell convention
+        status.signal().map(|s| 128 + s).unwrap_or(1)
+    });
+
+    ExitCode::from(code as u8)
 }

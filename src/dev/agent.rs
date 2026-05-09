@@ -6,8 +6,8 @@ use crate::config::Config;
 use crate::dev::build_command;
 use crate::dev::image;
 use crate::dev::run::RunOpts;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::user::ResolvedUser;
 
 /// An agent encapsulates everything that is specific to a particular program

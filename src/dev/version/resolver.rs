@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use std::path::PathBuf;
 
 use crate::dev::version::cache;
@@ -23,7 +23,11 @@ impl VersionResolver {
     /// - If `version` is `"latest"`, check the cache first; fall back to the
     ///   fetcher if the cache is missing or expired.
     /// - Network errors are non-fatal when a stale cache entry is present.
-    pub fn resolve<F: VersionFetcher + ?Sized>(&self, version: &str, fetcher: &F) -> Result<String> {
+    pub fn resolve<F: VersionFetcher + ?Sized>(
+        &self,
+        version: &str,
+        fetcher: &F,
+    ) -> Result<String> {
         let normalized = normalize_version(version);
 
         if normalized != "latest" {
@@ -95,7 +99,7 @@ pub fn validate_semver(version: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dev::version::cache::{write_cache, CacheEntry};
+    use crate::dev::version::cache::{CacheEntry, write_cache};
     use std::fs;
     use tempfile::TempDir;
 
