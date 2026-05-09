@@ -188,7 +188,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_resolve_external_symlink_is_skipped() {
         let tmp = TempDir::new().unwrap();
         let external_tmp = TempDir::new().unwrap();
@@ -205,7 +204,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_resolve_internal_symlink_resolves_to_target() {
         let tmp = TempDir::new().unwrap();
         let ws = workspace(&tmp);
@@ -228,7 +226,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_resolve_symlink_to_directory() {
         let tmp = TempDir::new().unwrap();
         let ws = workspace(&tmp);
@@ -250,7 +247,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_resolve_broken_symlink_is_skipped() {
         let tmp = TempDir::new().unwrap();
         let ws = workspace(&tmp);
@@ -264,7 +260,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg(unix)]
     fn test_resolve_deduplicates_same_target() {
         let tmp = TempDir::new().unwrap();
         let ws = workspace(&tmp);

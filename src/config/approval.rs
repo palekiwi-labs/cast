@@ -94,27 +94,19 @@ impl ApprovalStore {
     pub fn save_to(&self, path: &Path) -> Result<()> {
         let parent = path.parent().context("Invalid approval store path")?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::DirBuilderExt;
-            std::fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(parent)?;
-        }
-        #[cfg(not(unix))]
-        std::fs::create_dir_all(parent)?;
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(parent)?;
 
         let json =
             serde_json::to_string_pretty(self).context("Failed to serialize approval store")?;
 
         let mut temp = NamedTempFile::new_in(parent).context("Failed to create temporary file")?;
 
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o600))?;
-        }
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o600))?;
 
         temp.write_all(json.as_bytes())
             .context("Failed to write to temporary file")?;
@@ -296,12 +288,9 @@ mod tests {
         assert!(loaded.is_approved("hash1"));
 
         // Test restricted permissions on Unix
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let metadata = std::fs::metadata(&path).unwrap();
-            assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
-        }
+        use std::os::unix::fs::PermissionsExt;
+        let metadata = std::fs::metadata(&path).unwrap();
+        assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
     }
 
     #[test]
