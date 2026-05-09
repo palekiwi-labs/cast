@@ -3,7 +3,8 @@ mod loader;
 mod schema;
 
 pub use approval::{
-    ApprovalEntry, ApprovalStore, ApprovedConfig, compute_config_hash, load_approval_store,
+    approve_workspace_config, check_approved, compute_config_hash, deny_workspace_config,
+    load_approval_store, ApprovalEntry, ApprovalStore, ApprovedConfig,
 };
 pub use loader::load_config;
 pub use schema::{Config, VolumeConfig};

@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use crate::config::{compute_config_hash, load_approval_store, Config};
+use crate::config::Config;
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;
@@ -26,18 +26,13 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
         Some(ConfigCommands::Allow) => {
             let user = get_user()?;
             let workspace = get_workspace(&user.username)?;
-            let hash = compute_config_hash(config, &workspace.root)?;
-            let mut store = load_approval_store()?;
-            store.add_entry(hash, workspace.root.to_string_lossy().into_owned());
-            store.save()?;
+            crate::config::approve_workspace_config(config, &workspace.root)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(ConfigCommands::Deny) => {
             let user = get_user()?;
             let workspace = get_workspace(&user.username)?;
-            let mut store = load_approval_store()?;
-            store.remove_workspace_entries(&workspace.root.to_string_lossy());
-            store.save()?;
+            crate::config::deny_workspace_config(&workspace.root)?;
             Ok(ExitCode::SUCCESS)
         }
     }

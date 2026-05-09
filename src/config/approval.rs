@@ -169,6 +169,27 @@ impl ApprovalStore {
     }
 }
 
+/// Loads the store, approves the config for the given workspace, and saves it.
+pub fn approve_workspace_config(config: &Config, workspace_root: &Path) -> Result<()> {
+    let hash = compute_config_hash(config, workspace_root)?;
+    let mut store = load_approval_store()?;
+    store.add_entry(hash, workspace_root.to_string_lossy().into_owned());
+    store.save()
+}
+
+/// Loads the store, revokes all approvals for the given workspace, and saves it.
+pub fn deny_workspace_config(workspace_root: &Path) -> Result<()> {
+    let mut store = load_approval_store()?;
+    store.remove_workspace_entries(&workspace_root.to_string_lossy());
+    store.save()
+}
+
+/// Helper to load the store and verify a config in one step.
+pub fn check_approved(config: Config, workspace_root: &Path) -> Result<ApprovedConfig> {
+    let store = load_approval_store()?;
+    store.verify(config, workspace_root)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

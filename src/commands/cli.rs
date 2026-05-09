@@ -27,8 +27,7 @@ pub struct Cli {
 fn verify_config(cfg: Config) -> Result<ApprovedConfig> {
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
-    let store = crate::config::load_approval_store()?;
-    store.verify(cfg, &workspace.root)
+    crate::config::check_approved(cfg, &workspace.root)
 }
 
 pub fn run(cli: Cli) -> Result<ExitCode> {
