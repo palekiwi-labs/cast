@@ -313,7 +313,7 @@ mod tests {
         // MY_VAR is overridden by set
         assert_eq!(resolved.get("MY_VAR").unwrap(), "overridden");
         // HOME is NOT inherited
-        assert!(resolved.get("HOME").is_none());
+        assert!(!resolved.contains_key("HOME"));
     }
 
     #[test]
