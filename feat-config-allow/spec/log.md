@@ -103,3 +103,10 @@ Completed a security audit of the config approval system. Extended the ApprovedC
 - **Found:** nix-daemon and build commands were bypassable with raw Config
 - **Decided:** Moved all container-initiating commands to require ApprovedConfig
 
+## [e18058d] Refactor approval orchestration
+
+Moved the load-act-save lifecycle for config approvals into src/config/approval.rs. Simplified CLI handlers in commands/config.rs and commands/cli.rs. This improves testability and separates environment resolution from core logic.
+
+- **Found:** CLI handlers were manually orchestrating the approval store lifecycle
+- **Decided:** Created high-level approve_workspace_config, deny_workspace_config, and check_approved functions in the config module
+
