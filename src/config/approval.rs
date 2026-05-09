@@ -3,6 +3,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Recursively sort all JSON object keys for deterministic serialization.
 fn canonicalize_value(v: serde_json::Value) -> serde_json::Value {
@@ -55,6 +56,31 @@ pub struct ApprovalStore {
 pub struct ApprovalEntry {
     pub workspace: String,
     pub approved_at: u64,
+}
+
+impl ApprovalStore {
+    pub fn is_approved(&self, hash: &str) -> bool {
+        self.entries.contains_key(hash)
+    }
+
+    pub fn add_entry(&mut self, hash: String, workspace: String) {
+        let approved_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        self.entries.insert(
+            hash,
+            ApprovalEntry {
+                workspace,
+                approved_at,
+            },
+        );
+    }
+
+    pub fn remove_entry(&mut self, hash: &str) {
+        self.entries.remove(hash);
+    }
 }
 
 #[cfg(test)]
@@ -130,5 +156,20 @@ mod tests {
         let h1 = compute_config_hash(&c1, path).unwrap();
         let h2 = compute_config_hash(&c2, path).unwrap();
         assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn test_approval_store_in_memory() {
+        let mut store = ApprovalStore::default();
+        let hash = "abc123".to_string();
+        let workspace = "/home/user/project".to_string();
+
+        assert!(!store.is_approved(&hash));
+
+        store.add_entry(hash.clone(), workspace);
+        assert!(store.is_approved(&hash));
+
+        store.remove_entry(&hash);
+        assert!(!store.is_approved(&hash));
     }
 }
