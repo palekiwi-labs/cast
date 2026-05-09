@@ -67,6 +67,8 @@ pub struct McpToolConfig {
     pub args: Vec<ArgTemplate>,
     #[serde(default)]
     pub env: Option<McpEnvConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
     pub parameters: serde_json::Value,
 }
 
@@ -193,6 +195,7 @@ mod tests {
         let json = json!({
             "description": "Test Tool",
             "command": "ls",
+            "working_dir": "/tmp/sandbox",
             "args": [
                 { "if_present": "dir", "args": ["{dir}"] }
             ],
@@ -205,6 +208,7 @@ mod tests {
 
         let tool: McpToolConfig = serde_json::from_value(json).unwrap();
         assert_eq!(tool.command, "ls");
+        assert_eq!(tool.working_dir, Some("/tmp/sandbox".to_string()));
         assert_eq!(tool.env.as_ref().unwrap().inherit, vec!["HOME"]);
         assert_eq!(tool.env.as_ref().unwrap().set.get("DEBUG").unwrap(), "1");
     }

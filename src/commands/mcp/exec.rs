@@ -28,6 +28,11 @@ pub async fn run_command(
     cmd.args(args);
     cmd.env_clear();
     cmd.envs(resolved_env);
+
+    if let Some(dir) = &tool.working_dir {
+        cmd.current_dir(dir);
+    }
+
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
@@ -318,6 +323,7 @@ mod tests {
             command: "ls".to_string(),
             args: vec![],
             env: Some(McpEnvConfig::default()),
+            working_dir: Some("/tmp".to_string()),
             parameters: json!({}),
         };
         let mapped_args = vec!["-la".to_string()];
