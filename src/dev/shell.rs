@@ -2,7 +2,7 @@ use std::process::ExitStatus;
 
 use anyhow::{Result, bail};
 
-use crate::config::Config;
+use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
@@ -11,7 +11,7 @@ use crate::docker::client::DockerClient;
 use crate::user::get_user;
 
 /// Drop into an interactive shell in the dev container
-pub fn shell(agent: &dyn Agent, config: &Config) -> Result<ExitStatus> {
+pub fn shell(agent: &dyn Agent, config: &ApprovedConfig) -> Result<ExitStatus> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;

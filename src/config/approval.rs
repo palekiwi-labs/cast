@@ -24,6 +24,35 @@ pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<Str
     Ok(hex::encode(hasher.finalize()))
 }
 
+/// A validated configuration that has been explicitly approved by the user.
+///
+/// This type can only be constructed by the `ApprovalStore::verify` method,
+/// creating a compiler-enforced "gate" for functions that require an approved
+/// environment (like starting an agent session).
+#[derive(Debug, Clone)]
+pub struct ApprovedConfig(Config);
+
+impl std::ops::Deref for ApprovedConfig {
+    type Target = Config;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl ApprovedConfig {
+    /// Unwrap the approved configuration.
+    pub fn into_inner(self) -> Config {
+        self.0
+    }
+
+    /// UNSAFE: Wrap a raw configuration without user approval.
+    /// ONLY for use in tests to bypass the approval gate.
+    #[cfg(test)]
+    pub fn assume_approved_for_test(config: Config) -> Self {
+        Self(config)
+    }
+}
+
 pub fn approval_store_path() -> PathBuf {
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from(".local").join("share"))
@@ -94,6 +123,21 @@ impl ApprovalStore {
 
     pub fn is_approved(&self, hash: &str) -> bool {
         self.entries.contains_key(hash)
+    }
+
+    /// Verify that the given configuration and workspace are approved.
+    /// Returns an `ApprovedConfig` on success, or an error if not approved.
+    pub fn verify(&self, config: Config, workspace_root: &Path) -> Result<ApprovedConfig> {
+        let hash = compute_config_hash(&config, workspace_root)?;
+        if self.is_approved(&hash) {
+            Ok(ApprovedConfig(config))
+        } else {
+            anyhow::bail!(
+                "Configuration has not been approved for this project.\n\
+                 Note: env-var overrides (CAST_*) affect the hash.\n\
+                 Review with `cast config show`, then run `cast config allow` to approve."
+            );
+        }
     }
 
     pub fn add_entry(&mut self, hash: String, workspace: String) {
@@ -245,5 +289,38 @@ mod tests {
         std::fs::write(&path, "not json").unwrap();
         let result = ApprovalStore::load_from(&path);
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_verify_approved_config() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let config = Config::default();
+        let hash = compute_config_hash(&config, path).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry(hash, path.display().to_string());
+
+        let result = store.verify(config, path);
+        assert!(result.is_ok());
+        let approved = result.unwrap();
+        assert_eq!(approved.memory, Config::default().memory);
+    }
+
+    #[test]
+    fn test_verify_unapproved_config_fails() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let config = Config::default();
+
+        let store = ApprovalStore::default();
+        let result = store.verify(config, path);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Configuration has not been approved")
+        );
     }
 }
