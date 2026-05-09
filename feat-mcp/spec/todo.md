@@ -16,10 +16,14 @@
 - [x] Commit: `fix(mcp): ensure conditional arguments use logical AND and deny unknown fields`
 
 ## Slice 3: Secure Execution Engine - Sandbox
-- [ ] **RED**: Write tests verifying the `Command` builder logic: ensuring `.env_clear()` is applied, `PATH` is retained, and whitelisted/static variables (`inherit`, `set`) are mapped correctly. *(Ensure tests comply with Nix sandbox constraints)*.
-- [ ] **GREEN**: Implement subprocess execution wrapped in `tokio::task::spawn_blocking` capturing stdout/stderr.
-- [ ] **REFACTOR**: Ensure error handling wraps process failures clearly.
-- [ ] Commit: `feat(mcp): implement secure subprocess execution sandbox`
+- [x] **RED**: Write pure unit tests for `resolve_env` (verifying PATH injection, inheritance, and overrides) and `build_exec_command`.
+- [x] **GREEN**: Implement `resolve_env` and `build_exec_command` in `src/commands/mcp/exec.rs`.
+- [x] **GREEN**: Implement the thin `run_command` executor using `tokio::process::Command` with `.env_clear()`.
+- [x] **REFACTOR**: Ensure error handling wraps process failures clearly.
+- [x] Commit: `feat(mcp): implement secure subprocess execution sandbox`
+- [x] **FIX**: Apply refinements (TMPDIR retention, error handling, ref refactor, working_dir).
+- [x] Commit: `fix(mcp): apply code review refinements for subprocess sandbox`
+- [x] Commit: `feat(mcp): add working_dir support for tool isolation`
 
 ## Slice 4: Dynamic MCP Handler
 - [ ] **RED**: Write tests for converting `McpToolConfig` into `rmcp::Tool` definitions and testing `jsonschema` validation of mock `request.arguments`.

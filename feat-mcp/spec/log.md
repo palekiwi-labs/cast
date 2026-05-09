@@ -29,3 +29,11 @@
 - **Found:** Logical AND correctly applied for multiple conditions
 - **Decided:** Kept code review file in root per user instruction
 
+## [d8ef250] Slice 3: Secure Subprocess Execution Sandbox
+
+- **Found:** Nix-hermetic testing pattern with logic decoupling
+- **Found:** Graceful execution error reporting for MCP tools
+- **Decided:** Added TMPDIR retention for Nix sandbox compatibility
+- **Decided:** Added optional working_dir for tool isolation
+- **Decided:** Enabled tokio 'process' feature
+

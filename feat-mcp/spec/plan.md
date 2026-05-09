@@ -42,13 +42,17 @@ We will build a dynamic, JSON-Schema backed MCP server ("Semantic Tools") rather
    - Iterate through `ArgTemplate` array.
    - Evaluate `if_present` and `if_true` conditional objects based on JSON arguments.
    - Expand literal strings containing `"{var}"` or spread placeholders `"{...array}"` into standard `Vec<String>`.
-2. **Environment Sandbox**
-   - Construct `std::process::Command::new(tool.command)`.
-   - Enforce Default-Deny by calling `.env_clear()`.
-   - Always map `PATH` from host.
-   - Map explicitly whitelisted variables from `env.inherit` and `env.set`.
+2. **Environment Sandbox (Nix-Safe Pattern)**
+   - To maintain Nix compatibility and thread safety, decouple command construction from execution.
+   - **`resolve_env(config, host_env)`**: Pure function to resolve the environment map.
+     - Enforces Default-Deny.
+     - Always maps `PATH` from host.
+     - Maps explicitly whitelisted variables from `env.inherit` and `env.set`.
+   - **`build_exec_command(tool, mapped_args)`**: Pure function to return `(executable, args)` tuple.
 3. **Execution**
-   - Use `tokio::task::spawn_blocking` to wrap the process execution.
+   - Use `tokio::process::Command` for execution.
+   - Wire the pure builders into a thin executor: `.env_clear().envs(resolved_env)`.
+   - Use `tokio::task::spawn_blocking` only if needed for blocking I/O, otherwise prefer `tokio::process`.
    - Execute, capture stdout/stderr, and format the output into an MCP `CallToolResult`.
 
 ### Phase 5: Networking (`src/commands/mcp/server.rs`)
