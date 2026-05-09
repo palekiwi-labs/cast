@@ -5,19 +5,19 @@ use std::time::Instant;
 use anyhow::Result;
 use tracing::{debug, info, info_span};
 
-use crate::config::{Config, compute_config_hash, load_approval_store};
+use crate::config::{compute_config_hash, load_approval_store, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent resolves its own
@@ -49,10 +49,9 @@ pub fn run_agent(
     let store = load_approval_store()?;
     if !store.is_approved(&hash) {
         anyhow::bail!(
-            "Configuration has not been approved for this project (hash: {}).\n\
+            "Configuration has not been approved for this project.\n\
              Note: env-var overrides (CAST_*) affect the hash.\n\
-             Review with `cast config show`, then run `cast config allow` to approve.",
-            &hash[..8]
+             Review with `cast config show`, then run `cast config allow` to approve."
         );
     }
 
