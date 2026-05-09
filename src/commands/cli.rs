@@ -177,6 +177,10 @@ pub enum McpCommands {
         /// Port to listen on (overrides cast.json mcp.port)
         #[arg(long, default_value = "8080")]
         port: u16,
+
+        /// Host to bind to (default: 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
     },
 }
 

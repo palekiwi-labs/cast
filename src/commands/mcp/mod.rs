@@ -14,6 +14,6 @@ pub async fn run(
 ) -> anyhow::Result<()> {
     use crate::commands::cli::McpCommands;
     match command {
-        McpCommands::Start { port } => server::run_http_server(port, approved).await,
+        McpCommands::Start { port, host } => server::run_http_server(host, port, approved).await,
     }
 }

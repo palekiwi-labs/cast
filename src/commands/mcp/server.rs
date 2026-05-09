@@ -4,10 +4,11 @@ use axum::Router;
 use rmcp::transport::streamable_http_server::{
     StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
+use tracing::warn;
 
 use super::handler::McpHandler;
 
-pub async fn run_http_server(port: u16, approved: ApprovedConfig) -> anyhow::Result<()> {
+pub async fn run_http_server(host: String, port: u16, approved: ApprovedConfig) -> anyhow::Result<()> {
     let mcp_config = approved.mcp.clone();
     let host_env: std::collections::HashMap<String, String> = std::env::vars().collect();
 
@@ -32,11 +33,15 @@ pub async fn run_http_server(port: u16, approved: ApprovedConfig) -> anyhow::Res
     );
 
     let app = Router::new().nest_service("/mcp", service);
-    let addr = format!("0.0.0.0:{}", port);
+    let addr = format!("{}:{}", host, port);
 
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .with_context(|| format!("Failed to bind to {addr}"))?;
+
+    if host == "0.0.0.0" {
+        warn!("MCP server is listening on 0.0.0.0. This exposes the server to your local network!");
+    }
 
     tracing::info!(addr = %addr, "cast MCP server listening");
     eprintln!("cast MCP server listening on http://{addr}/mcp");
