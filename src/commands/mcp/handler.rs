@@ -297,9 +297,62 @@ mod tests {
         assert!(!errors.is_empty(), "wrong type should produce a validation error");
     }
 
-    // NOTE: Full end-to-end transport tests (list_tools / call_tool via
-    // tokio::io::duplex + serve_directly) are deferred to Slice 5, where the
-    // HTTP server layer is in place and a proper rmcp client can be wired up.
-    // The unit tests above cover all business logic that does not require the
-    // MCP JSON-RPC transport.
+    // --- execute_tool pipeline integration tests ---
+    //
+    // These tests drive the full validate → map → exec → respond path by calling
+    // execute_tool directly, avoiding the need to construct an rmcp RequestContext.
+
+    fn make_handler(tools: BTreeMap<String, McpToolConfig>) -> McpHandler {
+        let config = McpConfig {
+            port: None,
+            hostname: None,
+            tools,
+        };
+        McpHandler::new(config, HashMap::new())
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_success_returns_output() {
+        let mut tools = BTreeMap::new();
+        tools.insert("echo".to_string(), echo_tool_config());
+        let handler = make_handler(tools);
+
+        let args = json!({ "message": "hello" })
+            .as_object()
+            .unwrap()
+            .clone();
+        let request = CallToolRequestParams::new("echo").with_arguments(args);
+
+        let result = handler.execute_tool(request).await.expect("should succeed");
+        assert_ne!(result.content.len(), 0, "response should contain content");
+        assert!(
+            result.is_error.unwrap_or(false) == false,
+            "successful exec should not be flagged as error"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_unknown_tool_returns_invalid_params() {
+        let handler = make_handler(BTreeMap::new());
+
+        let request = CallToolRequestParams::new("no_such_tool");
+        let err = handler.execute_tool(request).await.expect_err("should fail");
+
+        // -32602 is the JSON-RPC code for InvalidParams
+        assert_eq!(err.code.0, -32602, "unknown tool should yield InvalidParams (-32602)");
+    }
+
+    #[tokio::test]
+    async fn test_pipeline_invalid_args_returns_invalid_request() {
+        let mut tools = BTreeMap::new();
+        tools.insert("echo".to_string(), echo_tool_config());
+        let handler = make_handler(tools);
+
+        // Omit the required `message` field to trigger schema validation failure
+        let request = CallToolRequestParams::new("echo");
+        let err = handler.execute_tool(request).await.expect_err("should fail");
+
+        // -32600 is the JSON-RPC code for InvalidRequest
+        assert_eq!(err.code.0, -32600, "schema violation should yield InvalidRequest (-32600)");
+    }
 }
