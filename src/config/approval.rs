@@ -2,8 +2,10 @@ use crate::config::Config;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use tempfile::NamedTempFile;
 
 /// Recursively sort all JSON object keys for deterministic serialization.
 fn canonicalize_value(v: serde_json::Value) -> serde_json::Value {
@@ -43,8 +45,15 @@ pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<Str
     Ok(hex::encode(hasher.finalize()))
 }
 
+pub fn approval_store_path() -> PathBuf {
+    dirs::data_dir()
+        .unwrap_or_else(|| PathBuf::from(".local").join("share"))
+        .join("cast")
+        .join("approved_configs.json")
+}
+
 pub fn load_approval_store() -> Result<ApprovalStore> {
-    todo!()
+    ApprovalStore::load_from(&approval_store_path())
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -59,6 +68,51 @@ pub struct ApprovalEntry {
 }
 
 impl ApprovalStore {
+    pub fn load_from(path: &Path) -> Result<Self> {
+        match std::fs::read_to_string(path) {
+            Ok(raw) => Ok(serde_json::from_str(&raw)
+                .context("Failed to parse approval store — file may be corrupted")?),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ApprovalStore::default()),
+            Err(e) => Err(e).context("Failed to read approval store"),
+        }
+    }
+
+    pub fn save(&self) -> Result<()> {
+        self.save_to(&approval_store_path())
+    }
+
+    pub fn save_to(&self, path: &Path) -> Result<()> {
+        let parent = path.parent().context("Invalid approval store path")?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            std::fs::DirBuilder::new()
+                .recursive(true)
+                .mode(0o700)
+                .create(parent)?;
+        }
+        #[cfg(not(unix))]
+        std::fs::create_dir_all(parent)?;
+
+        let json = serde_json::to_string(self).context("Failed to serialize approval store")?;
+
+        let mut temp = NamedTempFile::new_in(parent).context("Failed to create temporary file")?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(temp.path(), std::fs::Permissions::from_mode(0o600))?;
+        }
+
+        temp.write_all(json.as_bytes())
+            .context("Failed to write to temporary file")?;
+        temp.persist(path)
+            .context("Failed to persist approval store")?;
+
+        Ok(())
+    }
+
     pub fn is_approved(&self, hash: &str) -> bool {
         self.entries.contains_key(hash)
     }
@@ -171,5 +225,46 @@ mod tests {
 
         store.remove_entry(&hash);
         assert!(!store.is_approved(&hash));
+    }
+
+    #[test]
+    fn test_approval_store_persistence_roundtrip() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("approvals.json");
+
+        let mut store = ApprovalStore::default();
+        store.add_entry("hash1".into(), "/project1".into());
+        store.save_to(&path).unwrap();
+
+        let raw = std::fs::read_to_string(&path).unwrap();
+        let loaded: ApprovalStore = serde_json::from_str(&raw).unwrap();
+        assert!(loaded.is_approved("hash1"));
+
+        // Test restricted permissions on Unix
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let metadata = std::fs::metadata(&path).unwrap();
+            assert_eq!(metadata.permissions().mode() & 0o777, 0o600);
+        }
+    }
+
+    #[test]
+    fn test_load_approval_store_missing_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("missing.json");
+        // load_approval_store usually uses global path, so I'll test the internal loader helper if I make one,
+        // or just mock it. Let's add a `load_from` for testing.
+        let store = ApprovalStore::load_from(&path).unwrap();
+        assert!(store.entries.is_empty());
+    }
+
+    #[test]
+    fn test_load_approval_store_corrupt_file() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("corrupt.json");
+        std::fs::write(&path, "not json").unwrap();
+        let result = ApprovalStore::load_from(&path);
+        assert!(result.is_err());
     }
 }
