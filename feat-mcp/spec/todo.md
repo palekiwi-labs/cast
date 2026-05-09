@@ -1,17 +1,19 @@
 # Execution Roadmap: Built-in MCP Server
 
 ## Slice 1: Configuration Schema & Dependencies
-- [ ] Update `Cargo.toml` with `mcp` feature (default) and optional dependencies (`rmcp`, `tokio`, `axum`, `jsonschema`).
-- [ ] **RED**: Write tests for deserializing `McpConfig`, `McpToolConfig`, and the heterogeneous `ArgTemplate` array (handling both literal strings and conditional objects).
-- [ ] **GREEN**: Implement `src/config/schema.rs` additions to make tests pass.
-- [ ] **REFACTOR**: Ensure the struct layout is clean and idiomatic.
-- [ ] Commit: `feat(config): add mcp tool configuration schema`
+- [x] Update `Cargo.toml` with `mcp` feature (default) and optional dependencies (`rmcp`, `tokio`, `axum`, `jsonschema`).
+- [x] **RED**: Write tests for deserializing `McpConfig`, `McpToolConfig`, and the heterogeneous `ArgTemplate` array (handling both literal strings and conditional objects).
+- [x] **GREEN**: Implement `src/config/schema.rs` additions to make tests pass.
+- [x] **REFACTOR**: Ensure the struct layout is clean and idiomatic.
+- [x] Commit: `feat(config): add mcp tool configuration schema`
 
 ## Slice 2: Secure Execution Engine - Argument Mapper
-- [ ] **RED**: Write unit tests for mapping `Vec<ArgTemplate>` to `Vec<String>`. Test literal substitutions (`{var}`), spread operators (`{...array}`), and conditional evaluation (`if_present`, `if_true`) based on a sample JSON input.
-- [ ] **GREEN**: Implement the argument mapper logic in `src/commands/mcp/exec.rs`.
-- [ ] **REFACTOR**: Extract evaluation logic into testable helper functions if needed.
-- [ ] Commit: `feat(mcp): implement array-aware parameter mapper`
+- [x] **RED**: Write unit tests for mapping `Vec<ArgTemplate>` to `Vec<String>`. Test literal substitutions (`{var}`), spread operators (`{...array}`), and conditional evaluation (`if_present`, `if_true`) based on a sample JSON input.
+- [x] **GREEN**: Implement the argument mapper logic in `src/commands/mcp/exec.rs`.
+- [x] **REFACTOR**: Extract evaluation logic into testable helper functions if needed.
+- [x] Commit: `feat(mcp): implement array-aware parameter mapper`
+- [x] **FIX**: Apply logical AND to conditional evaluation and add `deny_unknown_fields` to schema.
+- [x] Commit: `fix(mcp): ensure conditional arguments use logical AND and deny unknown fields`
 
 ## Slice 3: Secure Execution Engine - Sandbox
 - [ ] **RED**: Write tests verifying the `Command` builder logic: ensuring `.env_clear()` is applied, `PATH` is retained, and whitelisted/static variables (`inherit`, `set`) are mapped correctly. *(Ensure tests comply with Nix sandbox constraints)*.
