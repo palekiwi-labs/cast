@@ -11,16 +11,16 @@ pub fn map_args(templates: &[ArgTemplate], args: &Value) -> Result<Vec<String>> 
                 final_args.extend(expand_placeholder(s, args)?);
             }
             ArgTemplate::Conditional(cond) => {
-                let mut should_include = false;
+                let mut should_include = true;
 
                 if let Some(key) = &cond.if_present {
-                    should_include = args.get(key).is_some() && !args[key].is_null();
+                    should_include &= args.get(key).is_some() && !args[key].is_null();
                 }
                 if let Some(key) = &cond.if_true {
-                    should_include = args.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
+                    should_include &= args.get(key).and_then(|v| v.as_bool()).unwrap_or(false);
                 }
 
-                if should_include {
+                if (cond.if_present.is_some() || cond.if_true.is_some()) && should_include {
                     for inner_arg in &cond.args {
                         final_args.extend(expand_placeholder(inner_arg, args)?);
                     }
@@ -149,6 +149,27 @@ mod tests {
         let args = json!({ "fail_fast": false });
         let result = map_args(&templates, &args).unwrap();
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_map_args_conditional_both() {
+        let templates = vec![ArgTemplate::Conditional(ConditionalBlock {
+            if_present: Some("format".to_string()),
+            if_true: Some("fail_fast".to_string()),
+            args: vec!["--flag".to_string()],
+        })];
+
+        // Both true -> include
+        let args = json!({ "format": "json", "fail_fast": true });
+        assert_eq!(map_args(&templates, &args).unwrap(), vec!["--flag"]);
+
+        // One false -> exclude
+        let args = json!({ "format": "json", "fail_fast": false });
+        assert!(map_args(&templates, &args).unwrap().is_empty());
+
+        // One missing -> exclude
+        let args = json!({ "fail_fast": true });
+        assert!(map_args(&templates, &args).unwrap().is_empty());
     }
 
     #[test]

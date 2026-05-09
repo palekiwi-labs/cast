@@ -60,6 +60,7 @@ pub struct McpConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct McpToolConfig {
     pub description: String,
     pub command: String,
@@ -85,6 +86,7 @@ pub enum ArgTemplate {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct ConditionalBlock {
     pub if_present: Option<String>,
     pub if_true: Option<String>,
