@@ -19,19 +19,41 @@ pub async fn run_command(
     mapped_args: Vec<String>,
     host_env: &HashMap<String, String>,
 ) -> Result<CallToolResult> {
-    let env_config = tool.env.as_ref().cloned().unwrap_or_default();
-    let resolved_env = resolve_env(&env_config, host_env);
+    let default_env = McpEnvConfig::default();
+    let env_config = tool.env.as_ref().unwrap_or(&default_env);
+    let resolved_env = resolve_env(env_config, host_env);
     let (exe, args) = build_exec_command(tool, mapped_args);
 
-    let mut cmd = Command::new(exe);
+    let mut cmd = Command::new(&exe);
     cmd.args(args);
     cmd.env_clear();
     cmd.envs(resolved_env);
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let child = cmd.spawn()?;
-    let output = child.wait_with_output().await?;
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(CallToolResult {
+                content: vec![McpContent {
+                    text: format!("Failed to spawn command '{}': {}", exe, e),
+                }],
+                is_error: true,
+            });
+        }
+    };
+
+    let output = match child.wait_with_output().await {
+        Ok(o) => o,
+        Err(e) => {
+            return Ok(CallToolResult {
+                content: vec![McpContent {
+                    text: format!("Failed to read command output: {}", e),
+                }],
+                is_error: true,
+            });
+        }
+    };
 
     let is_error = !output.status.success();
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -64,9 +86,11 @@ pub fn resolve_env(
 ) -> HashMap<String, String> {
     let mut final_env = HashMap::new();
 
-    // 1. Always retain PATH
-    if let Some(path) = host_env.get("PATH") {
-        final_env.insert("PATH".to_string(), path.clone());
+    // 1. Always retain critical system variables (for Nix compatibility)
+    for key in &["PATH", "TMPDIR"] {
+        if let Some(val) = host_env.get(*key) {
+            final_env.insert(key.to_string(), val.clone());
+        }
     }
 
     // 2. Map inherited variables
@@ -262,6 +286,7 @@ mod tests {
     fn test_resolve_env() {
         let mut host_env = HashMap::new();
         host_env.insert("PATH".to_string(), "/usr/bin".to_string());
+        host_env.insert("TMPDIR".to_string(), "/tmp/nix-shell.123".to_string());
         host_env.insert("USER".to_string(), "alice".to_string());
         host_env.insert("HOME".to_string(), "/home/alice".to_string());
         host_env.insert("MY_VAR".to_string(), "original".to_string());
@@ -275,8 +300,9 @@ mod tests {
 
         let resolved = resolve_env(&config, &host_env);
 
-        // PATH is always present
+        // PATH and TMPDIR are always present
         assert_eq!(resolved.get("PATH").unwrap(), "/usr/bin");
+        assert_eq!(resolved.get("TMPDIR").unwrap(), "/tmp/nix-shell.123");
         // USER is inherited
         assert_eq!(resolved.get("USER").unwrap(), "alice");
         // MY_VAR is overridden by set
