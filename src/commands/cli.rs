@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
@@ -9,7 +9,7 @@ use crate::dev::pi::Pi;
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use tracing::info_span;
 
@@ -98,6 +98,16 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let status = dev::shell(&Pi, &approved)?;
             Ok(to_exit_code(status))
         }
+        #[cfg(feature = "mcp")]
+        Some(Commands::Mcp { command }) => {
+            let approved = verify_config(cfg)?;
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .context("Failed to build Tokio runtime")?;
+            rt.block_on(crate::commands::mcp::run(command, approved))?;
+            Ok(ExitCode::SUCCESS)
+        }
         None => unreachable!("Clap should handle required subcommands"),
     }
 }
@@ -159,6 +169,17 @@ pub enum ShellAgent {
     Pi,
 }
 
+#[cfg(feature = "mcp")]
+#[derive(Subcommand)]
+pub enum McpCommands {
+    /// Start the MCP HTTP server
+    Start {
+        /// Port to listen on (overrides cast.json mcp.port)
+        #[arg(long, default_value = "8080")]
+        port: u16,
+    },
+}
+
 #[derive(Subcommand)]
 pub enum Commands {
     /// Build an agent's image
@@ -191,6 +212,12 @@ pub enum Commands {
     Shell {
         #[command(subcommand)]
         agent: ShellAgent,
+    },
+    #[cfg(feature = "mcp")]
+    /// Start the MCP server to expose tools to coding agents
+    Mcp {
+        #[command(subcommand)]
+        command: McpCommands,
     },
 }
 
