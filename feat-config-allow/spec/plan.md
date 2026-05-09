@@ -12,34 +12,9 @@ The feature is implemented across three layers:
 
 ## Layer 1: `src/config/approval.rs` (new file)
 
-### Canonical JSON Hashing
+### Deterministic JSON Hashing
 
-`Config` contains `HashMap<String, String>` and `HashMap<String, VolumeConfig>` whose
-serialization order is non-deterministic. A canonicalization step is required before hashing.
-
-**Approach**: Serialize `Config` to `serde_json::Value`, recursively sort all object
-keys alphabetically, serialize the sorted `Value` to bytes, then hash with SHA-256.
-
-```rust
-/// Recursively sort all JSON object keys for deterministic serialization.
-fn canonicalize_value(v: serde_json::Value) -> serde_json::Value {
-    match v {
-        serde_json::Value::Object(map) => {
-            let sorted: serde_json::Map<_, _> = map
-                .into_iter()
-                .map(|(k, v)| (k, canonicalize_value(v)))
-                .collect::<std::collections::BTreeMap<_, _>>()
-                .into_iter()
-                .collect();
-            serde_json::Value::Object(sorted)
-        }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.into_iter().map(canonicalize_value).collect())
-        }
-        other => other,
-    }
-}
-```
+`Config` uses `BTreeMap` for map fields (`agent_versions` and `extra_data_volumes`), which guarantees deterministic iteration order during serialization. This allows for direct hashing of the serialized JSON bytes without an intermediate canonicalization step.
 
 ### `compute_config_hash`
 
@@ -50,17 +25,16 @@ resolve to the same canonical form and produce identical hashes for the same wor
 ```rust
 pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<String> {
     use sha2::{Digest, Sha256};
-    use std::os::unix::ffi::OsStrExt; // required for .as_bytes() on OsStr
+    use std::os::unix::ffi::OsStrExt;
 
     let canonical_root = std::fs::canonicalize(workspace_root)
         .context("Failed to canonicalize workspace root path")?;
 
-    let json_value = serde_json::to_value(config)?;
-    let canonical_json = canonicalize_value(json_value);
-    let config_bytes = serde_json::to_vec(&canonical_json)?;
+    // Direct serialization is deterministic because of BTreeMap in Config.
+    let config_bytes = serde_json::to_vec(config)?;
 
     let mut hasher = Sha256::new();
-    hasher.update(canonical_root.as_os_str().as_bytes()); // OsStrExt::as_bytes
+    hasher.update(canonical_root.as_os_str().as_bytes());
     hasher.update(b"\0"); // null separator prevents path/config boundary collisions
     hasher.update(&config_bytes);
 
@@ -68,207 +42,101 @@ pub fn compute_config_hash(config: &Config, workspace_root: &Path) -> Result<Str
 }
 ```
 
-Note: `OsStr::as_encoded_bytes()` does not exist in stable Rust. The correct method
-on Unix targets is `std::os::unix::ffi::OsStrExt::as_bytes()`.
+### Typestate Pattern: `ApprovedConfig`
+
+To ensure the security gate cannot be bypassed, we use the Typestate Pattern.
+
+```rust
+/// A typestate representing a Configuration that has passed the security approval gate.
+#[derive(Debug, Clone)]
+pub struct ApprovedConfig(Config);
+
+impl ApprovedConfig {
+    pub fn into_inner(self) -> Config { self.0 }
+
+    #[cfg(test)]
+    pub fn assume_approved_for_test(config: Config) -> Self { Self(config) }
+}
+
+impl Deref for ApprovedConfig {
+    type Target = Config;
+    fn deref(&self) -> &Self::Target { &self.0 }
+}
+```
+
+The only production-ready way to obtain an `ApprovedConfig` is via `ApprovalStore::verify`:
+
+```rust
+impl ApprovalStore {
+    pub fn verify(&self, config: Config, workspace_root: &Path) -> Result<ApprovedConfig> {
+        let hash = compute_config_hash(&config, workspace_root)?;
+        if self.is_approved(&hash) {
+            Ok(ApprovedConfig(config))
+        } else {
+            anyhow::bail!("Configuration has not been approved for this project...");
+        }
+    }
+}
+```
 
 ### Approval Store
 
-`BTreeMap` is used instead of `HashMap` for the entries collection. This ensures
-the persisted JSON file always has lexicographically sorted keys, making diffs and
-debugging readable and the serialized form deterministic.
+`BTreeMap` is used for the entries collection to ensure the persisted JSON file always has lexicographically sorted keys.
 
 ```rust
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct ApprovalStore {
     pub entries: BTreeMap<String, ApprovalEntry>,
 }
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ApprovalEntry {
-    pub workspace: String,
-    pub approved_at: u64, // seconds since Unix epoch
-}
 ```
 
 **Persistence path**: `dirs::data_dir().join("cast").join("approved_configs.json")`
-
-**Atomic writes**: Use the same `NamedTempFile` + `persist()` pattern as `src/dev/version/cache.rs`.
-
-**File permissions**: The parent directory must be created with mode `0o700` and the
-file with mode `0o600` (owner-only). This prevents other users on a shared Linux
-machine from reading or modifying the approval store. Use
-`std::os::unix::fs::DirBuilderExt` and `OpenOptionsExt` when creating.
-
-**`load_approval_store` error handling**: `NotFound` must be handled explicitly and
-return `ApprovalStore::default()`. All other I/O errors must be propagated. Silently
-swallowing non-`NotFound` errors would mask a corrupted store.
-
-```rust
-pub fn load_approval_store() -> Result<ApprovalStore> {
-    let path = approval_store_path();
-    match std::fs::read_to_string(&path) {
-        Ok(raw) => Ok(serde_json::from_str(&raw)
-            .context("Failed to parse approval store — file may be corrupted")?),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ApprovalStore::default()),
-        Err(e) => Err(e).context("Failed to read approval store"),
-    }
-}
-```
-
-**Public API**:
-```rust
-pub fn approval_store_path() -> PathBuf { ... }
-pub fn load_approval_store() -> Result<ApprovalStore> { ... }
-
-impl ApprovalStore {
-    pub fn is_approved(&self, hash: &str) -> bool { ... }
-    pub fn add_entry(&mut self, hash: String, workspace: String) { ... }
-    pub fn remove_entry(&mut self, hash: &str) { ... }
-    pub fn save(&self) -> Result<()> { ... } // atomic write with 0o600 file permissions
-}
-```
+**Atomic writes**: Use `NamedTempFile` + `persist()`.
+**File permissions**: Parent directory `0o700`, file `0o600`.
 
 ---
 
 ## Layer 2: `src/commands/config.rs` (updated)
 
-### New subcommands
-
-```rust
-#[derive(clap::Subcommand)]
-pub enum ConfigCommands {
-    /// Show the current configuration
-    Show,
-    /// Approve the current configuration for this project
-    Allow,
-    /// Revoke approval for the current configuration in this project
-    Deny,
-}
-```
-
-### Handler
-
-Both `Allow` and `Deny` require resolving the current user and workspace (for the
-workspace path to include in the hash). The same pattern used in `run_agent` applies.
-
-```rust
-ConfigCommands::Allow => {
-    let user = get_user()?;
-    let workspace = get_workspace(&user.username)?;
-    let hash = compute_config_hash(config, &workspace.root)?;
-    let mut store = load_approval_store()?;
-    store.add_entry(hash.clone(), workspace.root.to_string_lossy().into_owned());
-    store.save()?;
-    println!("Configuration approved ({}).", &hash[..12]);
-    Ok(ExitCode::SUCCESS)
-}
-
-ConfigCommands::Deny => {
-    let user = get_user()?;
-    let workspace = get_workspace(&user.username)?;
-    let hash = compute_config_hash(config, &workspace.root)?;
-    let mut store = load_approval_store()?;
-    store.remove_entry(&hash);
-    store.save()?;
-    println!("Approval revoked ({}).", &hash[..12]);
-    Ok(ExitCode::SUCCESS)
-}
-```
+`cast config allow/deny/show` operate on the raw `Config`. `allow` and `deny` are silent on success. `show` only prints the configuration JSON, without computing hashes, ensuring it works outside of workspace contexts.
 
 ---
 
-## Layer 3: `src/dev/run.rs` (updated)
+## Layer 3: Enforcement & Dispatcher
 
-### Interception point
+### Interception Point (`src/commands/cli.rs`)
 
-The approval check occurs in `run_agent` after the workspace is resolved and before
-`nix_daemon::ensure_running`, which is the first side-effecting operation.
-
-The rejection message includes the short hash so the user can correlate it with what
-`cast config allow` will approve. It also mentions env-var overrides to prevent
-confusion when the hash appears to change unexpectedly.
+The approval check is lifted out of `run_agent` and into the command dispatcher.
 
 ```rust
-pub fn run_agent(agent: &dyn Agent, config: &Config, extra_args: Vec<String>) -> Result<ExitStatus> {
-    let start_time = Instant::now();
-    let docker = DockerClient;
+fn verify_config(cfg: Config) -> Result<ApprovedConfig> {
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
-
-    // Config approval gate — must precede all side effects.
-    let hash = compute_config_hash(config, &workspace.root)?;
     let store = load_approval_store()?;
-    if !store.is_approved(&hash) {
-        anyhow::bail!(
-            "Configuration has not been approved for this project (hash: {}).\n\
-             Note: env-var overrides (CAST_*) affect the hash.\n\
-             Review with `cast config show`, then run `cast config allow` to approve.",
-            &hash[..8]
-        );
-    }
+    store.verify(cfg, &workspace.root)
+}
 
-    // ... rest of run_agent unchanged ...
-    nix_daemon::ensure_running(&docker, config)?;
+// In run():
+Some(Commands::Run { agent }) => {
+    let approved_cfg = verify_config(cfg)?;
+    dev::run_agent(agent.as_agent(), &approved_cfg, ...)?;
+}
 ```
 
----
+### Enforcement Gate (`src/dev/run.rs`)
 
-## Module Wiring
-
-`src/config/mod.rs` exposes the new module:
-```rust
-mod approval;
-pub use approval::{compute_config_hash, load_approval_store, ApprovalStore, ApprovalEntry};
-```
+`run_agent` (and `shell`) change their signature to accept `&ApprovedConfig`. This makes it a compile-time error to call these functions without having passed through the verification helper.
 
 ---
 
 ## Testing Strategy
 
 ### `src/config/approval.rs` (unit tests)
-- `compute_config_hash` produces the same result for the same config + workspace (stability).
-- `compute_config_hash` produces different results for different workspace paths (use `tempfile::TempDir`).
-- `compute_config_hash` produces different results for different configs.
-- `compute_config_hash` is stable regardless of `HashMap` insertion order for `extra_data_volumes`.
-- `ApprovalStore::add_entry` → `is_approved` returns true.
-- `ApprovalStore::remove_entry` → `is_approved` returns false.
-- `load_approval_store` returns an empty store when file is absent.
-- `load_approval_store` propagates error on corrupted (non-JSON) file.
-- `save` + `load_approval_store` round-trips correctly.
+- `compute_config_hash` stability and sensitivity tests.
+- `test_config_hash_determinism`: Regression guard for insertion order.
+- `ApprovalStore::verify` success and failure cases.
+- `save` + `load` round-trips with permissions checks.
 
-### `src/commands/config.rs`
-- Existing `Show` test coverage is maintained.
+### `src/dev/run.rs` & `src/dev/shell.rs`
+- Unit tests calling these functions must use `ApprovedConfig::assume_approved_for_test`.
 
-### `src/dev/run.rs`
-- `run_agent` can be tested only at the integration level (requires Docker). No new
-  unit tests are needed here; the approval logic itself is unit-tested in `approval.rs`.
-
----
-
-## Error Messages
-
-| Situation | Message |
-|---|---|
-| Config not approved | `"Configuration has not been approved for this project (hash: abc12345).\nNote: env-var overrides (CAST_*) affect the hash.\nReview with \`cast config show\`, then run \`cast config allow\` to approve."` |
-| After `cast config allow` | `"Configuration approved (abc12345678abc)."` |
-| After `cast config deny` | `"Approval revoked (abc12345678abc)."` |
-| `cast config deny` on non-approved config | `"Approval revoked (abc12345678abc)."` (idempotent — `remove_entry` is a no-op if the key is absent) |
-
-## Enhancement: `cast config show` Displays Hash and Approval Status
-
-`cast config show` must be updated to also compute and display the current hash and
-its approval status. This gives users full visibility before deciding to approve.
-
-```
-$ cast config show
-{
-  "memory": "1024m",
-  ...
-}
-
-Hash:   abc12345678abcde...
-Status: NOT APPROVED — run `cast config allow` to approve
-```
-
-This requires `show` to also call `get_user()` + `get_workspace()` for hash
-computation. The approval status lookup is read-only and does not modify the store.

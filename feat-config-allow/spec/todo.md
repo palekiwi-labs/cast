@@ -68,6 +68,52 @@ We are using a TDD workflow with vertical slices. For each slice, we write tests
 - **Validation**: Verify `cast run` fails on unapproved config, succeeds after `allow`, and fails after `deny`.
 - **Milestone**: COMMIT
 
+## Slice 7: Minimalist UI Polish (COMPLETED)
+**Goal**: Simplify the UI and fix the `config show` regression.
+- **Implementation**:
+  - Remove hash/status display from `cast config show` (`src/commands/config.rs`).
+  - Silence success output for `allow` and `deny` (`src/commands/config.rs`).
+  - Remove unnecessary `.clone()` of hash (`src/commands/config.rs`).
+  - Remove hash display from the enforcement gate error message (`src/dev/run.rs`).
+- **Validation**:
+  - Verify `cast config show` works outside a workspace.
+  - Verify `cast config allow/deny` are silent on success.
+  - Verify `cast run` error message is clean.
+- **Milestone**: COMMIT (REFACTOR)
+
+## Slice 8: Convert Config HashMap → BTreeMap
+**Goal**: Make Config serialization natively deterministic, eliminating the canonicalization overhead.
+- **Implementation**:
+  - `src/config/schema.rs`: Change `agent_versions` and `extra_data_volumes` to `BTreeMap`. Update `Default` impl and `use` statement.
+  - `src/config/approval.rs`: Delete `canonicalize_value`. Simplify `compute_config_hash` to use `serde_json::to_vec(config)` directly. Rename `test_hash_map_ordering_invariance` to `test_config_hash_determinism`.
+  - `src/dev/volumes.rs`: Remove manual `entries.sort_by_key()` — `BTreeMap` iterates in sorted order natively.
+  - `src/dev/pi/mod.rs` and `src/dev/opencode/mod.rs`: Remove unused `use std::collections::HashMap` imports.
+  - `src/config/loader.rs`: No changes needed.
+  - `src/dev/extra_dirs.rs`: No changes needed.
+- **Note**: All existing hashes in `~/.local/share/cast/approved_configs.json` are invalidated. Accepted.
+- **Validation**: `cargo test` passes. `cargo clippy` reports no warnings.
+- **Milestone**: COMMIT (REFACTOR)
+
+## Slice 9: Typestate Pattern for ApprovedConfig
+**Goal**: Make the compiler enforce the approval gate — impossible to call `run_agent` or `shell` with an unapproved config.
+- **Implementation**:
+  - `src/config/approval.rs`:
+    - Add `ApprovedConfig(Config)` newtype with private inner field.
+    - Implement `Deref<Target = Config>` for transparent field access.
+    - Add `into_inner(self) -> Config` method.
+    - Add `#[cfg(test)] assume_approved_for_test(config: Config) -> Self`.
+    - Add `ApprovalStore::verify(config: Config, workspace_root: &Path) -> Result<ApprovedConfig>`.
+    - Add tests: `verify` succeeds for approved hash, fails for unapproved hash.
+  - `src/config/mod.rs`: Export `ApprovedConfig`.
+  - `src/commands/cli.rs`:
+    - Add `verify_config(cfg: Config) -> Result<ApprovedConfig>` helper (calls `get_user`, `get_workspace`, `load_approval_store`, `store.verify`).
+    - `Commands::Run`: call `verify_config(cfg)?` before `dev::run_agent`.
+    - `Commands::Shell`: call `verify_config(cfg)?` before `dev::shell`.
+  - `src/dev/run.rs`: Change signature to `config: &ApprovedConfig`. Remove the manual approval gate block entirely.
+  - Any unit tests calling `run_agent`/`shell` directly: wrap raw `Config` with `assume_approved_for_test`.
+- **Validation**: `cargo test` passes. `cargo clippy` reports no warnings. Verify `cast run` still fails on unapproved config and succeeds after `cast config allow`.
+- **Milestone**: COMMIT (REFACTOR)
+
 ## Final Verification
 - Run `cargo clippy` and `cargo fmt`.
 - Fix any warnings or styling issues.
