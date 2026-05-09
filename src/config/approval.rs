@@ -78,8 +78,10 @@ pub struct ApprovalEntry {
 impl ApprovalStore {
     pub fn load_from(path: &Path) -> Result<Self> {
         match std::fs::read_to_string(path) {
-            Ok(raw) => Ok(serde_json::from_str(&raw)
-                .context("Failed to parse approval store — file may be corrupted")?),
+            Ok(raw) => Ok(serde_json::from_str(&raw).context(
+                "Failed to parse approval store. The file may be corrupted. \
+                 Try manually fixing or deleting ~/.local/share/cast/approved_configs.json",
+            )?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(ApprovalStore::default()),
             Err(e) => Err(e).context("Failed to read approval store"),
         }
@@ -103,7 +105,8 @@ impl ApprovalStore {
         #[cfg(not(unix))]
         std::fs::create_dir_all(parent)?;
 
-        let json = serde_json::to_string(self).context("Failed to serialize approval store")?;
+        let json =
+            serde_json::to_string_pretty(self).context("Failed to serialize approval store")?;
 
         let mut temp = NamedTempFile::new_in(parent).context("Failed to create temporary file")?;
 
@@ -157,6 +160,12 @@ impl ApprovalStore {
 
     pub fn remove_entry(&mut self, hash: &str) {
         self.entries.remove(hash);
+    }
+
+    /// Remove all approval entries associated with a specific workspace path.
+    pub fn remove_workspace_entries(&mut self, workspace_path: &str) {
+        self.entries
+            .retain(|_, entry| entry.workspace != workspace_path);
     }
 }
 
@@ -318,11 +327,9 @@ mod tests {
         let store = ApprovalStore::default();
         let result = store.verify(config, path);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Configuration has not been approved")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Configuration has not been approved"));
     }
 }

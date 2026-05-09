@@ -3,9 +3,9 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::Subcommand;
 
-use crate::config::Config;
-use crate::docker::BuildOptions;
+use crate::config::ApprovedConfig;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
 
 #[derive(Subcommand)]
@@ -29,7 +29,7 @@ pub enum NixDaemonCommands {
     Stop,
 }
 
-pub fn handle_nix_daemon(cfg: &Config, command: NixDaemonCommands) -> Result<ExitCode> {
+pub fn handle_nix_daemon(cfg: &ApprovedConfig, command: NixDaemonCommands) -> Result<ExitCode> {
     match command {
         NixDaemonCommands::Build { force, no_cache } => {
             let docker = DockerClient;

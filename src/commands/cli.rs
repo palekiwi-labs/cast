@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
@@ -51,7 +51,8 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                     no_cache,
                 },
         }) => {
-            dev::build_agent(&OpenCode, &cfg, base, force, no_cache)?;
+            let approved = verify_config(cfg)?;
+            dev::build_agent(&OpenCode, &approved, base, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Build {
@@ -62,11 +63,15 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                     no_cache,
                 },
         }) => {
-            dev::build_agent(&Pi, &cfg, base, force, no_cache)?;
+            let approved = verify_config(cfg)?;
+            dev::build_agent(&Pi, &approved, base, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
-        Some(Commands::NixDaemon { command }) => nix_daemon::handle_nix_daemon(&cfg, command),
+        Some(Commands::NixDaemon { command }) => {
+            let approved = verify_config(cfg)?;
+            nix_daemon::handle_nix_daemon(&approved, command)
+        }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
         Some(Commands::Run { agent }) => {
             let approved = verify_config(cfg)?;
