@@ -15,9 +15,3 @@
 ## Config
 
 - [ ] `nix_warn_dirty` default: false
-
-## Extra features
-
-- [in_progress] logging
-- [ ] history tracking
-- [ ] TUI interface for orchestration

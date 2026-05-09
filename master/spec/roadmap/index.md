@@ -8,11 +8,10 @@ This document tracks potential enhancements and features that could be added to 
 
 see: `.mem/master/spec/roadmap/cast-config-allow-deny.md`
 
-### Considerations:
+## Extra features
 
-Should the absolute project path on the host be included in the hash? That would prevent situations
-where a user has changed a setting for one project, i.e. increased memory limits and this setting
-configuration would now become approved for all other projects.
+- history tracking: log information about all projects `cast` was executed for
+- TUI interface for orchestration
 
 ## Configuration
 
