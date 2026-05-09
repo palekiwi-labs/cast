@@ -2,8 +2,8 @@ use crate::commands::mcp::exec;
 use crate::config::{McpConfig, McpToolConfig};
 use rmcp::{
     model::{
-        CallToolRequestMethod, CallToolRequestParams, CallToolResult, Content, Implementation,
-        ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
+        CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
+        PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
     },
     service::RequestContext,
     ErrorData as McpError, RoleServer, ServerHandler,
@@ -77,7 +77,7 @@ impl ServerHandler for McpHandler {
             .config
             .tools
             .get(&*request.name)
-            .ok_or_else(McpError::method_not_found::<CallToolRequestMethod>)?;
+            .ok_or_else(|| McpError::invalid_params(format!("Unknown tool: '{}'", request.name), None))?;
 
         // 2. Extract arguments as a JSON Value
         let args_map = request.arguments.unwrap_or_default();
