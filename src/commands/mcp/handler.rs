@@ -67,6 +67,7 @@ impl McpHandler {
         request: CallToolRequestParams,
     ) -> Result<CallToolResult, McpError> {
         info!(tool = %request.name, "call_tool requested");
+        eprintln!("MCP: tool called: {}", request.name);
 
         // 1. Look up the tool in config
         let tool_config = self.inner.config.tools.get(&*request.name).ok_or_else(|| {
@@ -102,6 +103,12 @@ impl McpHandler {
             McpError::internal_error(format!("Argument mapping error: {}", e), None)
         })?;
 
+        eprintln!(
+            "MCP: executing: {} {}",
+            tool_config.command,
+            mapped_args.join(" ")
+        );
+
         // 5. Execute the command via the secure execution engine
         let exec_result = exec::run_command(tool_config, mapped_args, &self.inner.host_env)
             .await
@@ -118,11 +125,13 @@ impl McpHandler {
             .collect();
 
         if exec_result.is_error {
+            eprintln!("MCP: tool {} finished (error)", request.name);
             // CallToolResult is #[non_exhaustive]; build via success() then override is_error
             let mut result = CallToolResult::success(content);
             result.is_error = Some(true);
             Ok(result)
         } else {
+            eprintln!("MCP: tool {} finished (success)", request.name);
             Ok(CallToolResult::success(content))
         }
     }
@@ -154,6 +163,7 @@ impl ServerHandler for McpHandler {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
+        eprintln!("MCP: client connected (discovery)");
         Ok(ListToolsResult {
             tools: self.inner.cached_tools.clone(),
             next_cursor: None,
