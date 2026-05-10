@@ -136,6 +136,9 @@ impl ApprovalStore {
     }
 
     pub fn add_entry(&mut self, hash: String, workspace: String) {
+        // Ensure exactly 1 approved version per workspace by removing any existing entries
+        self.remove_workspace_entries(&workspace);
+
         let approved_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -343,5 +346,38 @@ mod tests {
                 .to_string()
                 .contains("Configuration has not been approved")
         );
+    }
+
+    #[test]
+    fn test_approval_overwrite() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let workspace = path.display().to_string();
+
+        let mut store = ApprovalStore::default();
+
+        // First approval
+        let c1 = Config::default();
+        let h1 = compute_config_hash(&c1, path).unwrap();
+        store.add_entry(h1.clone(), workspace.clone());
+        assert_eq!(store.entries.len(), 1);
+
+        // Second approval for same workspace with different config
+        let c2 = Config {
+            memory: "2048m".to_string(),
+            ..Config::default()
+        };
+        let h2 = compute_config_hash(&c2, path).unwrap();
+        store.add_entry(h2.clone(), workspace.clone());
+
+        // This is what we want to fail currently and pass after fix
+        // Currently it will be 2
+        assert_eq!(
+            store.entries.len(),
+            1,
+            "Should have exactly 1 entry per workspace"
+        );
+        assert!(store.is_approved(&h2));
+        assert!(!store.is_approved(&h1), "Old hash should have been removed");
     }
 }
