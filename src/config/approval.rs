@@ -340,12 +340,10 @@ mod tests {
         let store = ApprovalStore::default();
         let result = store.verify(config, path);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Configuration has not been approved")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Configuration has not been approved"));
     }
 
     #[test]
@@ -379,5 +377,24 @@ mod tests {
         );
         assert!(store.is_approved(&h2));
         assert!(!store.is_approved(&h1), "Old hash should have been removed");
+    }
+
+    #[test]
+    fn test_deny_removes_all_entries() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let workspace = path.display().to_string();
+
+        let mut store = ApprovalStore::default();
+
+        let config = Config::default();
+        let hash = compute_config_hash(&config, path).unwrap();
+        store.add_entry(hash.clone(), workspace.clone());
+
+        assert!(store.is_approved(&hash));
+
+        store.remove_workspace_entries(&workspace);
+        assert!(!store.is_approved(&hash));
+        assert_eq!(store.entries.len(), 0);
     }
 }
