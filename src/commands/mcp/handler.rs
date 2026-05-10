@@ -75,8 +75,8 @@ impl McpHandler {
         // --- Built-in Documentation Routing ---
         if request.name == "list_cast_documentation" {
             let mut list = String::from("Available cast documentation:\n\n");
-            for entry in crate::commands::mcp::docs::DOC_ENTRIES {
-                list.push_str(&format!("- `{}`: {}\n", entry.id, entry.description));
+            for id in crate::commands::mcp::docs::list_docs() {
+                list.push_str(&format!("- `{}`\n", id));
             }
             list.push_str("\nUse `fetch_cast_documentation(id=\"...\")` to read an entry.");
             return Ok(CallToolResult::success(vec![Content::text(list)]));
@@ -89,17 +89,14 @@ impl McpHandler {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| McpError::invalid_params("Missing required argument 'id'", None))?;
 
-            let entry = crate::commands::mcp::docs::DOC_ENTRIES
-                .iter()
-                .find(|e| e.id == id)
-                .ok_or_else(|| {
-                    McpError::invalid_params(
-                        format!("Documentation entry '{}' not found. Use `list_cast_documentation` to see available docs.", id),
-                        None
-                    )
-                })?;
+            let content = crate::commands::mcp::docs::fetch_doc(id).ok_or_else(|| {
+                McpError::invalid_params(
+                    format!("Documentation entry '{}' not found. Use `list_cast_documentation` to see available docs.", id),
+                    None
+                )
+            })?;
 
-            return Ok(CallToolResult::success(vec![Content::text(entry.content)]));
+            return Ok(CallToolResult::success(vec![Content::text(content)]));
         }
         // --- End Built-ins ---
 
@@ -444,13 +441,13 @@ mod tests {
         let result = handler.execute_tool(request).await.expect("should succeed");
         let content = result.content[0].as_text().expect("should be text");
         assert!(content.text.contains("Available cast documentation"));
-        assert!(content.text.contains("mcp-config"));
+        assert!(content.text.contains("mcp/configuration"), "Content was: {}", content.text);
     }
 
     #[tokio::test]
     async fn test_fetch_cast_documentation_success() {
         let handler = make_handler(BTreeMap::new());
-        let args = json!({ "id": "mcp-config" }).as_object().unwrap().clone();
+        let args = json!({ "id": "mcp/configuration" }).as_object().unwrap().clone();
         let request = CallToolRequestParams::new("fetch_cast_documentation").with_arguments(args);
 
         let result = handler.execute_tool(request).await.expect("should succeed");

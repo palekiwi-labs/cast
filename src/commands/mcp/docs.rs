@@ -1,19 +1,34 @@
+use include_dir::{include_dir, Dir};
 use rmcp::model::Tool;
 use serde_json::json;
 
-pub struct DocEntry {
-    pub id: &'static str,
-    pub title: &'static str,
-    pub description: &'static str,
-    pub content: &'static str,
+static DOCS_DIR: Dir = include_dir!("$CARGO_MANIFEST_DIR/docs");
+
+pub fn list_docs() -> Vec<String> {
+    fn collect_files(dir: &Dir, paths: &mut Vec<String>) {
+        for entry in dir.entries() {
+            match entry {
+                include_dir::DirEntry::Dir(d) => collect_files(d, paths),
+                include_dir::DirEntry::File(f) => {
+                    let path = f.path().to_string_lossy();
+                    if path.ends_with(".md") {
+                        paths.push(path.strip_suffix(".md").unwrap_or(&path).to_string());
+                    }
+                }
+            }
+        }
+    }
+    let mut paths = Vec::new();
+    collect_files(&DOCS_DIR, &mut paths);
+    paths
 }
 
-pub const DOC_ENTRIES: &[DocEntry] = &[DocEntry {
-    id: "mcp-config",
-    title: "MCP Configuration",
-    description: "Guide for configuring dynamic MCP tools in cast",
-    content: include_str!("../../../docs/mcp/configuration.md"),
-}];
+pub fn fetch_doc(id: &str) -> Option<&'static str> {
+    let path = format!("{}.md", id);
+    DOCS_DIR
+        .get_file(path)
+        .and_then(|file| file.contents_utf8())
+}
 
 pub fn builtin_tools() -> Vec<Tool> {
     vec![
