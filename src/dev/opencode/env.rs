@@ -33,6 +33,7 @@ pub const PASSTHROUGH_VARS: &[&str] = &[
     "OPENCODE_SERVER_PASSWORD",
     // Configuration with Paths (users must provide container paths)
     "OPENCODE_CONFIG",
+    "OPENCODE_CONFIG_DIR",
     "OPENCODE_CONFIG_CONTENT",
     "OPENCODE_MODELS_PATH",
 ];
