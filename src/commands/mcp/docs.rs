@@ -1,4 +1,4 @@
-use include_dir::{Dir, include_dir};
+use include_dir::{include_dir, Dir};
 use rmcp::model::Tool;
 use serde_json::json;
 
@@ -11,8 +11,8 @@ pub fn list_docs() -> Vec<String> {
                 include_dir::DirEntry::Dir(d) => collect_files(d, paths),
                 include_dir::DirEntry::File(f) => {
                     let path = f.path().to_string_lossy();
-                    if path.ends_with(".md") {
-                        paths.push(path.strip_suffix(".md").unwrap_or(&path).to_string());
+                    if let Some(stripped) = path.strip_suffix(".md") {
+                        paths.push(stripped.to_string());
                     }
                 }
             }
