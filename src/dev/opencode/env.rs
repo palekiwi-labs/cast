@@ -3,8 +3,6 @@ use std::collections::HashMap;
 /// Environment variables that should be passed through from the host to the container.
 ///
 /// This includes LLM provider API keys, core OpenCode configuration flags, and path settings.
-/// Note that `OPENCODE_CONFIG_DIR` is intentionally excluded here as it receives special
-/// mount handling in the main `docker run` builder.
 pub const PASSTHROUGH_VARS: &[&str] = &[
     // LLM Provider API Keys & Credentials
     "ANTHROPIC_API_KEY",
