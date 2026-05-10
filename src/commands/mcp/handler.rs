@@ -336,7 +336,7 @@ mod tests {
         let result = handler.execute_tool(request).await.expect("should succeed");
         assert_ne!(result.content.len(), 0, "response should contain content");
         assert!(
-            result.is_error.unwrap_or(false) == false,
+            !result.is_error.unwrap_or(false),
             "successful exec should not be flagged as error"
         );
     }
