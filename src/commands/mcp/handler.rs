@@ -40,6 +40,9 @@ impl McpHandler {
         let mut validators = HashMap::new();
         let mut cached_tools = Vec::new();
 
+        // Register built-in tools (e.g. documentation)
+        cached_tools.extend(crate::commands::mcp::docs::builtin_tools());
+
         for (name, tool) in &config.tools {
             let validator = jsonschema::validator_for(&tool.parameters)
                 .map_err(|e| anyhow::anyhow!("Invalid JSON schema for tool '{}': {}", name, e))?;
@@ -68,6 +71,37 @@ impl McpHandler {
     ) -> Result<CallToolResult, McpError> {
         info!(tool = %request.name, "call_tool requested");
         eprintln!("MCP: tool called: {}", request.name);
+
+        // --- Built-in Documentation Routing ---
+        if request.name == "list_cast_documentation" {
+            let mut list = String::from("Available cast documentation:\n\n");
+            for entry in crate::commands::mcp::docs::DOC_ENTRIES {
+                list.push_str(&format!("- `{}`: {}\n", entry.id, entry.description));
+            }
+            list.push_str("\nUse `fetch_cast_documentation(id=\"...\")` to read an entry.");
+            return Ok(CallToolResult::success(vec![Content::text(list)]));
+        }
+
+        if request.name == "fetch_cast_documentation" {
+            let args_map = request.arguments.unwrap_or_default();
+            let id = args_map
+                .get("id")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| McpError::invalid_params("Missing required argument 'id'", None))?;
+
+            let entry = crate::commands::mcp::docs::DOC_ENTRIES
+                .iter()
+                .find(|e| e.id == id)
+                .ok_or_else(|| {
+                    McpError::invalid_params(
+                        format!("Documentation entry '{}' not found. Use `list_cast_documentation` to see available docs.", id),
+                        None
+                    )
+                })?;
+
+            return Ok(CallToolResult::success(vec![Content::text(entry.content)]));
+        }
+        // --- End Built-ins ---
 
         // 1. Look up the tool in config
         let tool_config = self.inner.config.tools.get(&*request.name).ok_or_else(|| {
@@ -400,5 +434,41 @@ mod tests {
             err.code.0, -32602,
             "schema violation should yield InvalidParams (-32602)"
         );
+    }
+
+    #[tokio::test]
+    async fn test_list_cast_documentation_returns_list() {
+        let handler = make_handler(BTreeMap::new());
+        let request = CallToolRequestParams::new("list_cast_documentation");
+
+        let result = handler.execute_tool(request).await.expect("should succeed");
+        let content = result.content[0].as_text().expect("should be text");
+        assert!(content.text.contains("Available cast documentation"));
+        assert!(content.text.contains("mcp-config"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_cast_documentation_success() {
+        let handler = make_handler(BTreeMap::new());
+        let args = json!({ "id": "mcp-config" }).as_object().unwrap().clone();
+        let request = CallToolRequestParams::new("fetch_cast_documentation").with_arguments(args);
+
+        let result = handler.execute_tool(request).await.expect("should succeed");
+        let content = result.content[0].as_text().expect("should be text");
+        assert!(content.text.contains("# MCP Configuration in `cast`"));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_cast_documentation_not_found() {
+        let handler = make_handler(BTreeMap::new());
+        let args = json!({ "id": "non-existent" }).as_object().unwrap().clone();
+        let request = CallToolRequestParams::new("fetch_cast_documentation").with_arguments(args);
+
+        let err = handler
+            .execute_tool(request)
+            .await
+            .expect_err("should fail");
+        assert_eq!(err.code.0, -32602);
+        assert!(err.message.contains("not found"));
     }
 }

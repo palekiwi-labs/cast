@@ -1,4 +1,7 @@
 #[cfg(feature = "mcp")]
+pub mod docs;
+
+#[cfg(feature = "mcp")]
 pub mod exec;
 
 #[cfg(feature = "mcp")]
