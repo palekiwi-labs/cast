@@ -441,13 +441,20 @@ mod tests {
         let result = handler.execute_tool(request).await.expect("should succeed");
         let content = result.content[0].as_text().expect("should be text");
         assert!(content.text.contains("Available cast documentation"));
-        assert!(content.text.contains("mcp/configuration"), "Content was: {}", content.text);
+        assert!(
+            content.text.contains("mcp/configuration"),
+            "Content was: {}",
+            content.text
+        );
     }
 
     #[tokio::test]
     async fn test_fetch_cast_documentation_success() {
         let handler = make_handler(BTreeMap::new());
-        let args = json!({ "id": "mcp/configuration" }).as_object().unwrap().clone();
+        let args = json!({ "id": "mcp/configuration" })
+            .as_object()
+            .unwrap()
+            .clone();
         let request = CallToolRequestParams::new("fetch_cast_documentation").with_arguments(args);
 
         let result = handler.execute_tool(request).await.expect("should succeed");
