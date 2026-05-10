@@ -26,10 +26,16 @@
 - [x] Commit: `feat(mcp): add working_dir support for tool isolation`
 
 ## Slice 4: Dynamic MCP Handler
-- [ ] **RED**: Write tests for converting `McpToolConfig` into `rmcp::Tool` definitions and testing `jsonschema` validation of mock `request.arguments`.
-- [ ] **GREEN**: Implement manual `ServerHandler` (`list_tools` and `call_tool`) in `src/commands/mcp/handler.rs`.
-- [ ] **REFACTOR**: Clean up json parsing and error mapping to MCP standard errors.
-- [ ] Commit: `feat(mcp): implement dynamic tool router and schema validation`
+- [x] **RED**: Write tests for converting `McpToolConfig` into `rmcp::Tool` definitions and testing `jsonschema` validation of mock `request.arguments`.
+- [x] **GREEN**: Implement manual `ServerHandler` (`list_tools` and `call_tool`) in `src/commands/mcp/handler.rs`.
+- [x] **REFACTOR**: Clean up json parsing and error mapping to MCP standard errors.
+- [x] Commit: `feat: implement dynamic MCP handler (Slice 4)`
+
+## Slice 4.5: Refinements & Fixes
+- [x] Pre-compile `jsonschema` validators in `McpHandler` to avoid re-compilation on every request.
+- [x] Correct "Tool Not Found" error code from `MethodNotFound` to `InvalidParams`.
+- [x] Add direct unit tests for `handler.call_tool` exercising the full validation-to-execution pipeline.
+- [x] Improve observability with `tracing::error!` logging for internal execution failures.
 
 ## Slice 5: Server Infrastructure & CLI Wire-up
 - [ ] Implement `tokio` runtime and `axum` server setup configuring `host.docker.internal` in `src/commands/mcp/server.rs`.
