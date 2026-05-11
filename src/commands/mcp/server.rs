@@ -2,7 +2,7 @@ use crate::config::ApprovedConfig;
 use anyhow::Context as _;
 use axum::Router;
 use rmcp::transport::streamable_http_server::{
-    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
+    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
@@ -34,9 +34,14 @@ pub async fn run_http_server(
             "host.docker.internal",
         ]);
 
+    // Disable inactivity timeouts (keep_alive) for local MCP sessions.
+    // This prevents "Session not found" errors when an agent idles for more than 5 minutes.
+    let mut session_manager = LocalSessionManager::default();
+    session_manager.session_config.keep_alive = None;
+
     let service = StreamableHttpService::new(
         move || Ok(handler.clone()),
-        LocalSessionManager::default().into(),
+        session_manager.into(),
         config,
     );
 
