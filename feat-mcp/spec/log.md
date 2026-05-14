@@ -119,3 +119,16 @@
 - **Found:** Verified rmcp support for Resources, though Tools remain the preferred interface for now.
 - **Found:** Proposed a registry-based approach for serving documentation files from the repository.
 
+## [b7c9b94] Research complete: MCP Session not found
+
+- **Found:** The error is a 404 from rmcp when a session ID is unknown.
+- **Found:** Sessions are in-memory and subject to a 5-minute inactivity timeout.
+- **Found:** The server lack persistence, so restarts wipe all sessions.
+
+## [6060736] Research complete: MCP Tool Call Timeouts
+
+- **Found:** Subprocesses in exec.rs lack timeouts and kill_on_drop(true), leading to ghost processes
+- **Found:** rmcp enforces a 5-minute timeout on the Tasks feature but not on standard tool calls
+- **Decided:** Implement tool-level timeout configuration in cast.json
+- **Decided:** Enable kill_on_drop(true) for all MCP tool subprocesses
+

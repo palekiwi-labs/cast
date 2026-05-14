@@ -1,0 +1,449 @@
+2026-05-13T02:10:39.014422Z  INFO cast{id=290b774c pid=3120047}: cast::commands::cli: enter
+2026-05-13T02:10:39.014459Z  INFO cast{id=290b774c pid=3120047}: cast::commands::cli: close time.busy=41.4µs time.idle=3.50µs
+2026-05-13T02:19:25.158286Z  INFO cast{id=bb85cb13 pid=3172340}: cast::commands::cli: enter
+2026-05-13T02:19:25.158323Z  INFO cast{id=bb85cb13 pid=3172340}: cast::commands::cli: close time.busy=41.9µs time.idle=3.02µs
+2026-05-13T02:35:08.886129Z  INFO cast{id=38e52c8f pid=3262935}: cast::commands::cli: enter
+2026-05-13T02:35:08.886173Z  INFO cast{id=38e52c8f pid=3262935}: cast::commands::cli: close time.busy=49.1µs time.idle=3.87µs
+2026-05-13T02:35:40.763241Z  INFO cast{id=efb16948 pid=3266470}: cast::commands::cli: enter
+2026-05-13T02:35:40.763278Z  INFO cast{id=efb16948 pid=3266470}: cast::commands::cli: close time.busy=38.4µs time.idle=3.99µs
+2026-05-13T02:37:28.521605Z  INFO cast{id=26c4ee77 pid=3277868}: cast::commands::cli: enter
+2026-05-13T02:37:28.521663Z  INFO cast{id=26c4ee77 pid=3277868}: cast::commands::cli: close time.busy=64.8µs time.idle=5.25µs
+2026-05-13T02:49:18.874816Z  INFO cast{id=d29b6675 pid=3350248}: cast::commands::cli: enter
+2026-05-13T02:49:18.880445Z  INFO cast{id=d29b6675 pid=3350248}: cast::commands::cli: close time.busy=5.63ms time.idle=4.21µs
+2026-05-13T02:49:21.439898Z  INFO cast{id=a926f741 pid=3350477}: cast::commands::cli: enter
+2026-05-13T02:49:21.445635Z  INFO cast{id=a926f741 pid=3350477}: cast::commands::cli: close time.busy=5.74ms time.idle=6.35µs
+2026-05-13T02:49:22.295440Z  INFO cast{id=e9ecdace pid=3350608}: cast::commands::cli: enter
+2026-05-13T02:49:22.302782Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: enter
+2026-05-13T02:49:22.329960Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::nix_daemon::daemon: nix daemon already running container_name=cast-nix-daemon
+2026-05-13T02:49:22.330011Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: starting agent session image_tag=localhost/cast:0.1.0-opencode-1.4.6 container_name=cast-opencode-devise-64374 port=64374
+2026-05-13T02:49:22.366226Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::image: image exists, skipping build image_tag=localhost/cast:0.1.0-opencode-1.4.6
+2026-05-13T02:55:11.251800Z  INFO cast{id=b1702464 pid=3388344}: cast::commands::cli: enter
+2026-05-13T02:55:11.251855Z  INFO cast{id=b1702464 pid=3388344}: cast::commands::cli: close time.busy=62.4µs time.idle=5.08µs
+2026-05-13T02:55:23.853739Z  INFO cast{id=7f5905ac pid=3389946}: cast::commands::cli: enter
+2026-05-13T02:55:23.853775Z  INFO cast{id=7f5905ac pid=3389946}: cast::commands::cli: close time.busy=37.9µs time.idle=3.52µs
+2026-05-13T02:57:08.564963Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: agent session ended exit_code=0 duration_secs=466
+2026-05-13T02:57:08.565013Z  INFO cast{id=e9ecdace pid=3350608}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: close time.busy=466s time.idle=3.31µs
+2026-05-13T02:57:08.565023Z  INFO cast{id=e9ecdace pid=3350608}: cast::commands::cli: close time.busy=466s time.idle=2.94µs
+2026-05-13T02:58:03.982130Z  INFO cast{id=9e5dfe22 pid=3406410}: cast::commands::cli: enter
+2026-05-13T02:58:03.982177Z  INFO cast{id=9e5dfe22 pid=3406410}: cast::commands::cli: close time.busy=52.1µs time.idle=4.34µs
+2026-05-13T03:10:00.934794Z  INFO cast{id=182a81ab pid=3478196}: cast::commands::cli: enter
+2026-05-13T03:10:00.934839Z  INFO cast{id=182a81ab pid=3478196}: cast::commands::cli: close time.busy=50.2µs time.idle=3.74µs
+2026-05-13T03:10:10.238327Z  INFO cast{id=bfd7a180 pid=3479514}: cast::commands::cli: enter
+2026-05-13T03:10:10.247458Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: enter
+2026-05-13T03:10:10.265775Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::nix_daemon::daemon: nix daemon already running container_name=cast-nix-daemon
+2026-05-13T03:10:10.265825Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: starting agent session image_tag=localhost/cast:0.1.0-opencode-1.4.6 container_name=cast-opencode-devise-64374 port=64374
+2026-05-13T03:10:10.297776Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::image: image exists, skipping build image_tag=localhost/cast:0.1.0-opencode-1.4.6
+2026-05-13T03:18:33.348954Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: agent session ended exit_code=0 duration_secs=503
+2026-05-13T03:18:33.349021Z  INFO cast{id=bfd7a180 pid=3479514}:agent_session{agent="opencode" container=cast-opencode-devise-64374 port=64374}: cast::dev::run: close time.busy=503s time.idle=4.14µs
+2026-05-13T03:18:33.349042Z  INFO cast{id=bfd7a180 pid=3479514}: cast::commands::cli: close time.busy=503s time.idle=3.60µs
+2026-05-13T03:23:39.450720Z  INFO cast{id=702b62c7 pid=3566380}: cast::commands::cli: enter
+2026-05-13T03:23:39.450760Z  INFO cast{id=702b62c7 pid=3566380}: cast::commands::cli: close time.busy=43.5µs time.idle=3.24µs
+2026-05-13T03:25:39.983297Z  INFO cast{id=1d455ead pid=3578697}: cast::commands::cli: enter
+2026-05-13T03:25:39.983348Z  INFO cast{id=1d455ead pid=3578697}: cast::commands::cli: close time.busy=52.6µs time.idle=4.38µs
+2026-05-13T03:42:14.620299Z  INFO cast{id=e1d4a391 pid=3689081}: cast::commands::cli: enter
+2026-05-13T03:42:14.620487Z  INFO cast{id=e1d4a391 pid=3689081}: cast::commands::cli: close time.busy=190µs time.idle=3.84µs
+2026-05-13T04:11:00.778055Z  INFO cast{id=8c3999cf pid=3871714}: cast::commands::cli: enter
+2026-05-13T04:11:00.778089Z  INFO cast{id=8c3999cf pid=3871714}: cast::commands::cli: close time.busy=43.7µs time.idle=2.67µs
+2026-05-13T04:20:30.239833Z  INFO cast{id=5f6f933c pid=3939354}: cast::commands::cli: enter
+2026-05-13T04:20:30.239881Z  INFO cast{id=5f6f933c pid=3939354}: cast::commands::cli: close time.busy=53.2µs time.idle=3.53µs
+2026-05-13T04:24:08.660498Z  INFO cast{id=26380373 pid=3964033}: cast::commands::cli: enter
+2026-05-13T04:24:08.660549Z  INFO cast{id=26380373 pid=3964033}: cast::commands::cli: close time.busy=56.4µs time.idle=4.32µs
+2026-05-13T04:26:29.244427Z  INFO streamable_http_session{id="c5a0b074-8144-4af0-820b-305f347a5b6f"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:26:29.244687Z  INFO streamable_http_session{id="c5a0b074-8144-4af0-820b-305f347a5b6f"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:26:29.244733Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:29.244776Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:29.244789Z  INFO serve_inner: cast::commands::mcp::handler: call_tool requested tool=run_rspec
+2026-05-13T04:26:31.441816Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:31.443638Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:32.674763Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:32.876256Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:32.894192Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.022547Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.283491Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.283707Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.465819Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.636082Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:33.780781Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.108890Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.249888Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.251457Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.251579Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411317Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411362Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411466Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411479Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411519Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411532Z  INFO streamable_http_session{id="c5a0b074-8144-4af0-820b-305f347a5b6f"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:26:34.411589Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:26:34.411615Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:27:03.677003Z  INFO cast{id=fd5b22d6 pid=3984060}: cast::commands::cli: enter
+2026-05-13T04:27:03.677052Z  INFO cast{id=fd5b22d6 pid=3984060}: cast::commands::cli: close time.busy=44.0µs time.idle=9.02µs
+2026-05-13T04:55:24.137581Z  INFO cast{id=aa3d411d pid=4165727}: cast::commands::cli: enter
+2026-05-13T04:55:24.137614Z  INFO cast{id=aa3d411d pid=4165727}: cast::commands::cli: close time.busy=36.2µs time.idle=2.62µs
+2026-05-13T04:58:49.941194Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:58:49.941927Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:58:49.942064Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:49.942202Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:49.942211Z  INFO serve_inner: cast::commands::mcp::handler: call_tool requested tool=run_rspec
+2026-05-13T04:58:50.056061Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:50.058018Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:50.564541Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.356205Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.364732Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.375424Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.384713Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.395995Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.402645Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.408601Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.413949Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.416645Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.464381Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.465618Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.490341Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.503682Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.512928Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.556802Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.561069Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.693543Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.703490Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.717881Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.734237Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.749052Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.753088Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.766748Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.773819Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.787925Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.856153Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.872757Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.876974Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.890734Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.899808Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.913720Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.920872Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.925874Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.939305Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:55.948944Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.012192Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.022255Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.027691Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.042431Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.052193Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.063266Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.070588Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.079322Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.093198Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.159411Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.173205Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.182964Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.190880Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.199582Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.210492Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.220468Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.230353Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.295420Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.357352Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.368170Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.383984Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.627200Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.662102Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.825630Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:56.862220Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:58.304166Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:58:59.455425Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:00.098623Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:00.589460Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:01.097200Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:01.401679Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:01.976980Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:02.391241Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:02.705391Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:02.961389Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:02.991927Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.015150Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.093067Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.114766Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.199923Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.394903Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.492973Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:03.637418Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:04.006239Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:04.362775Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:04.721529Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.130114Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.136920Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.353760Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.508599Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.716539Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:05.923656Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:06.153438Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:06.354014Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:06.574226Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:06.882462Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.090777Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.316155Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.504987Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.710055Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.931668Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.975505Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:07.988935Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.001683Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.014585Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.029871Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.044722Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.119646Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.133438Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.145042Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.158286Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.172033Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.184666Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.187071Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.194524Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.201867Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.208054Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.210717Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.219975Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.275386Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.611175Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.620325Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.621417Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:08.901236Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:09.227990Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:09.230462Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:09.983498Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:09.991105Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.007205Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.008143Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.130377Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.148920Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.220204Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.237443Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.255836Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.275213Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.289921Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.358205Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.377549Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.394766Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.408398Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.424956Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.492787Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.522844Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.615253Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.642465Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.714302Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.740810Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.765617Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.790585Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.870336Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.899923Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:10.929733Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.009679Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.036251Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.062406Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.136664Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.165742Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.191964Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.211911Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.268828Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.431419Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.433444Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.509885Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:11.683419Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.028642Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.030545Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.051652Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.051704Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.174656Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631307Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631359Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631687Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631701Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631742Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631892Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:59:12.631938Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:12.631963Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:36.116378Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:59:36.116585Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:59:36.116610Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:36.116637Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:36.116650Z  INFO serve_inner: cast::commands::mcp::handler: call_tool requested tool=run_rspec
+2026-05-13T04:59:36.159941Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:36.161913Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:36.639625Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.146891Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.152992Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.162565Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.169644Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.178174Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.184295Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.190610Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.195871Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.198115Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.246602Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.247922Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.269797Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.283005Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.293105Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.331531Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.335968Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.423777Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.433199Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.446635Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.460695Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.473828Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.478068Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.490170Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.500653Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.512426Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.573084Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.587021Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.591118Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.605326Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.613257Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.625669Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.635239Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.639148Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.652485Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.660627Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.721010Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.729862Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.733708Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.746488Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.754602Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.769771Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.778610Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.786880Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.798761Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.811851Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.871341Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.882025Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.890595Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.899636Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.908866Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.917716Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.927036Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:41.995573Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.061912Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.072978Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.085121Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.307408Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.395212Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.574222Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:42.604827Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:44.101789Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:45.240921Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:45.972078Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:46.503758Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:46.952208Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:47.235586Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:47.787661Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.174174Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.462611Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.690942Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.718302Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.745805Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.825066Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.846231Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:48.939865Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:49.133727Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:49.235811Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:49.385157Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:49.737496Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:50.080625Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:50.431087Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:50.862039Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:50.869068Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:51.080213Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:51.287463Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:51.434364Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:51.636368Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:51.848715Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:52.055896Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:52.268135Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:52.636137Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:52.826338Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:52.983994Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.185916Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.395022Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.609490Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.647845Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.658480Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.667141Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.728413Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.744924Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.757899Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.771193Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.784006Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.796002Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.810274Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.821139Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.880666Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.884266Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.894648Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.903152Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.912123Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.914367Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.921286Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:53.927185Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.249707Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.310391Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.311838Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.602928Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.930019Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:54.932885Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.655939Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.717788Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.743038Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.744131Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.860272Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.875284Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.890853Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.958072Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.979316Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:55.997888Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.013863Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.031190Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.044862Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.112077Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.126286Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.141098Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.155239Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.189321Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.333737Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.362996Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.388462Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.468244Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.494793Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.527879Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.609522Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.641378Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.671513Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.748132Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.777131Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.799641Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.832099Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.912830Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.944532Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.970398Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:56.980421Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.215825Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.218390Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.233708Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.445652Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.780938Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.782630Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.809620Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.809672Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:57.952097Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427603Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427654Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427733Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427744Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427775Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427785Z  INFO streamable_http_session{id="11175301-754c-491c-b3de-219f841efb98"}: rmcp::transport::streamable_http_server::session::local: enter
+2026-05-13T04:59:58.427819Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T04:59:58.427846Z  INFO serve_inner: rmcp::service: enter
+2026-05-13T05:03:05.906220Z  INFO cast{id=abe5f2f9 pid=1961732}:agent_session{agent="opencode" container=cast-opencode-spabreaks-58266 port=58266}: cast::dev::run: agent session ended exit_code=137 duration_secs=21182
+2026-05-13T05:03:05.909217Z  INFO cast{id=abe5f2f9 pid=1961732}:agent_session{agent="opencode" container=cast-opencode-spabreaks-58266 port=58266}: cast::dev::run: close time.busy=21182s time.idle=7.07µs
+2026-05-13T05:03:05.909256Z  INFO cast{id=abe5f2f9 pid=1961732}: cast::commands::cli: close time.busy=21182s time.idle=3.00µs
+2026-05-13T05:04:15.201342Z  INFO cast{id=47845a9c pid=30517}: cast::commands::cli: enter
+2026-05-13T05:04:15.201384Z  INFO cast{id=47845a9c pid=30517}: cast::commands::cli: close time.busy=46.8µs time.idle=3.55µs
