@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
@@ -109,6 +109,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                 McpCommands::List { url } => {
                     rt.block_on(crate::commands::mcp::list_tools(url))?;
                 }
+                McpCommands::Describe { tool_name, url } => {
+                    rt.block_on(crate::commands::mcp::describe_tool(tool_name, url))?;
+                }
                 other => {
                     let approved = verify_config(cfg)?;
                     rt.block_on(crate::commands::mcp::run(other, approved))?;
@@ -192,6 +195,15 @@ pub enum McpCommands {
     },
     /// List tools exposed by the MCP server
     List {
+        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// Show the input schema for a specific MCP tool
+    Describe {
+        /// Name of the tool to inspect
+        tool_name: String,
+
         /// MCP server URL (overrides CAST_MCP_URL env and default)
         #[arg(long)]
         url: Option<String>,

@@ -19,6 +19,30 @@ use tokio_util::sync::CancellationToken;
 // Import our client from the cast crate
 use cast::commands::mcp::client::McpClient;
 
+/// Build a mock tool with a fully populated input schema for testing.
+fn make_mock_tool() -> Tool {
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "message": {
+                "type": "string",
+                "description": "The message to send"
+            },
+            "count": {
+                "type": "integer",
+                "description": "Number of times to repeat"
+            }
+        },
+        "required": ["message"]
+    });
+
+    Tool::new_with_raw(
+        "dummy_tool".to_string(),
+        Some("A mock tool for integration testing".into()),
+        schema.as_object().cloned().unwrap_or_default(),
+    )
+}
+
 /// A minimal dummy server handler to mock responses for our client.
 struct MockServerHandler;
 
@@ -33,13 +57,8 @@ impl ServerHandler for MockServerHandler {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, McpError> {
-        let test_tool = Tool::new_with_raw(
-            "dummy_tool".to_string(),
-            Some("A mock tool for integration testing".into()),
-            serde_json::Map::new(),
-        );
         Ok(ListToolsResult {
-            tools: vec![test_tool],
+            tools: vec![make_mock_tool()],
             next_cursor: None,
             meta: Default::default(),
         })
@@ -130,6 +149,95 @@ async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
             .stdout(predicate::str::contains(
                 "A mock tool for integration testing",
             ));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
+    // 1. Spawn a mock MCP server
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+    let router = axum::Router::new().nest_service("/mcp", service);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+                .await;
+        }
+    });
+
+    // 2. Invoke `cast mcp describe dummy_tool --url <mock_url>` as a subprocess.
+    // spawn_blocking prevents executor starvation (same pattern as list test).
+    let url = format!("http://{addr}/mcp");
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args(["mcp", "describe", "dummy_tool", "--url", &url])
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert()
+            .success()
+            // Tool name and description
+            .stdout(predicate::str::contains("dummy_tool"))
+            .stdout(predicate::str::contains("A mock tool for integration testing"))
+            // Properties from schema
+            .stdout(predicate::str::contains("message"))
+            .stdout(predicate::str::contains("string"))
+            .stdout(predicate::str::contains("required"))
+            .stdout(predicate::str::contains("count"))
+            .stdout(predicate::str::contains("integer"))
+            .stdout(predicate::str::contains("optional"))
+            // Example invocation hint
+            .stdout(predicate::str::contains("cast mcp call dummy_tool"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
+    // 1. Spawn a mock MCP server
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+    let router = axum::Router::new().nest_service("/mcp", service);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+                .await;
+        }
+    });
+
+    // 2. Ask for a tool that does not exist — expect a non-zero exit with a helpful message.
+    let url = format!("http://{addr}/mcp");
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args(["mcp", "describe", "nonexistent_tool", "--url", &url])
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert()
+            .failure()
+            .stderr(predicate::str::contains("Unknown tool"))
+            .stderr(predicate::str::contains("cast mcp list"));
     })
     .await?;
 
