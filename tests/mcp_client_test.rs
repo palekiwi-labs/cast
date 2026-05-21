@@ -1,5 +1,7 @@
 #![cfg(feature = "mcp")]
 
+use assert_cmd::Command;
+use predicates::prelude::*;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
     model::{
@@ -88,5 +90,49 @@ async fn test_mcp_client_handshake_and_discovery() -> anyhow::Result<()> {
     ct.cancel();
     let _ = server_handle.await;
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
+    // 1. Spawn a mock MCP server
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+    let router = axum::Router::new().nest_service("/mcp", service);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+                .await;
+        }
+    });
+
+    // 2. Invoke `cast mcp list --url <mock_url>` as a subprocess.
+    // spawn_blocking prevents executor starvation: without it, the blocking
+    // assert() would starve the Tokio reactor, preventing the mock server from
+    // processing the client's delete_session cleanup request, causing a deadlock.
+    let url = format!("http://{addr}/mcp");
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args(["mcp", "list", "--url", &url])
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("dummy_tool"))
+            .stdout(predicate::str::contains(
+                "A mock tool for integration testing",
+            ));
+    })
+    .await?;
+
+    ct.cancel();
     Ok(())
 }

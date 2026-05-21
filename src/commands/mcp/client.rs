@@ -40,8 +40,7 @@ impl ClientHandler for McpClientHandler {
 /// A clean, stateless wrapper around an rmcp client.
 pub struct McpClient {
     peer: Peer<RoleClient>,
-    // Keeps the running service and background tasks alive
-    _service: RunningService<RoleClient, McpClientHandler>,
+    service: RunningService<RoleClient, McpClientHandler>,
 }
 
 impl McpClient {
@@ -60,10 +59,7 @@ impl McpClient {
         let service = handler.serve(transport).await?;
         let peer = service.peer().clone();
 
-        Ok(Self {
-            peer,
-            _service: service,
-        })
+        Ok(Self { peer, service })
     }
 
     /// Retrieve all tools from the connected MCP server (discovery).
@@ -71,6 +67,18 @@ impl McpClient {
         // `list_all_tools` automatically manages cursors and paginated results under the hood
         let tools = self.peer.list_all_tools().await?;
         Ok(tools)
+    }
+
+    /// Gracefully shut down the client, awaiting the background service task.
+    ///
+    /// Must be called explicitly to avoid leaving the Tokio runtime blocked on
+    /// the rmcp session-deletion cleanup (which has a 5-second internal timeout).
+    pub async fn shutdown(self) -> anyhow::Result<()> {
+        self.service
+            .cancel()
+            .await
+            .map_err(|e| anyhow::anyhow!("MCP client shutdown join error: {e}"))?;
+        Ok(())
     }
 }
 
