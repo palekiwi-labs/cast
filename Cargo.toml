@@ -20,7 +20,7 @@ tempfile = "3.10.0"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-ureq = { version = "3", features = ["json"] }
+reqwest = { version = "0.13.3", features = ["json", "blocking"] }
 rmcp = { version = "1.6.0", features = ["server", "transport-streamable-http-server"], optional = true }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "process", "signal", "net"], optional = true }
 axum = { version = "0.8.9", optional = true }
