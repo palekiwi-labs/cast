@@ -12,12 +12,12 @@ use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent resolves its own
@@ -165,6 +165,10 @@ pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
         "FORCE_COLOR=1".to_string(),
     ]);
 
+    // MCP server URL injection.
+    let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
+    run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+
     // Nix store.
     run_args.extend([
         "-v".to_string(),
@@ -260,6 +264,36 @@ mod tests {
         // OpenCode-specific args must NOT be present
         assert!(!run_args.iter().any(|a| a.contains("opencode")));
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
+
+        // MCP URL injection
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_build_run_opts_mcp_custom_port() {
+        let mut config = Config::default();
+        config.mcp.port = 9000;
+
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let workspace = ResolvedWorkspace {
+            root: PathBuf::from("/home/alice/project"),
+            container_path: PathBuf::from("/home/alice/project"),
+        };
+        let opts = RunOpts {
+            workspace,
+            user,
+            port: 32768,
+            host_home_dir: Some(PathBuf::from("/home/alice")),
+            user_flake_present: false,
+            project_flake_present: false,
+        };
+
+        let run_args = build_run_opts(&config, &opts);
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]
