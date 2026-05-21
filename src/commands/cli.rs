@@ -100,12 +100,20 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         #[cfg(feature = "mcp")]
         Some(Commands::Mcp { command }) => {
-            let approved = verify_config(cfg)?;
+            use crate::commands::cli::McpCommands;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .context("Failed to build Tokio runtime")?;
-            rt.block_on(crate::commands::mcp::run(command, approved))?;
+            match command {
+                McpCommands::List { url } => {
+                    rt.block_on(crate::commands::mcp::list_tools(url))?;
+                }
+                other => {
+                    let approved = verify_config(cfg)?;
+                    rt.block_on(crate::commands::mcp::run(other, approved))?;
+                }
+            }
             Ok(ExitCode::SUCCESS)
         }
         None => unreachable!("Clap should handle required subcommands"),
@@ -181,6 +189,12 @@ pub enum McpCommands {
         /// Host to bind to (overrides cast.json mcp.hostname)
         #[arg(long)]
         host: Option<String>,
+    },
+    /// List tools exposed by the MCP server
+    List {
+        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        #[arg(long)]
+        url: Option<String>,
     },
 }
 

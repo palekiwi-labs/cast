@@ -2,7 +2,7 @@ use crate::config::ApprovedConfig;
 use anyhow::Context as _;
 use axum::Router;
 use rmcp::transport::streamable_http_server::{
-    session::local::LocalSessionManager, StreamableHttpServerConfig, StreamableHttpService,
+    StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
@@ -39,11 +39,8 @@ pub async fn run_http_server(
     let mut session_manager = LocalSessionManager::default();
     session_manager.session_config.keep_alive = None;
 
-    let service = StreamableHttpService::new(
-        move || Ok(handler.clone()),
-        session_manager.into(),
-        config,
-    );
+    let service =
+        StreamableHttpService::new(move || Ok(handler.clone()), session_manager.into(), config);
 
     let app = Router::new().nest_service("/mcp", service);
     let addr = format!("{}:{}", host, port);
