@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::opencode::OpenCode;
@@ -100,11 +100,11 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         #[cfg(feature = "mcp")]
         Some(Commands::Mcp { command }) => {
-            let approved = verify_config(cfg)?;
             let rt = tokio::runtime::Builder::new_multi_thread()
                 .enable_all()
                 .build()
                 .context("Failed to build Tokio runtime")?;
+            let approved = verify_config(cfg)?;
             rt.block_on(crate::commands::mcp::run(command, approved))?;
             Ok(ExitCode::SUCCESS)
         }

@@ -10,15 +10,12 @@
     };
   };
 
-  outputs = { nixpkgs, fenix, flake-utils, ... }:
+  outputs = { self, nixpkgs, fenix, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         rustToolchain = fenix.packages.${system}.stable.toolchain;
-      in
-      {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "cast";
+        common = {
           version = "0.1.0";
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
@@ -26,24 +23,39 @@
               let
                 relPath = pkgs.lib.removePrefix (toString ./.) (toString path);
               in
-              (pkgs.lib.hasPrefix "/docs" relPath) ||
+              (pkgs.lib.hasPrefix "/crates/cast/docs" relPath) ||
               (pkgs.lib.cleanSourceFilter path type);
           };
-
           cargoLock = {
             lockFile = ./Cargo.lock;
           };
+          nativeBuildInputs = [ rustToolchain pkgs.cacert ];
+          SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+        };
+      in
+      {
+        packages = {
+          cast = pkgs.rustPlatform.buildRustPackage (common // {
+            pname = "cast";
+            cargoBuildFlags = [ "-p" "cast" ];
+            meta = with pkgs.lib; {
+              description = "cast - coding agent sandbox tool";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+            };
+          });
 
-          nativeBuildInputs = [ rustToolchain ];
+          cast-mcp-client = pkgs.rustPlatform.buildRustPackage (common // {
+            pname = "cast-mcp-client";
+            cargoBuildFlags = [ "-p" "cast-mcp-client" ];
+            meta = with pkgs.lib; {
+              description = "Lightweight MCP client for cast";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+            };
+          });
 
-          buildInputs = [];
-
-          meta = with pkgs.lib; {
-            description = "cast - coding agent sandbox tool";
-            homepage = "https://github.com/palekiwi-labs/cast";
-            license = licenses.mit;
-            maintainers = [ ];
-          };
+          default = self.packages.${system}.cast;
         };
 
         devShells.default = pkgs.mkShell
