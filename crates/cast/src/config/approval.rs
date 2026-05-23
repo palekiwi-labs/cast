@@ -54,6 +54,9 @@ impl ApprovedConfig {
 }
 
 pub fn approval_store_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("CAST_DATA_DIR") {
+        return PathBuf::from(dir).join("approved_configs.json");
+    }
     dirs::data_dir()
         .unwrap_or_else(|| PathBuf::from(".local").join("share"))
         .join("cast")
@@ -73,6 +76,8 @@ pub struct ApprovalStore {
 pub struct ApprovalEntry {
     pub workspace: String,
     pub approved_at: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approved_config: Option<serde_json::Value>,
 }
 
 impl ApprovalStore {
@@ -120,6 +125,13 @@ impl ApprovalStore {
         self.entries.contains_key(hash)
     }
 
+    /// Find the approval entry for a given canonical workspace path.
+    pub fn find_by_workspace(&self, canonical_path: &str) -> Option<&ApprovalEntry> {
+        self.entries
+            .values()
+            .find(|entry| entry.workspace == canonical_path)
+    }
+
     /// Verify that the given configuration and workspace are approved.
     /// Returns an `ApprovedConfig` on success, or an error if not approved.
     pub fn verify(&self, config: Config, workspace_root: &Path) -> Result<ApprovedConfig> {
@@ -130,12 +142,12 @@ impl ApprovalStore {
             anyhow::bail!(
                 "Configuration has not been approved for this project.\n\
                  Note: env-var overrides (CAST_*) affect the hash.\n\
-                 Review with `cast config show`, then run `cast config allow` to approve."
+                 Run `cast config diff` to see what changed, then `cast config allow` to approve."
             );
         }
     }
 
-    pub fn add_entry(&mut self, hash: String, workspace: String) {
+    pub fn add_entry(&mut self, hash: String, workspace: String, config: serde_json::Value) {
         // Ensure exactly 1 approved version per workspace by removing any existing entries
         self.remove_workspace_entries(&workspace);
 
@@ -149,6 +161,7 @@ impl ApprovalStore {
             ApprovalEntry {
                 workspace,
                 approved_at,
+                approved_config: Some(config),
             },
         );
     }
@@ -169,8 +182,13 @@ pub fn approve_workspace_config(config: &Config, workspace_root: &Path) -> Resul
     let canonical_root =
         std::fs::canonicalize(workspace_root).context("Failed to canonicalize workspace root")?;
     let hash = compute_config_hash(config, &canonical_root)?;
+    let snapshot = serde_json::to_value(config).context("Failed to serialize config snapshot")?;
     let mut store = load_approval_store()?;
-    store.add_entry(hash, canonical_root.to_string_lossy().into_owned());
+    store.add_entry(
+        hash,
+        canonical_root.to_string_lossy().into_owned(),
+        snapshot,
+    );
     store.save()
 }
 
@@ -274,7 +292,7 @@ mod tests {
 
         assert!(!store.is_approved(&hash));
 
-        store.add_entry(hash.clone(), workspace);
+        store.add_entry(hash.clone(), workspace, serde_json::Value::Null);
         assert!(store.is_approved(&hash));
 
         store.remove_entry(&hash);
@@ -287,7 +305,7 @@ mod tests {
         let path = tmp.path().join("approvals.json");
 
         let mut store = ApprovalStore::default();
-        store.add_entry("hash1".into(), "/project1".into());
+        store.add_entry("hash1".into(), "/project1".into(), serde_json::Value::Null);
         store.save_to(&path).unwrap();
 
         let raw = std::fs::read_to_string(&path).unwrap();
@@ -327,7 +345,7 @@ mod tests {
         let hash = compute_config_hash(&config, path).unwrap();
 
         let mut store = ApprovalStore::default();
-        store.add_entry(hash, path.display().to_string());
+        store.add_entry(hash, path.display().to_string(), serde_json::Value::Null);
 
         let result = store.verify(config, path);
         assert!(result.is_ok());
@@ -363,7 +381,7 @@ mod tests {
         // First approval
         let c1 = Config::default();
         let h1 = compute_config_hash(&c1, path).unwrap();
-        store.add_entry(h1.clone(), workspace.clone());
+        store.add_entry(h1.clone(), workspace.clone(), serde_json::Value::Null);
         assert_eq!(store.entries.len(), 1);
 
         // Second approval for same workspace with different config
@@ -372,7 +390,7 @@ mod tests {
             ..Config::default()
         };
         let h2 = compute_config_hash(&c2, path).unwrap();
-        store.add_entry(h2.clone(), workspace.clone());
+        store.add_entry(h2.clone(), workspace.clone(), serde_json::Value::Null);
 
         assert_eq!(
             store.entries.len(),
@@ -393,7 +411,7 @@ mod tests {
 
         let config = Config::default();
         let hash = compute_config_hash(&config, path).unwrap();
-        store.add_entry(hash.clone(), workspace.clone());
+        store.add_entry(hash.clone(), workspace.clone(), serde_json::Value::Null);
 
         assert!(store.is_approved(&hash));
 
@@ -423,7 +441,11 @@ mod tests {
             let canonical_root = std::fs::canonicalize(p)?;
             let hash = compute_config_hash(cfg, &canonical_root)?;
             let mut store = ApprovalStore::load_from(&store_path)?;
-            store.add_entry(hash, canonical_root.to_string_lossy().into_owned());
+            store.add_entry(
+                hash,
+                canonical_root.to_string_lossy().into_owned(),
+                serde_json::Value::Null,
+            );
             store.save_to(&store_path)
         };
 
@@ -445,5 +467,47 @@ mod tests {
             1,
             "Should have exactly 1 entry even when accessed via symlinks"
         );
+    }
+
+    #[test]
+    fn test_legacy_entry_deserializes_without_approved_config() {
+        let raw = r#"{
+        "workspace": "/home/user/project",
+        "approved_at": 1715234400
+    }"#;
+        let entry: ApprovalEntry = serde_json::from_str(raw).unwrap();
+        assert!(entry.approved_config.is_none());
+    }
+
+    #[test]
+    fn test_add_entry_stores_config_snapshot() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("approvals.json");
+
+        let config = Config::default();
+        let snapshot = serde_json::to_value(&config).unwrap();
+        let workspace = "/home/user/project".to_string();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry("hash1".into(), workspace.clone(), snapshot.clone());
+        store.save_to(&path).unwrap();
+
+        let loaded = ApprovalStore::load_from(&path).unwrap();
+        let entry = loaded.entries.get("hash1").unwrap();
+        assert_eq!(entry.approved_config.as_ref().unwrap(), &snapshot);
+    }
+
+    #[test]
+    fn test_find_by_workspace_returns_entry() {
+        let config = Config::default();
+        let snapshot = serde_json::to_value(&config).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry("hash1".into(), "/workspace/a".into(), snapshot.clone());
+        store.add_entry("hash2".into(), "/workspace/b".into(), snapshot);
+
+        assert!(store.find_by_workspace("/workspace/a").is_some());
+        assert!(store.find_by_workspace("/workspace/b").is_some());
+        assert!(store.find_by_workspace("/workspace/c").is_none());
     }
 }
