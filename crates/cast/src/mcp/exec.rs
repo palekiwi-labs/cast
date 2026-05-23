@@ -5,19 +5,55 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::process::Command;
 
+#[cfg(unix)]
+use libc;
+
+#[derive(Debug)]
 pub struct CallToolResult {
     pub content: Vec<McpContent>,
     pub is_error: bool,
 }
 
+#[derive(Debug)]
 pub struct McpContent {
     pub text: String,
+}
+
+/// RAII guard that kills the entire process group when dropped.
+/// Covers every exit path: normal return, timeout, I/O error, and future-drop.
+#[cfg(unix)]
+struct ProcessGroupGuard(u32);
+
+#[cfg(unix)]
+impl Drop for ProcessGroupGuard {
+    fn drop(&mut self) {
+        kill_process_group(self.0);
+    }
+}
+
+/// Sends SIGKILL to every process in the given process group.
+/// `kill(-pgid, SIGKILL)` is the POSIX equivalent of `killpg(pgid, SIGKILL)`.
+/// ESRCH (no such process group) is silently ignored — means processes already exited.
+#[cfg(unix)]
+fn kill_process_group(pgid: u32) {
+    if pgid == 0 {
+        return; // never kill PGID 0 (would target our own group)
+    }
+    // SAFETY: kill() is always safe to call. Negative first arg = "send to process group".
+    let ret = unsafe { libc::kill(-(pgid as libc::pid_t), libc::SIGKILL) };
+    if ret != 0 {
+        let e = std::io::Error::last_os_error();
+        if e.raw_os_error() != Some(libc::ESRCH) {
+            eprintln!("cast: kill_process_group({}): {}", pgid, e);
+        }
+    }
 }
 
 pub async fn run_command(
     tool: &McpToolConfig,
     mapped_args: Vec<String>,
     host_env: &HashMap<String, String>,
+    timeout: std::time::Duration,
 ) -> Result<CallToolResult> {
     let default_env = McpEnvConfig::default();
     let env_config = tool.env.as_ref().unwrap_or(&default_env);
@@ -27,6 +63,12 @@ pub async fn run_command(
     let mut cmd = Command::new(&exe);
     cmd.args(args);
     cmd.env_clear();
+
+    // Put the child in its own process group so we can kill the entire tree.
+    #[cfg(unix)]
+    cmd.process_group(0);
+
+    // kill_on_drop is kept as a zombie-reaper fallback via Tokio's background waiter.
     cmd.kill_on_drop(true);
     cmd.envs(resolved_env);
 
@@ -50,17 +92,46 @@ pub async fn run_command(
         }
     };
 
-    let output = match child.wait_with_output().await {
-        Ok(o) => o,
-        Err(e) => {
-            return Ok(CallToolResult {
-                content: vec![McpContent {
-                    text: format!("Failed to read command output: {}", e),
-                }],
-                is_error: true,
-            });
+    // Capture PGID immediately after spawn (== child PID after process_group(0)).
+    #[cfg(unix)]
+    let pgid = child.id();
+
+    // Install the RAII guard. Fires killpg on ANY exit path including future-drop.
+    #[cfg(unix)]
+    let _guard = pgid.map(ProcessGroupGuard);
+
+    let output = tokio::select! {
+        res = child.wait_with_output() => {
+            match res {
+                Ok(o) => o,
+                Err(e) => {
+                    return Ok(CallToolResult {
+                        content: vec![McpContent {
+                            text: format!("Failed to read command output: {}", e),
+                        }],
+                        is_error: true,
+                    });
+                }
+            }
+        }
+        _ = tokio::time::sleep(timeout) => {
+            // Explicitly kill the group before the guard fires to be deterministic.
+            #[cfg(unix)]
+            if let Some(id) = pgid {
+                kill_process_group(id);
+            }
+            // _guard will also fire on drop of this arm — idempotent, ESRCH ignored.
+            return Err(anyhow::anyhow!(
+                "tool execution timed out after {}s",
+                timeout.as_secs()
+            ));
         }
     };
+
+    // Process exited normally — disarm guard by letting it drop harmlessly.
+    // The ESRCH from killpg on an already-exited group is silently ignored.
+    #[cfg(unix)]
+    drop(_guard); // explicit drop to document intent; guard fires, ESRCH ignored
 
     let is_error = !output.status.success();
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -333,5 +404,74 @@ mod tests {
         let (exe, args) = build_exec_command(&tool, mapped_args);
         assert_eq!(exe, "ls");
         assert_eq!(args, vec!["-la"]);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_timeout_kills_entire_process_tree() {
+        use libc;
+        use std::time::Duration;
+
+        // sh writes its own PID (== its PGID after process_group(0)) to a temp file
+        // then immediately sleeps for 100s. The sleep is the grandchild we want killed.
+        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let pid_path = tmp.path().to_str().unwrap().to_string();
+
+        let tool = McpToolConfig {
+            description: "test".to_string(),
+            command: "sh".to_string(),
+            args: vec![
+                ArgTemplate::Literal("-c".to_string()),
+                ArgTemplate::Literal(format!("printf '%d' $$ > {pid}; sleep 100", pid = pid_path)),
+            ],
+            env: None,
+            working_dir: None,
+            parameters: serde_json::json!({}),
+            timeout_secs: None,
+        };
+
+        let mut host_env = HashMap::new();
+        if let Ok(path) = std::env::var("PATH") {
+            host_env.insert("PATH".to_string(), path);
+        }
+
+        // 400ms is long enough for sh to write its PID and start sleep,
+        // short enough for the test suite to be fast.
+        let mapped_args = vec![
+            "-c".to_string(),
+            format!("printf '%d' $$ > {pid}; sleep 100", pid = pid_path),
+        ];
+        let result = run_command(&tool, mapped_args, &host_env, Duration::from_millis(400)).await;
+
+        assert!(
+            result.is_err(),
+            "should have returned a timeout error, got: {:?}",
+            result
+        );
+        assert!(
+            result.unwrap_err().to_string().contains("timed out"),
+            "error should mention timeout"
+        );
+
+        // Allow the kernel a brief moment to process the signal.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // The shell wrote its PID before sleeping.
+        // After process_group(0), that PID is also the PGID.
+        let pgid_str = std::fs::read_to_string(tmp.path())
+            .expect("sh should have written its PID before sleeping");
+        let pgid: libc::pid_t = pgid_str
+            .trim()
+            .parse()
+            .expect("PID file should contain a valid integer");
+
+        // kill -0 (signal 0) returns 0 if the process group exists, ESRCH if not.
+        // SAFETY: signal 0 only checks for existence; it never delivers a signal.
+        let group_exists = unsafe { libc::killpg(pgid, 0) == 0 };
+        assert!(
+            !group_exists,
+            "process group {} (sh + sleep 100) should be dead after timeout, but it is still alive",
+            pgid
+        );
     }
 }

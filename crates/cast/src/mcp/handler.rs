@@ -145,24 +145,24 @@ impl McpHandler {
             .timeout_secs
             .unwrap_or(self.inner.config.global_timeout_secs);
 
-        let exec_result = match tokio::time::timeout(
+        let exec_result = exec::run_command(
+            tool_config,
+            mapped_args,
+            &self.inner.host_env,
             std::time::Duration::from_secs(timeout_secs),
-            exec::run_command(tool_config, mapped_args, &self.inner.host_env),
         )
         .await
-        {
-            Ok(res) => res,
-            Err(_) => {
-                eprintln!("MCP: tool {} timed out after {}s", request.name, timeout_secs);
-                return Err(McpError::internal_error(
-                    format!("tool execution timed out after {}s", timeout_secs),
-                    None,
-                ));
-            }
-        }
         .map_err(|e| {
-            error!(tool = %request.name, err = %e, "command execution failed");
-            McpError::internal_error(format!("Command execution error: {}", e), None)
+            let msg = e.to_string();
+            if msg.contains("timed out") {
+                eprintln!(
+                    "MCP: tool {} timed out after {}s",
+                    request.name, timeout_secs
+                );
+            } else {
+                error!(tool = %request.name, err = %e, "command execution failed");
+            }
+            McpError::internal_error(msg, None)
         })?;
 
         // 6. Convert to MCP response, preserving the subprocess error flag
