@@ -10,34 +10,44 @@
     };
   };
 
-  outputs = { nixpkgs, fenix, flake-utils, ... }:
+  outputs = { self, nixpkgs, fenix, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         rustToolchain = fenix.packages.${system}.stable.toolchain;
-      in
-      {
-        packages.default = pkgs.rustPlatform.buildRustPackage {
-          pname = "cast";
+        common = {
           version = "0.1.0";
           src = pkgs.lib.cleanSource ./.;
-
           cargoLock = {
             lockFile = ./Cargo.lock;
           };
-
           nativeBuildInputs = [ rustToolchain pkgs.cacert ];
-
-          buildInputs = [];
-
           SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+        };
+      in
+      {
+        packages = {
+          cast = pkgs.rustPlatform.buildRustPackage (common // {
+            pname = "cast";
+            cargoBuildFlags = [ "-p" "cast" ];
+            meta = with pkgs.lib; {
+              description = "cast - coding agent sandbox tool";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+            };
+          });
 
-          meta = with pkgs.lib; {
-            description = "cast - coding agent sandbox tool";
-            homepage = "https://github.com/palekiwi-labs/cast";
-            license = licenses.mit;
-            maintainers = [ ];
-          };
+          cast-mcp-client = pkgs.rustPlatform.buildRustPackage (common // {
+            pname = "cast-mcp-client";
+            cargoBuildFlags = [ "-p" "cast-mcp-client" ];
+            meta = with pkgs.lib; {
+              description = "Lightweight MCP client for cast";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+            };
+          });
+
+          default = self.packages.${system}.cast;
         };
 
         devShells.default = pkgs.mkShell
