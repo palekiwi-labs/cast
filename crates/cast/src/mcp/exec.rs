@@ -27,6 +27,7 @@ pub async fn run_command(
     let mut cmd = Command::new(&exe);
     cmd.args(args);
     cmd.env_clear();
+    cmd.kill_on_drop(true);
     cmd.envs(resolved_env);
 
     if let Some(dir) = &tool.working_dir {
@@ -326,6 +327,7 @@ mod tests {
             env: Some(McpEnvConfig::default()),
             working_dir: Some("/tmp".to_string()),
             parameters: json!({}),
+            timeout_secs: None,
         };
         let mapped_args = vec!["-la".to_string()];
         let (exe, args) = build_exec_command(&tool, mapped_args);
