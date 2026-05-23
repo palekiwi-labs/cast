@@ -136,6 +136,9 @@ impl ApprovalStore {
     }
 
     pub fn add_entry(&mut self, hash: String, workspace: String) {
+        // Ensure exactly 1 approved version per workspace by removing any existing entries
+        self.remove_workspace_entries(&workspace);
+
         let approved_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -163,16 +166,20 @@ impl ApprovalStore {
 
 /// Loads the store, approves the config for the given workspace, and saves it.
 pub fn approve_workspace_config(config: &Config, workspace_root: &Path) -> Result<()> {
-    let hash = compute_config_hash(config, workspace_root)?;
+    let canonical_root =
+        std::fs::canonicalize(workspace_root).context("Failed to canonicalize workspace root")?;
+    let hash = compute_config_hash(config, &canonical_root)?;
     let mut store = load_approval_store()?;
-    store.add_entry(hash, workspace_root.to_string_lossy().into_owned());
+    store.add_entry(hash, canonical_root.to_string_lossy().into_owned());
     store.save()
 }
 
 /// Loads the store, revokes all approvals for the given workspace, and saves it.
 pub fn deny_workspace_config(workspace_root: &Path) -> Result<()> {
+    let canonical_root =
+        std::fs::canonicalize(workspace_root).context("Failed to canonicalize workspace root")?;
     let mut store = load_approval_store()?;
-    store.remove_workspace_entries(&workspace_root.to_string_lossy());
+    store.remove_workspace_entries(&canonical_root.to_string_lossy());
     store.save()
 }
 
@@ -342,6 +349,103 @@ mod tests {
                 .unwrap_err()
                 .to_string()
                 .contains("Configuration has not been approved")
+        );
+    }
+
+    #[test]
+    fn test_approval_overwrite() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let workspace = path.display().to_string();
+
+        let mut store = ApprovalStore::default();
+
+        // First approval
+        let c1 = Config::default();
+        let h1 = compute_config_hash(&c1, path).unwrap();
+        store.add_entry(h1.clone(), workspace.clone());
+        assert_eq!(store.entries.len(), 1);
+
+        // Second approval for same workspace with different config
+        let c2 = Config {
+            memory: "2048m".to_string(),
+            ..Config::default()
+        };
+        let h2 = compute_config_hash(&c2, path).unwrap();
+        store.add_entry(h2.clone(), workspace.clone());
+
+        // This is what we want to fail currently and pass after fix
+        // Currently it will be 2
+        assert_eq!(
+            store.entries.len(),
+            1,
+            "Should have exactly 1 entry per workspace"
+        );
+        assert!(store.is_approved(&h2));
+        assert!(!store.is_approved(&h1), "Old hash should have been removed");
+    }
+
+    #[test]
+    fn test_deny_removes_all_entries() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path();
+        let workspace = path.display().to_string();
+
+        let mut store = ApprovalStore::default();
+
+        let config = Config::default();
+        let hash = compute_config_hash(&config, path).unwrap();
+        store.add_entry(hash.clone(), workspace.clone());
+
+        assert!(store.is_approved(&hash));
+
+        store.remove_workspace_entries(&workspace);
+        assert!(!store.is_approved(&hash));
+        assert_eq!(store.entries.len(), 0);
+    }
+
+    #[test]
+    fn test_symlink_path_matching() {
+        use std::os::unix::fs::symlink;
+
+        // Use a persistent temp dir for this test since we're using the real load_approval_store
+        let tmp = TempDir::new().unwrap();
+        let real_path = tmp.path().join("real");
+        std::fs::create_dir(&real_path).unwrap();
+        let sym_path = tmp.path().join("sym");
+        symlink(&real_path, &sym_path).unwrap();
+
+        // Mock the approval store path to avoid polluting real user data
+        let store_path = tmp.path().join("approvals.json");
+
+        let config = Config::default();
+
+        // Helper to simulate approve_workspace_config with a custom path
+        let approve = |cfg: &Config, p: &Path| -> Result<()> {
+            let canonical_root = std::fs::canonicalize(p)?;
+            let hash = compute_config_hash(cfg, &canonical_root)?;
+            let mut store = ApprovalStore::load_from(&store_path)?;
+            store.add_entry(hash, canonical_root.to_string_lossy().into_owned());
+            store.save_to(&store_path)
+        };
+
+        // 1. Approve via real path
+        approve(&config, &real_path).unwrap();
+
+        // 2. Approve via symlink path
+        approve(&config, &sym_path).unwrap();
+
+        let config2 = Config {
+            memory: "2048m".to_string(),
+            ..Config::default()
+        };
+        approve(&config2, &sym_path).unwrap();
+
+        let store = ApprovalStore::load_from(&store_path).unwrap();
+        assert_eq!(
+            store.entries.len(),
+            1,
+            "Should have exactly 1 entry even when accessed via symlinks"
         );
     }
 }
