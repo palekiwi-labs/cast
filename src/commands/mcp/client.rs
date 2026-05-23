@@ -62,6 +62,17 @@ impl McpClient {
         Ok(Self { peer, service })
     }
 
+    /// Call a tool on the connected MCP server with a JSON arguments map.
+    pub async fn call_tool(
+        &self,
+        name: String,
+        arguments: serde_json::Map<String, serde_json::Value>,
+    ) -> anyhow::Result<rmcp::model::CallToolResult> {
+        let request = rmcp::model::CallToolRequestParams::new(name).with_arguments(arguments);
+        let result = self.peer.call_tool(request).await?;
+        Ok(result)
+    }
+
     /// Retrieve all tools from the connected MCP server (discovery).
     pub async fn list_tools(&self) -> anyhow::Result<Vec<Tool>> {
         // `list_all_tools` automatically manages cursors and paginated results under the hood

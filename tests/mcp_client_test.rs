@@ -5,8 +5,8 @@ use predicates::prelude::*;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
     model::{
-        Implementation, ListToolsResult, PaginatedRequestParams, ServerCapabilities, ServerInfo,
-        Tool,
+        CallToolRequestParams, CallToolResult, Content, Implementation, ListToolsResult,
+        PaginatedRequestParams, ServerCapabilities, ServerInfo, Tool,
     },
     service::RequestContext,
     transport::streamable_http_server::{
@@ -62,6 +62,31 @@ impl ServerHandler for MockServerHandler {
             next_cursor: None,
             meta: Default::default(),
         })
+    }
+
+    async fn call_tool(
+        &self,
+        request: CallToolRequestParams,
+        _context: RequestContext<RoleServer>,
+    ) -> Result<CallToolResult, McpError> {
+        match request.name.as_ref() {
+            "dummy_tool" => {
+                let message = request
+                    .arguments
+                    .as_ref()
+                    .and_then(|args| args.get("message"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("(no message)");
+                Ok(CallToolResult::success(vec![Content::text(format!(
+                    "echo: {}",
+                    message
+                ))]))
+            }
+            other => Err(McpError::invalid_params(
+                format!("Unknown tool: {}", other),
+                None,
+            )),
+        }
     }
 }
 
@@ -238,6 +263,91 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
             .failure()
             .stderr(predicate::str::contains("Unknown tool"))
             .stderr(predicate::str::contains("cast mcp list"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// Spawn a fresh mock server and return its URL and cancellation token.
+async fn spawn_mock_server() -> anyhow::Result<(String, CancellationToken)> {
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+    let router = axum::Router::new().nest_service("/mcp", service);
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+                .await;
+        }
+    });
+    Ok((format!("http://{addr}/mcp"), ct))
+}
+
+#[tokio::test]
+async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args([
+        "mcp",
+        "call",
+        "dummy_tool",
+        r#"{"message": "hello"}"#,
+        "--url",
+        &url,
+    ])
+    .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("echo: hello"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args(["mcp", "call", "dummy_tool", "-", "--url", &url])
+        .write_stdin(r#"{"message": "from stdin"}"#)
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert()
+            .success()
+            .stdout(predicate::str::contains("echo: from stdin"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let mut cmd = Command::cargo_bin("cast")?;
+    cmd.args(["mcp", "call", "nonexistent_tool", "{}", "--url", &url])
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+
+    tokio::task::spawn_blocking(move || {
+        cmd.assert().failure();
     })
     .await?;
 

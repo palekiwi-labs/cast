@@ -112,6 +112,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                 McpCommands::Describe { tool_name, url } => {
                     rt.block_on(crate::commands::mcp::describe_tool(tool_name, url))?;
                 }
+                McpCommands::Call {
+                    tool_name,
+                    params,
+                    url,
+                } => {
+                    rt.block_on(crate::commands::mcp::call_tool_cmd(tool_name, params, url))?;
+                }
                 other => {
                     let approved = verify_config(cfg)?;
                     rt.block_on(crate::commands::mcp::run(other, approved))?;
@@ -203,6 +210,20 @@ pub enum McpCommands {
     Describe {
         /// Name of the tool to inspect
         tool_name: String,
+
+        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        #[arg(long)]
+        url: Option<String>,
+    },
+    /// Call a tool on the MCP server with JSON arguments
+    Call {
+        /// Name of the tool to call
+        tool_name: String,
+
+        /// JSON arguments as an inline string, or '-' to read from stdin.
+        /// Defaults to '{}' if omitted and stdin is a terminal.
+        #[arg(value_name = "JSON")]
+        params: Option<String>,
 
         /// MCP server URL (overrides CAST_MCP_URL env and default)
         #[arg(long)]
