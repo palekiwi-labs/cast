@@ -15,3 +15,10 @@ reqwest = { version = "0.13.3", features = ["json"] }
 rmcp = { version = "1.6.0", features = ["client", "transport-streamable-http-client", "transport-streamable-http-client-reqwest"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[dev-dependencies]
+assert_cmd = "2.2.0"
+predicates = "3.1.4"
+tokio-util = "0.7.18"
+axum = "0.8.9"
+rmcp = { version = "1.6.0", features = ["server", "transport-streamable-http-server"] }

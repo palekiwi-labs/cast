@@ -1,5 +1,3 @@
-#![cfg(feature = "mcp")]
-
 use assert_cmd::Command;
 use predicates::prelude::*;
 use rmcp::{
@@ -163,9 +161,8 @@ async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
     // assert() would starve the Tokio reactor, preventing the mock server from
     // processing the client's delete_session cleanup request, causing a deadlock.
     let url = format!("http://{addr}/mcp");
-    let mut cmd = Command::cargo_bin("cast")?;
-    cmd.args(["mcp", "list", "--url", &url])
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["list", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert()
@@ -205,9 +202,8 @@ async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
     // 2. Invoke `cast mcp describe dummy_tool --url <mock_url>` as a subprocess.
     // spawn_blocking prevents executor starvation (same pattern as list test).
     let url = format!("http://{addr}/mcp");
-    let mut cmd = Command::cargo_bin("cast")?;
-    cmd.args(["mcp", "describe", "dummy_tool", "--url", &url])
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["describe", "dummy_tool", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert()
@@ -254,9 +250,8 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
 
     // 2. Ask for a tool that does not exist — expect a non-zero exit with a helpful message.
     let url = format!("http://{addr}/mcp");
-    let mut cmd = Command::cargo_bin("cast")?;
-    cmd.args(["mcp", "describe", "nonexistent_tool", "--url", &url])
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["describe", "nonexistent_tool", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert()
@@ -296,16 +291,14 @@ async fn spawn_mock_server() -> anyhow::Result<(String, CancellationToken)> {
 async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
-    let mut cmd = Command::cargo_bin("cast")?;
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
     cmd.args([
-        "mcp",
         "call",
         "dummy_tool",
         r#"{"message": "hello"}"#,
         "--url",
         &url,
-    ])
-    .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    ]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert()
@@ -322,10 +315,9 @@ async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
 async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
-    let mut cmd = Command::cargo_bin("cast")?;
-    cmd.args(["mcp", "call", "dummy_tool", "-", "--url", &url])
-        .write_stdin(r#"{"message": "from stdin"}"#)
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["call", "dummy_tool", "-", "--url", &url])
+        .write_stdin(r#"{"message": "from stdin"}"#);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert()
@@ -342,9 +334,8 @@ async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
 async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
-    let mut cmd = Command::cargo_bin("cast")?;
-    cmd.args(["mcp", "call", "nonexistent_tool", "{}", "--url", &url])
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["call", "nonexistent_tool", "{}", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert().failure();

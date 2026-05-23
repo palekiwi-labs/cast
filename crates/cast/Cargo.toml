@@ -21,7 +21,6 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 reqwest = { version = "0.13.3", features = ["json", "blocking"] }
-cast-mcp-client = { path = "../cast-mcp-client" }
 rmcp = { version = "1.6.0", features = ["server", "transport-streamable-http-server"], optional = true }
 tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "process", "signal", "net"], optional = true }
 axum = { version = "0.8.9", optional = true }
@@ -31,7 +30,6 @@ http = { version = "1.4.0", optional = true }
 tokio-util = { version = "0.7.18", optional = true }
 
 [dev-dependencies]
-cast-mcp-client = { path = "../cast-mcp-client" }
 assert_cmd = "2.2.0"
 predicates = "3.1.4"
 pretty_assertions = "1.4.1"

@@ -301,7 +301,6 @@ dependencies = [
  "anyhow",
  "assert_cmd",
  "axum",
- "cast-mcp-client",
  "clap",
  "crc",
  "dirs",
@@ -331,12 +330,16 @@ name = "cast-mcp-client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "assert_cmd",
+ "axum",
  "clap",
+ "predicates",
  "reqwest",
  "rmcp",
  "serde",
  "serde_json",
  "tokio",
+ "tokio-util",
  "tracing",
  "tracing-subscriber",
 ]
