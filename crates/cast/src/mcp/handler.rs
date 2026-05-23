@@ -153,6 +153,7 @@ impl McpHandler {
         {
             Ok(res) => res,
             Err(_) => {
+                eprintln!("MCP: tool {} timed out after {}s", request.name, timeout_secs);
                 return Err(McpError::internal_error(
                     format!("tool execution timed out after {}s", timeout_secs),
                     None,
