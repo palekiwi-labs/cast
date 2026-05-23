@@ -17,7 +17,15 @@
         rustToolchain = fenix.packages.${system}.stable.toolchain;
         common = {
           version = "0.1.0";
-          src = pkgs.lib.cleanSource ./.;
+          src = pkgs.lib.cleanSourceWith {
+            src = ./.;
+            filter = path: type:
+              let
+                relPath = pkgs.lib.removePrefix (toString ./.) (toString path);
+              in
+              (pkgs.lib.hasPrefix "/crates/cast/docs" relPath) ||
+              (pkgs.lib.cleanSourceFilter path type);
+          };
           cargoLock = {
             lockFile = ./Cargo.lock;
           };

@@ -35,6 +35,7 @@ pub async fn run_command(
 
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
+    cmd.stdin(Stdio::null());
 
     let child = match cmd.spawn() {
         Ok(c) => c,
