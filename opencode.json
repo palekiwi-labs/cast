@@ -8,7 +8,7 @@
   "mcp": {
     "mcp-cast": {
       "type": "remote",
-      "url": "http://host.docker.internal:30305/mcp",
+      "url": "{env:CAST_MCP_URL}",
       "enabled": true
     }
   },
