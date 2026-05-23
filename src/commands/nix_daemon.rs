@@ -4,8 +4,8 @@ use anyhow::Result;
 use clap::Subcommand;
 
 use crate::config::ApprovedConfig;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 
 #[derive(Subcommand)]

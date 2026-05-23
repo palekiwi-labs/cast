@@ -13,5 +13,20 @@
       "type": "bind",
       "mode": "rw"
     }
+  },
+  "mcp": {
+    "port": 30305,
+    "hostname": "0.0.0.0",
+    "tools": {
+      "get_system_info": {
+        "description": "Returns basic system information like kernel version and uptime",
+        "command": "uname",
+        "args": ["-a"],
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    }
   }
 }
