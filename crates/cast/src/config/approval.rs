@@ -344,12 +344,10 @@ mod tests {
         let store = ApprovalStore::default();
         let result = store.verify(config, path);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Configuration has not been approved")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Configuration has not been approved"));
     }
 
     #[test]
@@ -374,8 +372,6 @@ mod tests {
         let h2 = compute_config_hash(&c2, path).unwrap();
         store.add_entry(h2.clone(), workspace.clone());
 
-        // This is what we want to fail currently and pass after fix
-        // Currently it will be 2
         assert_eq!(
             store.entries.len(),
             1,
@@ -408,7 +404,7 @@ mod tests {
     fn test_symlink_path_matching() {
         use std::os::unix::fs::symlink;
 
-        // Use a persistent temp dir for this test since we're using the real load_approval_store
+        // Use a persistent temp dir for this test
         let tmp = TempDir::new().unwrap();
         let real_path = tmp.path().join("real");
         std::fs::create_dir(&real_path).unwrap();
