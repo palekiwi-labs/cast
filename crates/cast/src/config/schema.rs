@@ -58,8 +58,8 @@ pub struct McpConfig {
     pub port: u16,
     #[serde(default = "default_mcp_hostname")]
     pub hostname: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub global_timeout_secs: Option<u64>,
+    #[serde(default = "default_mcp_global_timeout")]
+    pub global_timeout_secs: u64,
     #[serde(default)]
     pub tools: BTreeMap<String, McpToolConfig>,
 }
@@ -69,7 +69,7 @@ impl Default for McpConfig {
         Self {
             port: DEFAULT_MCP_PORT,
             hostname: DEFAULT_MCP_HOSTNAME.to_string(),
-            global_timeout_secs: None,
+            global_timeout_secs: default_mcp_global_timeout(),
             tools: BTreeMap::new(),
         }
     }
@@ -81,6 +81,10 @@ fn default_mcp_port() -> u16 {
 
 fn default_mcp_hostname() -> String {
     DEFAULT_MCP_HOSTNAME.to_string()
+}
+
+fn default_mcp_global_timeout() -> u64 {
+    300
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -247,7 +251,17 @@ mod tests {
             "tools": {}
         });
         let config: McpConfig = serde_json::from_value(json).unwrap();
-        assert_eq!(config.global_timeout_secs, Some(120));
+        assert_eq!(config.global_timeout_secs, 120u64);
+    }
+
+    #[test]
+    fn test_mcp_config_default_global_timeout() {
+        let json = json!({
+            "port": 32123,
+            "tools": {}
+        });
+        let config: McpConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.global_timeout_secs, 300);
     }
 
     #[test]

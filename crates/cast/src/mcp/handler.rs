@@ -143,25 +143,21 @@ impl McpHandler {
         // 5. Execute the command via the secure execution engine
         let timeout_secs = tool_config
             .timeout_secs
-            .or(self.inner.config.global_timeout_secs);
+            .unwrap_or(self.inner.config.global_timeout_secs);
 
-        let exec_result = if let Some(secs) = timeout_secs {
-            match tokio::time::timeout(
-                std::time::Duration::from_secs(secs),
-                exec::run_command(tool_config, mapped_args, &self.inner.host_env),
-            )
-            .await
-            {
-                Ok(res) => res,
-                Err(_) => {
-                    return Err(McpError::internal_error(
-                        format!("tool execution timed out after {}s", secs),
-                        None,
-                    ));
-                }
+        let exec_result = match tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs),
+            exec::run_command(tool_config, mapped_args, &self.inner.host_env),
+        )
+        .await
+        {
+            Ok(res) => res,
+            Err(_) => {
+                return Err(McpError::internal_error(
+                    format!("tool execution timed out after {}s", timeout_secs),
+                    None,
+                ));
             }
-        } else {
-            exec::run_command(tool_config, mapped_args, &self.inner.host_env).await
         }
         .map_err(|e| {
             error!(tool = %request.name, err = %e, "command execution failed");
@@ -310,7 +306,7 @@ mod tests {
         let config = McpConfig {
             port: 8080,
             hostname: "localhost".to_string(),
-            global_timeout_secs: None,
+            global_timeout_secs: 300,
             tools,
         };
 
@@ -366,12 +362,12 @@ mod tests {
     // execute_tool directly, avoiding the need to construct an rmcp RequestContext.
 
     fn make_handler(tools: BTreeMap<String, McpToolConfig>) -> McpHandler {
-        make_handler_with_timeout(tools, None)
+        make_handler_with_timeout(tools, 300)
     }
 
     fn make_handler_with_timeout(
         tools: BTreeMap<String, McpToolConfig>,
-        global_timeout_secs: Option<u64>,
+        global_timeout_secs: u64,
     ) -> McpHandler {
         let config = McpConfig {
             port: 8080,
@@ -445,7 +441,7 @@ mod tests {
         let mcp_config = McpConfig {
             port: 8080,
             hostname: "localhost".to_string(),
-            global_timeout_secs: None,
+            global_timeout_secs: 300,
             tools,
         };
         let res = McpHandler::new(mcp_config, HashMap::new());
@@ -526,7 +522,7 @@ mod tests {
         let mut tool = sleep_tool_config(2);
         tool.timeout_secs = Some(1);
         tools.insert("slow".to_string(), tool);
-        let handler = make_handler_with_timeout(tools, None);
+        let handler = make_handler_with_timeout(tools, 300);
 
         let start = std::time::Instant::now();
         let request = CallToolRequestParams::new("slow");
@@ -551,7 +547,7 @@ mod tests {
     async fn test_global_timeout_is_enforced() {
         let mut tools = BTreeMap::new();
         tools.insert("slow".to_string(), sleep_tool_config(2));
-        let handler = make_handler_with_timeout(tools, Some(1));
+        let handler = make_handler_with_timeout(tools, 1);
 
         let start = std::time::Instant::now();
         let request = CallToolRequestParams::new("slow");
@@ -580,7 +576,7 @@ mod tests {
         // and asserts we are done well within 1s.
         let mut tools = BTreeMap::new();
         tools.insert("slow".to_string(), sleep_tool_config(2));
-        let handler = make_handler_with_timeout(tools, None);
+        let handler = make_handler_with_timeout(tools, 300);
 
         let request = CallToolRequestParams::new("slow");
         let handler_clone = handler.clone();
