@@ -26,9 +26,11 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = [ rustToolchain ];
+          nativeBuildInputs = [ rustToolchain pkgs.cacert ];
 
           buildInputs = [];
+
+          SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
 
           meta = with pkgs.lib; {
             description = "cast - coding agent sandbox tool";

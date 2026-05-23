@@ -7,7 +7,7 @@
       "type": "bind",
       "mode": "rw"
     },
-    "cargo": {
+    "dev_notes": {
       "source": "~/code/palekiwi-labs/dev-notes/cast",
       "target": "~/code/palekiwi-labs/dev-notes/cast",
       "type": "bind",
@@ -25,6 +25,29 @@
         "parameters": {
           "type": "object",
           "properties": {}
+        }
+      },
+      "example_tool": {
+        "description": "A comprehensive example to test MCP argument mapping",
+        "command": "echo",
+        "args": [
+          "Base:", "{message}",
+          "Items:", "{...items}"
+        ],
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "message": {
+              "type": "string",
+              "description": "The main message (Required)"
+            },
+            "items": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "A list of items to expand via spread operator"
+            }
+          },
+          "required": ["message"]
         }
       }
     }
