@@ -18,13 +18,11 @@ impl VersionFetcher for GithubReleaseFetcher {
         }
 
         let url = format!("https://api.github.com/repos/{}/releases/latest", self.repo);
-        let client = reqwest::blocking::Client::new();
-        let release: GithubRelease = client
-            .get(&url)
-            .header("User-Agent", "cast")
-            .send()
+        let release: GithubRelease = ureq::get(&url)
+            .set("User-Agent", "cast")
+            .call()
             .context("Failed to reach GitHub API")?
-            .json()
+            .into_json()
             .context("Failed to parse GitHub API response")?;
         Ok(release.tag_name)
     }
