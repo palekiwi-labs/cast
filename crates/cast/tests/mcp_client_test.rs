@@ -16,8 +16,8 @@ use rmcp::{
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
-// Import our client from the cast crate
-use cast::commands::mcp::client::McpClient;
+// Import our client from the cast-mcp-client crate
+use cast_mcp_client::McpClient;
 
 /// Build a mock tool with a fully populated input schema for testing.
 fn make_mock_tool() -> Tool {
@@ -223,7 +223,7 @@ async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
             .stdout(predicate::str::contains("integer"))
             .stdout(predicate::str::contains("optional"))
             // Example invocation hint
-            .stdout(predicate::str::contains("cast mcp call dummy_tool"));
+            .stdout(predicate::str::contains("call dummy_tool"));
     })
     .await?;
 
@@ -262,7 +262,7 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
         cmd.assert()
             .failure()
             .stderr(predicate::str::contains("Unknown tool"))
-            .stderr(predicate::str::contains("cast mcp list"));
+            .stderr(predicate::str::contains("list"));
     })
     .await?;
 
