@@ -58,6 +58,8 @@ pub struct McpConfig {
     pub port: u16,
     #[serde(default = "default_mcp_hostname")]
     pub hostname: String,
+    #[serde(default = "default_mcp_global_timeout")]
+    pub global_timeout_secs: u64,
     #[serde(default)]
     pub tools: BTreeMap<String, McpToolConfig>,
 }
@@ -67,6 +69,7 @@ impl Default for McpConfig {
         Self {
             port: DEFAULT_MCP_PORT,
             hostname: DEFAULT_MCP_HOSTNAME.to_string(),
+            global_timeout_secs: default_mcp_global_timeout(),
             tools: BTreeMap::new(),
         }
     }
@@ -80,6 +83,10 @@ fn default_mcp_hostname() -> String {
     DEFAULT_MCP_HOSTNAME.to_string()
 }
 
+fn default_mcp_global_timeout() -> u64 {
+    300
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct McpToolConfig {
@@ -91,6 +98,8 @@ pub struct McpToolConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub working_dir: Option<String>,
     pub parameters: serde_json::Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]
@@ -232,5 +241,51 @@ mod tests {
         assert_eq!(tool.working_dir, Some("/tmp/sandbox".to_string()));
         assert_eq!(tool.env.as_ref().unwrap().inherit, vec!["HOME"]);
         assert_eq!(tool.env.as_ref().unwrap().set.get("DEBUG").unwrap(), "1");
+    }
+
+    #[test]
+    fn test_mcp_config_deserializes_global_timeout() {
+        let json = json!({
+            "port": 32123,
+            "global_timeout_secs": 120,
+            "tools": {}
+        });
+        let config: McpConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.global_timeout_secs, 120u64);
+    }
+
+    #[test]
+    fn test_mcp_config_default_global_timeout() {
+        let json = json!({
+            "port": 32123,
+            "tools": {}
+        });
+        let config: McpConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(config.global_timeout_secs, 300);
+    }
+
+    #[test]
+    fn test_mcp_tool_config_deserializes_timeout() {
+        let json = json!({
+            "description": "A tool",
+            "command": "sleep",
+            "args": [],
+            "parameters": {}
+        });
+        let tool: McpToolConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(tool.timeout_secs, None);
+    }
+
+    #[test]
+    fn test_mcp_tool_config_deserializes_explicit_timeout() {
+        let json = json!({
+            "description": "A tool",
+            "command": "sleep",
+            "args": [],
+            "parameters": {},
+            "timeout_secs": 30
+        });
+        let tool: McpToolConfig = serde_json::from_value(json).unwrap();
+        assert_eq!(tool.timeout_secs, Some(30));
     }
 }
