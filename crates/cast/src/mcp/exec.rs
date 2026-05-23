@@ -5,6 +5,21 @@ use std::collections::HashMap;
 use std::process::Stdio;
 use tokio::process::Command;
 
+#[derive(Debug)]
+pub enum ExecError {
+    Timeout { secs: u64 },
+}
+
+impl std::fmt::Display for ExecError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Timeout { secs } => write!(f, "tool execution timed out after {}s", secs),
+        }
+    }
+}
+
+impl std::error::Error for ExecError {}
+
 #[cfg(unix)]
 use libc;
 
@@ -54,7 +69,7 @@ pub async fn run_command(
     mapped_args: Vec<String>,
     host_env: &HashMap<String, String>,
     timeout: std::time::Duration,
-) -> Result<CallToolResult> {
+) -> std::result::Result<CallToolResult, ExecError> {
     let default_env = McpEnvConfig::default();
     let env_config = tool.env.as_ref().unwrap_or(&default_env);
     let resolved_env = resolve_env(env_config, host_env);
@@ -121,10 +136,7 @@ pub async fn run_command(
                 kill_process_group(id);
             }
             // _guard will also fire on drop of this arm — idempotent, ESRCH ignored.
-            return Err(anyhow::anyhow!(
-                "tool execution timed out after {}s",
-                timeout.as_secs()
-            ));
+            return Err(ExecError::Timeout { secs: timeout.as_secs() });
         }
     };
 

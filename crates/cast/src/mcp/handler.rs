@@ -154,13 +154,10 @@ impl McpHandler {
         .await
         .map_err(|e| {
             let msg = e.to_string();
-            if msg.contains("timed out") {
-                eprintln!(
-                    "MCP: tool {} timed out after {}s",
-                    request.name, timeout_secs
-                );
-            } else {
-                error!(tool = %request.name, err = %e, "command execution failed");
+            match &e {
+                exec::ExecError::Timeout { secs } => {
+                    eprintln!("MCP: tool {} timed out after {}s", request.name, secs);
+                }
             }
             McpError::internal_error(msg, None)
         })?;
