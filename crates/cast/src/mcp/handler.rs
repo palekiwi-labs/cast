@@ -1,4 +1,4 @@
-use crate::commands::mcp::exec;
+use super::exec;
 use crate::config::{McpConfig, McpToolConfig};
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
@@ -41,7 +41,7 @@ impl McpHandler {
         let mut cached_tools = Vec::new();
 
         // Register built-in tools (e.g. documentation)
-        cached_tools.extend(crate::commands::mcp::docs::builtin_tools());
+        cached_tools.extend(super::docs::builtin_tools());
 
         for (name, tool) in &config.tools {
             let validator = jsonschema::validator_for(&tool.parameters)
@@ -75,7 +75,7 @@ impl McpHandler {
         // --- Built-in Documentation Routing ---
         if request.name == "list_cast_documentation" {
             let mut list = String::from("Available cast documentation:\n\n");
-            for id in crate::commands::mcp::docs::list_docs() {
+            for id in super::docs::list_docs() {
                 list.push_str(&format!("- `{}`\n", id));
             }
             list.push_str("\nUse `fetch_cast_documentation(id=\"...\")` to read an entry.");
@@ -89,7 +89,7 @@ impl McpHandler {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| McpError::invalid_params("Missing required argument 'id'", None))?;
 
-            let content = crate::commands::mcp::docs::fetch_doc(id).ok_or_else(|| {
+            let content = super::docs::fetch_doc(id).ok_or_else(|| {
                 McpError::invalid_params(
                     format!("Documentation entry '{}' not found. Use `list_cast_documentation` to see available docs.", id),
                     None
