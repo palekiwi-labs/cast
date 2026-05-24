@@ -3,7 +3,8 @@ use predicates::prelude::*;
 
 fn cast() -> Command {
     let mut cmd = Command::cargo_bin("cast").unwrap();
-    cmd.env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"));
+    cmd.env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
+        .env("CAST_DATA_DIR", std::env::temp_dir().join("cast-test-data"));
     cmd
 }
 
