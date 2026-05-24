@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 /// Return the pi configuration directory path relative to the provided base.
 pub fn get_config_dir(base: &Path) -> PathBuf {
-    base.join("cast/agents/pi")
+    base.join(".pi")
 }
 
 /// Ensure the pi configuration directory exists on the host and return its path.
