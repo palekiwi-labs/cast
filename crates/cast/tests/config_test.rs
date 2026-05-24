@@ -208,7 +208,7 @@ fn test_config_show_hints_diff_when_unapproved() {
 
     // stdout must still be valid JSON
     let stdout = String::from_utf8_lossy(&output.stdout);
-    serde_json::from_str::<serde_json::Value>(&stdout.trim())
+    serde_json::from_str::<serde_json::Value>(stdout.trim())
         .expect("stdout must still be valid JSON");
 
     // stderr must contain the hint
