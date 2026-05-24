@@ -104,8 +104,7 @@ impl ApprovalStore {
             .mode(0o700)
             .create(parent)?;
 
-        let json =
-            serde_json::to_string_pretty(self).context("Failed to serialize approval store")?;
+        let json = serde_json::to_string(self).context("Failed to serialize approval store")?;
 
         let mut temp = NamedTempFile::new_in(parent).context("Failed to create temporary file")?;
 
