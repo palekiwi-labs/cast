@@ -4,5 +4,12 @@
     "bash": {
       "cargo *": "allow"
     }
-  }
+  },
+  "mcp": {
+    "mcp-cast": {
+      "type": "remote",
+      "url": "{env:CAST_MCP_URL}",
+      "enabled": true
+    }
+  },
 }

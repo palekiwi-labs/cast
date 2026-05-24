@@ -1,0 +1,79 @@
+use std::collections::HashMap;
+
+/// Environment variables that should be passed through from the host to the container.
+///
+/// This includes LLM provider API keys, core OpenCode configuration flags, and path settings.
+pub const PASSTHROUGH_VARS: &[&str] = &[
+    // LLM Provider API Keys & Credentials
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GOOGLE_GENERATIVE_AI_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "MISTRAL_API_KEY",
+    "GROQ_API_KEY",
+    "XAI_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "TOGETHER_API_KEY",
+    "PERPLEXITY_API_KEY",
+    "FIREWORKS_API_KEY",
+    // Core Configuration Flags
+    "OPENCODE_AUTO_SHARE",
+    "OPENCODE_DISABLE_AUTOUPDATE",
+    "OPENCODE_DISABLE_PRUNE",
+    "OPENCODE_DISABLE_AUTOCOMPACT",
+    "OPENCODE_DISABLE_TERMINAL_TITLE",
+    "OPENCODE_DISABLE_PROJECT_CONFIG",
+    "OPENCODE_DISABLE_SHARE",
+    "OPENCODE_EXPERIMENTAL",
+    "OPENCODE_PERMISSION",
+    "OPENCODE_MODELS_URL",
+    "OPENCODE_GIT_BASH_PATH",
+    "OPENCODE_SERVER_USERNAME",
+    "OPENCODE_SERVER_PASSWORD",
+    // Configuration with Paths (users must provide container paths)
+    "OPENCODE_CONFIG",
+    "OPENCODE_CONFIG_DIR",
+    "OPENCODE_CONFIG_CONTENT",
+    "OPENCODE_MODELS_PATH",
+];
+
+/// Generates docker run arguments for OpenCode environment variables.
+///
+/// Only includes variables from `PASSTHROUGH_VARS` that are actually set in the
+/// injected `env` map. Uses the Docker name-only syntax (`-e VAR_NAME`) which allows
+/// the container process to inherit the value directly from the host environment
+/// without the value ever appearing in the command-line arguments.
+pub fn build_passthrough_env_args(env: &HashMap<String, String>) -> Vec<String> {
+    PASSTHROUGH_VARS
+        .iter()
+        .filter(|&&var| env.contains_key(var))
+        .flat_map(|&var| ["-e".to_string(), var.to_string()])
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_passthrough_env_args() {
+        let mut env = HashMap::new();
+        env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
+        env.insert("UNKNOWN_VAR".to_string(), "foo".to_string());
+
+        let args = build_passthrough_env_args(&env);
+
+        assert_eq!(
+            args,
+            vec!["-e".to_string(), "ANTHROPIC_API_KEY".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_build_passthrough_env_args_empty() {
+        let env = HashMap::new();
+        let args = build_passthrough_env_args(&env);
+        assert!(args.is_empty());
+    }
+}

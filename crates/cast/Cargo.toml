@@ -1,0 +1,43 @@
+[package]
+description = "cast - coding agent sandbox tool"
+authors = ["palekiwi"]
+name = "cast"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.102"
+clap = { version = "4.6.1", features = ["derive"] }
+crc = "3.4.0"
+dirs = "6.0.0"
+figment = { version = "0.10.19", features = ["json", "env"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+sha2 = "0.11"
+hex = "0.4.3"
+libc = "0.2"
+tempfile = "3.10.0"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ureq = { version = "2.10.1", features = ["json"] }
+rmcp = { version = "1.6.0", features = ["server", "transport-streamable-http-server"], optional = true }
+tokio = { version = "1.52.3", features = ["rt-multi-thread", "macros", "process", "signal", "net"], optional = true }
+axum = { version = "0.8.9", optional = true }
+jsonschema = { version = "0.46.4", default-features = false, optional = true }
+uuid = { version = "1.23.1", features = ["v4"], optional = true }
+http = { version = "1.4.0", optional = true }
+tokio-util = { version = "0.7.18", optional = true }
+include_dir = "0.7"
+similar = "3.1.1"
+owo-colors = "4.3.0"
+
+[dev-dependencies]
+assert_cmd = "2.2.0"
+predicates = "3.1.4"
+pretty_assertions = "1.4.1"
+tempfile = "3.27.0"
+
+[features]
+default = ["mcp"]
+mcp = ["dep:rmcp", "dep:tokio", "dep:axum", "dep:jsonschema", "dep:uuid", "dep:http", "dep:tokio-util"]

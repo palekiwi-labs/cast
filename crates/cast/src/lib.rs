@@ -1,0 +1,9 @@
+pub mod commands;
+pub mod config;
+pub mod dev;
+pub mod docker;
+pub mod logging;
+#[cfg(feature = "mcp")]
+pub mod mcp;
+pub mod nix_daemon;
+pub mod user;
