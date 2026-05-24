@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use crate::config::{Config, format_config_diff, load_approval_store};
+use crate::config::{format_config_diff, load_approval_store, Config};
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;
@@ -66,15 +66,8 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
                         "No approved config for this workspace.\nRun `cast config allow` to approve the current configuration."
                     );
                 }
-                Some(entry) if entry.approved_config.is_none() => {
-                    println!(
-                        "No config snapshot available for this workspace.\n\
-                         This entry was approved with an older version of cast.\n\
-                         Run `cast config allow` to re-approve and capture a snapshot."
-                    );
-                }
                 Some(entry) => {
-                    let approved_snapshot = entry.approved_config.as_ref().unwrap();
+                    let approved_snapshot = &entry.approved_config;
                     let current_hash = crate::config::compute_config_hash(config, &canonical)?;
 
                     // Find the hash key for this entry by looking it up

@@ -76,8 +76,7 @@ pub struct ApprovalStore {
 pub struct ApprovalEntry {
     pub workspace: String,
     pub approved_at: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approved_config: Option<serde_json::Value>,
+    pub approved_config: serde_json::Value,
 }
 
 impl ApprovalStore {
@@ -161,7 +160,7 @@ impl ApprovalStore {
             ApprovalEntry {
                 workspace,
                 approved_at,
-                approved_config: Some(config),
+                approved_config: config,
             },
         );
     }
@@ -362,12 +361,10 @@ mod tests {
         let store = ApprovalStore::default();
         let result = store.verify(config, path);
         assert!(result.is_err());
-        assert!(
-            result
-                .unwrap_err()
-                .to_string()
-                .contains("Configuration has not been approved")
-        );
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Configuration has not been approved"));
     }
 
     #[test]
@@ -470,16 +467,6 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_entry_deserializes_without_approved_config() {
-        let raw = r#"{
-        "workspace": "/home/user/project",
-        "approved_at": 1715234400
-    }"#;
-        let entry: ApprovalEntry = serde_json::from_str(raw).unwrap();
-        assert!(entry.approved_config.is_none());
-    }
-
-    #[test]
     fn test_add_entry_stores_config_snapshot() {
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("approvals.json");
@@ -494,7 +481,7 @@ mod tests {
 
         let loaded = ApprovalStore::load_from(&path).unwrap();
         let entry = loaded.entries.get("hash1").unwrap();
-        assert_eq!(entry.approved_config.as_ref().unwrap(), &snapshot);
+        assert_eq!(entry.approved_config, snapshot);
     }
 
     #[test]

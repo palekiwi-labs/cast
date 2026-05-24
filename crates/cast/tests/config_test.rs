@@ -50,12 +50,14 @@ fn test_config_env_vars_override() {
 
     fs::write(&config_path, json.to_string()).unwrap();
 
+    let data_dir = TempDir::new().unwrap();
     // Run cast config show with env vars set via subprocess
     // Note: Use single underscore for field names (CAST_NIX_VOLUME_NAME)
     let output = Command::cargo_bin("cast")
         .unwrap()
         .current_dir(temp_dir.path())
         .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
+        .env("CAST_DATA_DIR", data_dir.path())
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
@@ -97,35 +99,6 @@ fn cast_with_data_dir(data_dir: &std::path::Path) -> Command {
 fn test_config_diff_no_approval() {
     let workspace = TempDir::new().unwrap();
     let data_dir = TempDir::new().unwrap();
-
-    cast_with_data_dir(data_dir.path())
-        .current_dir(workspace.path())
-        .args(["config", "diff"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("cast config allow"));
-}
-
-#[test]
-fn test_config_diff_legacy_entry_no_snapshot() {
-    let workspace = TempDir::new().unwrap();
-    let data_dir = TempDir::new().unwrap();
-
-    // Seed a legacy entry (no approved_config field) for this workspace
-    let canonical = std::fs::canonicalize(workspace.path()).unwrap();
-    let legacy_entry = serde_json::json!({
-        "entries": {
-            "deadbeef": {
-                "workspace": canonical.to_string_lossy(),
-                "approved_at": 1715234400u64
-            }
-        }
-    });
-    fs::write(
-        data_dir.path().join("approved_configs.json"),
-        serde_json::to_string_pretty(&legacy_entry).unwrap(),
-    )
-    .unwrap();
 
     cast_with_data_dir(data_dir.path())
         .current_dir(workspace.path())
