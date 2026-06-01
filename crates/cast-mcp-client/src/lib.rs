@@ -97,10 +97,7 @@ pub async fn list_tools_cmd(url: Option<String>) -> anyhow::Result<()> {
     let url = resolve_server_url(url);
     let mcp_client = McpClient::connect(&url).await?;
     let tools = mcp_client.list_tools().await?;
-    for tool in &tools {
-        let description = tool.description.as_deref().unwrap_or("");
-        println!("{:<30} {}", tool.name, description);
-    }
+    println!("{}", serde_json::to_string_pretty(&tools)?);
     mcp_client.shutdown().await
 }
 
@@ -113,14 +110,31 @@ pub async fn describe_tool_cmd(tool_name: String, url: Option<String>) -> anyhow
         .into_iter()
         .find(|t| t.name == tool_name)
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "Unknown tool '{}'. Run 'mcp-client list' to see available tools.",
-                tool_name
-            )
+            print_json_error(
+                "TOOL_NOT_FOUND",
+                &format!(
+                    "Unknown tool '{}'. Run 'cast-mcp-client list' to see available tools.",
+                    tool_name
+                ),
+            );
+            anyhow::anyhow!("tool not found")
         })?;
 
-    print_tool_schema(&tool.name, tool.description.as_deref(), &tool.input_schema);
+    println!("{}", serde_json::to_string_pretty(&tool)?);
     mcp_client.shutdown().await
+}
+
+fn print_json_error(code: &str, message: &str) {
+    let payload = serde_json::json!({
+        "error": {
+            "code": code,
+            "message": message
+        }
+    });
+    eprintln!(
+        "{}",
+        serde_json::to_string_pretty(&payload).unwrap_or_default()
+    );
 }
 
 pub async fn call_tool_cmd(
@@ -134,25 +148,17 @@ pub async fn call_tool_cmd(
     let mcp_client = McpClient::connect(&url).await?;
     let result = mcp_client.call_tool(tool_name.clone(), arguments).await?;
 
-    for item in &result.content {
-        use rmcp::model::RawContent;
-        match &item.raw {
-            RawContent::Text(t) => println!("{}", t.text),
-            other => println!("{}", serde_json::to_string_pretty(other)?),
-        }
-    }
+    println!("{}", serde_json::to_string_pretty(&result)?);
 
     mcp_client.shutdown().await?;
-
-    if result.is_error.unwrap_or(false) {
-        anyhow::bail!("Tool '{}' reported an error.", tool_name);
-    }
 
     Ok(())
 }
 
 /// Read JSON parameters from an inline string, explicit stdin (`-`), piped stdin, or default to `{}`.
-pub fn read_params(params: Option<String>) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
+pub fn read_params(
+    params: Option<String>,
+) -> anyhow::Result<serde_json::Map<String, serde_json::Value>> {
     use std::io::Read;
 
     let raw = match params.as_deref() {
@@ -185,73 +191,9 @@ pub fn read_params(params: Option<String>) -> anyhow::Result<serde_json::Map<Str
             .map_err(|e| anyhow::anyhow!("Failed to parse JSON parameters: {}", e))?
     };
 
-    value
-        .as_object()
-        .cloned()
-        .ok_or_else(|| anyhow::anyhow!("Parameters must be a JSON object, e.g. '{{\"key\": \"val\"}}'"))
-}
-
-/// Pretty-print an MCP tool's input schema to stdout.
-pub fn print_tool_schema(
-    name: &str,
-    description: Option<&str>,
-    schema: &serde_json::Map<String, serde_json::Value>,
-) {
-    use std::collections::HashSet;
-
-    println!("Tool: {}", name);
-    if let Some(desc) = description {
-        println!("Description: {}", desc);
-    }
-    println!();
-
-    let properties = schema
-        .get("properties")
-        .and_then(|v| v.as_object());
-
-    let required: HashSet<&str> = schema
-        .get("required")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect())
-        .unwrap_or_default();
-
-    match properties {
-        None => {
-            println!("Parameters: none");
-        }
-        Some(props) if props.is_empty() => {
-            println!("Parameters: none");
-        }
-        Some(props) => {
-            println!("Parameters:");
-            for (prop_name, prop_val) in props {
-                let prop_type = prop_val
-                    .get("type")
-                    .and_then(|t| t.as_str())
-                    .unwrap_or("any");
-                let prop_desc = prop_val
-                    .get("description")
-                    .and_then(|d| d.as_str())
-                    .unwrap_or("");
-                let required_label = if required.contains(prop_name.as_str()) {
-                    "required"
-                } else {
-                    "optional"
-                };
-
-                println!(
-                    "  {} ({}, {}): {}",
-                    prop_name, prop_type, required_label, prop_desc
-                );
-            }
-        }
-    }
-
-    println!();
-    println!(
-        "Example: cast-mcp-client call {} '{{\"key\": \"value\"}}'",
-        name
-    );
+    value.as_object().cloned().ok_or_else(|| {
+        anyhow::anyhow!("Parameters must be a JSON object, e.g. '{{\"key\": \"val\"}}'")
+    })
 }
 
 #[cfg(test)]
