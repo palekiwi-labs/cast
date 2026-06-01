@@ -253,13 +253,12 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().failure().get_output().stderr.clone();
-        let s = std::str::from_utf8(&output).expect("stderr should be UTF-8");
-        let mut stream = serde_json::Deserializer::from_str(s).into_iter::<serde_json::Value>();
-        let json = stream
-            .next()
-            .expect("stderr should contain JSON")
-            .expect("valid JSON expected");
-        assert_eq!(json["error"]["code"], "TOOL_NOT_FOUND");
+        let s = std::str::from_utf8(&output)
+            .expect("stderr should be UTF-8")
+            .trim();
+        let json: serde_json::Value = serde_json::from_str(s)
+            .expect("stderr should be exactly one valid JSON object, nothing else");
+        assert_eq!(json["error"]["code"], "COMMAND_ERROR");
         assert!(
             json["error"]["message"]
                 .as_str()
