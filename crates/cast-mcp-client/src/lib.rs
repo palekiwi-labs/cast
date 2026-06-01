@@ -110,21 +110,17 @@ pub async fn describe_tool_cmd(tool_name: String, url: Option<String>) -> anyhow
         .into_iter()
         .find(|t| t.name == tool_name)
         .ok_or_else(|| {
-            print_json_error(
-                "TOOL_NOT_FOUND",
-                &format!(
-                    "Unknown tool '{}'. Run 'cast-mcp-client list' to see available tools.",
-                    tool_name
-                ),
-            );
-            anyhow::anyhow!("tool not found")
+            anyhow::anyhow!(
+                "Unknown tool '{}'. Run 'cast-mcp-client list' to see available tools.",
+                tool_name
+            )
         })?;
 
     println!("{}", serde_json::to_string_pretty(&tool)?);
     mcp_client.shutdown().await
 }
 
-fn print_json_error(code: &str, message: &str) {
+pub fn print_json_error(code: &str, message: &str) {
     let payload = serde_json::json!({
         "error": {
             "code": code,
@@ -133,7 +129,8 @@ fn print_json_error(code: &str, message: &str) {
     });
     eprintln!(
         "{}",
-        serde_json::to_string_pretty(&payload).unwrap_or_default()
+        serde_json::to_string_pretty(&payload)
+            .expect("static JSON payload should always serialize")
     );
 }
 
