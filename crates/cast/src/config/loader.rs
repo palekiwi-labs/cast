@@ -1,8 +1,8 @@
 use super::Config;
 use anyhow::{Context, Result};
 use figment::{
-    providers::{Env, Format, Json, Serialized},
     Figment,
+    providers::{Env, Format, Json, Serialized},
 };
 use std::path::PathBuf;
 use tracing::info;
@@ -18,6 +18,11 @@ use tracing::info;
 /// - Use single underscore for field names: CAST_NIX_VOLUME_NAME → nix_volume_name
 /// - Use double underscore for nesting: CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET → extra_data_volumes.cargo.target
 pub fn load_config() -> Result<Config> {
+    let cwd = std::env::current_dir().context("Failed to get current working directory")?;
+    load_config_from(&cwd)
+}
+
+pub fn load_config_from(base_dir: &std::path::Path) -> Result<Config> {
     let mut figment = Figment::new().merge(Serialized::defaults(Config::default()));
 
     if let Some(global_path) = global_config_path() {
@@ -26,12 +31,12 @@ pub fn load_config() -> Result<Config> {
 
     // Load cast-mcp.json into an intermediate Value.
     // This allows the file to have a flat structure (no root "mcp" key).
-    let mcp_json: figment::value::Value = Figment::from(Json::file("cast-mcp.json"))
+    let mcp_json: figment::value::Value = Figment::from(Json::file(base_dir.join("cast-mcp.json")))
         .extract()
         .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
 
     let config: Config = figment
-        .merge(Json::file("cast.json"))
+        .merge(Json::file(base_dir.join("cast.json")))
         .merge(Serialized::defaults(mcp_json).key("mcp"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
@@ -57,16 +62,13 @@ fn global_config_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    static CWD_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_load_config_succeeds() {
-        let _guard = CWD_MUTEX.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
         // Just verify it loads without error
         // Don't test specific values since they depend on user's environment
-        let config = load_config().unwrap();
+        let config = load_config_from(dir.path()).unwrap();
 
         // Basic sanity checks - these fields should always have some value
         assert!(!config.memory.is_empty());
@@ -89,13 +91,10 @@ mod tests {
         use std::io::Write;
         use tempfile::tempdir;
 
-        let _guard = CWD_MUTEX.lock().unwrap();
         let dir = tempdir().unwrap();
-        let original_cwd = std::env::current_dir().unwrap();
-        std::env::set_current_dir(dir.path()).unwrap();
 
         // Create cast.json
-        let mut cast_json = File::create("cast.json").unwrap();
+        let mut cast_json = File::create(dir.path().join("cast.json")).unwrap();
         writeln!(
             cast_json,
             r#"{{ "memory": "2048m", "mcp": {{ "port": 3000 }} }}"#
@@ -103,10 +102,10 @@ mod tests {
         .unwrap();
 
         // Create cast-mcp.json (flat structure, no root "mcp" key)
-        let mut mcp_json = File::create("cast-mcp.json").unwrap();
+        let mut mcp_json = File::create(dir.path().join("cast-mcp.json")).unwrap();
         writeln!(mcp_json, r#"{{ "hostname": "0.0.0.0", "port": 4000 }}"#).unwrap();
 
-        let config = load_config().unwrap();
+        let config = load_config_from(dir.path()).unwrap();
 
         // Should have memory from cast.json
         assert_eq!(config.memory, "2048m");
@@ -114,8 +113,6 @@ mod tests {
         assert_eq!(config.mcp.hostname, "0.0.0.0");
         // Should have port from cast-mcp.json (precedence)
         assert_eq!(config.mcp.port, 4000);
-
-        std::env::set_current_dir(original_cwd).unwrap();
     }
 
     #[test]
@@ -124,21 +121,16 @@ mod tests {
         use std::io::Write;
         use tempfile::tempdir;
 
-        let _guard = CWD_MUTEX.lock().unwrap();
         let dir = tempdir().unwrap();
-        let original_cwd = std::env::current_dir().unwrap();
-        std::env::set_current_dir(dir.path()).unwrap();
 
         // Create cast.json only
-        let mut cast_json = File::create("cast.json").unwrap();
+        let mut cast_json = File::create(dir.path().join("cast.json")).unwrap();
         writeln!(cast_json, r#"{{ "memory": "2048m" }}"#).unwrap();
 
-        let config = load_config().unwrap();
+        let config = load_config_from(dir.path()).unwrap();
 
         assert_eq!(config.memory, "2048m");
         // Should have defaults for MCP
         assert_eq!(config.mcp.port, 8080);
-
-        std::env::set_current_dir(original_cwd).unwrap();
     }
 }

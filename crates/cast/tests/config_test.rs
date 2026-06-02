@@ -29,8 +29,7 @@ fn test_config_load_with_partial_json() {
     fs::write(&config_path, json.to_string()).unwrap();
 
     // Load config from the temp directory
-    std::env::set_current_dir(temp_dir.path()).unwrap();
-    let config = cast::config::load_config().unwrap();
+    let config = cast::config::load_config_from(temp_dir.path()).unwrap();
 
     // Should merge with defaults
     assert_eq!(config.memory, "4g");
