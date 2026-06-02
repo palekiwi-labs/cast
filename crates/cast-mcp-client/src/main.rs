@@ -1,5 +1,5 @@
+use cast_mcp_client::{call_tool_cmd, describe_tool_cmd, list_tools_cmd, print_json_error};
 use clap::{Parser, Subcommand};
-use cast_mcp_client::{list_tools_cmd, describe_tool_cmd, call_tool_cmd};
 
 #[derive(Parser)]
 #[command(name = "cast-mcp-client")]
@@ -43,12 +43,21 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
+    let result = match cli.command {
         Commands::List { url } => list_tools_cmd(url).await,
         Commands::Describe { tool_name, url } => describe_tool_cmd(tool_name, url).await,
-        Commands::Call { tool_name, params, url } => call_tool_cmd(tool_name, params, url).await,
+        Commands::Call {
+            tool_name,
+            params,
+            url,
+        } => call_tool_cmd(tool_name, params, url).await,
+    };
+
+    if let Err(err) = result {
+        print_json_error("COMMAND_ERROR", &err.to_string());
+        std::process::exit(1);
     }
 }

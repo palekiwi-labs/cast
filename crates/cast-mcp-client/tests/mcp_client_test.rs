@@ -1,5 +1,4 @@
 use assert_cmd::Command;
-use predicates::prelude::*;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
     model::{
@@ -80,6 +79,9 @@ impl ServerHandler for MockServerHandler {
                     message
                 ))]))
             }
+            "error_tool" => Ok(CallToolResult::error(vec![Content::text(
+                "something went wrong",
+            )])),
             other => Err(McpError::invalid_params(
                 format!("Unknown tool: {}", other),
                 None,
@@ -165,12 +167,15 @@ async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
     cmd.args(["list", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("dummy_tool"))
-            .stdout(predicate::str::contains(
-                "A mock tool for integration testing",
-            ));
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_array());
+        assert_eq!(json[0]["name"], "dummy_tool");
+        assert_eq!(
+            json[0]["description"],
+            "A mock tool for integration testing"
+        );
     })
     .await?;
 
@@ -206,20 +211,13 @@ async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
     cmd.args(["describe", "dummy_tool", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
-        cmd.assert()
-            .success()
-            // Tool name and description
-            .stdout(predicate::str::contains("dummy_tool"))
-            .stdout(predicate::str::contains("A mock tool for integration testing"))
-            // Properties from schema
-            .stdout(predicate::str::contains("message"))
-            .stdout(predicate::str::contains("string"))
-            .stdout(predicate::str::contains("required"))
-            .stdout(predicate::str::contains("count"))
-            .stdout(predicate::str::contains("integer"))
-            .stdout(predicate::str::contains("optional"))
-            // Example invocation hint
-            .stdout(predicate::str::contains("call dummy_tool"));
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_object());
+        assert_eq!(json["name"], "dummy_tool");
+        assert_eq!(json["description"], "A mock tool for integration testing");
+        assert!(json["inputSchema"]["properties"]["message"].is_object());
     })
     .await?;
 
@@ -254,10 +252,19 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
     cmd.args(["describe", "nonexistent_tool", "--url", &url]);
 
     tokio::task::spawn_blocking(move || {
-        cmd.assert()
-            .failure()
-            .stderr(predicate::str::contains("Unknown tool"))
-            .stderr(predicate::str::contains("list"));
+        let output = cmd.assert().failure().get_output().stderr.clone();
+        let s = std::str::from_utf8(&output)
+            .expect("stderr should be UTF-8")
+            .trim();
+        let json: serde_json::Value = serde_json::from_str(s)
+            .expect("stderr should be exactly one valid JSON object, nothing else");
+        assert_eq!(json["error"]["code"], "COMMAND_ERROR");
+        assert!(
+            json["error"]["message"]
+                .as_str()
+                .expect("error message should be a string")
+                .contains("nonexistent_tool")
+        );
     })
     .await?;
 
@@ -301,9 +308,17 @@ async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
     ]);
 
     tokio::task::spawn_blocking(move || {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("echo: hello"));
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert_eq!(json["content"][0]["type"], "text");
+        assert!(
+            json["content"][0]["text"]
+                .as_str()
+                .expect("content should be text")
+                .contains("echo: hello")
+        );
+        assert!(json["isError"].is_null() || json["isError"] == false);
     })
     .await?;
 
@@ -320,9 +335,17 @@ async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
         .write_stdin(r#"{"message": "from stdin"}"#);
 
     tokio::task::spawn_blocking(move || {
-        cmd.assert()
-            .success()
-            .stdout(predicate::str::contains("echo: from stdin"));
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert_eq!(json["content"][0]["type"], "text");
+        assert!(
+            json["content"][0]["text"]
+                .as_str()
+                .expect("content should be text")
+                .contains("echo: from stdin")
+        );
+        assert!(json["isError"].is_null() || json["isError"] == false);
     })
     .await?;
 
@@ -339,6 +362,50 @@ async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
 
     tokio::task::spawn_blocking(move || {
         cmd.assert().failure();
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_call_tool_error_in_json() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["call", "error_tool", "{}", "--url", &url]);
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert_eq!(json["isError"], true);
+        assert!(
+            json["content"][0]["text"]
+                .as_str()
+                .expect("content should be text")
+                .contains("something went wrong")
+        );
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_mcp_list_stdout_is_clean_json() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["list", "--url", &url]);
+    cmd.env("RUST_LOG", "debug");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let _json: serde_json::Value = serde_json::from_slice(&output)
+            .expect("stdout should be valid JSON even with RUST_LOG=debug");
     })
     .await?;
 
