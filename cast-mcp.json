@@ -1,60 +1,50 @@
 {
-  "mcp": {
-    "port": 30305,
-    "hostname": "0.0.0.0",
-    "tools": {
-      "test_get_system_info": {
-        "description": "Returns basic system information like kernel version and uptime",
-        "command": "uname",
-        "args": ["-a"],
-        "parameters": {
-          "type": "object",
-          "properties": {}
-        }
-      },
-      "test_echo": {
-        "description": "A comprehensive example to test MCP argument mapping",
-        "command": "echo",
-        "args": [
-          "Base:", "{message}",
-          "Items:", "{...items}"
-        ],
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "message": {
-              "type": "string",
-              "description": "The main message (Required)"
-            },
-            "items": {
-              "type": "array",
-              "items": { "type": "string" },
-              "description": "A list of items to expand via spread operator"
-            }
+  "port": 30305,
+  "hostname": "0.0.0.0",
+  "tools": {
+    "test_get_system_info": {
+      "description": "Returns basic system information like kernel version and uptime",
+      "command": "uname",
+      "args": ["-a"],
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "test_echo": {
+      "description": "A comprehensive example to test MCP argument mapping",
+      "command": "echo",
+      "args": ["Base:", "{message}", "Items:", "{...items}"],
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "The main message (Required)"
           },
-          "required": ["message"]
-        }
-      },
-      "test_timeout": {
-        "description": "Sleeps for N seconds then prints a message (triggers timeout if N > timeout_secs)",
-        "command": "sh",
-        "args": [
-          "-c",
-          "sleep {seconds} && echo 'Done sleeping {seconds}s'"
-        ],
-        "timeout_secs": 2,
-        "parameters": {
-          "type": "object",
-          "properties": {
-            "seconds": {
-              "type": "integer",
-              "description": "Seconds to sleep"
-            }
-          },
-          "required": [
-            "seconds"
-          ]
-        }
+          "items": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "A list of items to expand via spread operator"
+          }
+        },
+        "required": ["message"]
+      }
+    },
+    "test_timeout": {
+      "description": "Sleeps for N seconds then prints a message (triggers timeout if N > timeout_secs)",
+      "command": "sh",
+      "args": ["-c", "sleep {seconds} && echo 'Done sleeping {seconds}s'"],
+      "timeout_secs": 2,
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "seconds": {
+            "type": "integer",
+            "description": "Seconds to sleep"
+          }
+        },
+        "required": ["seconds"]
       }
     }
   }
