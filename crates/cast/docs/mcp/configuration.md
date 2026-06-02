@@ -1,6 +1,10 @@
 # MCP Configuration in `cast`
 
-The `cast` MCP server allows you to define dynamic tools that can run commands on your host or in your development environment. These tools are defined in the `mcp.tools` section of your `cast.json` file.
+The `cast` MCP server allows you to define dynamic tools that can run commands on your host or in your development environment. These tools are defined in the `mcp.tools` section of your `cast.json` file or optionally in a separate `cast-mcp.json` file.
+
+When both files are present, `cast-mcp.json` takes precedence and its contents are merged into the `mcp` section of `cast.json`. Note that `cast-mcp.json` should have a **flat structure** (it should not contain a root `mcp` key), whereas in `cast.json` the settings must be under the `mcp` key.
+
+This allows you to keep your main configuration clean by moving MCP-specific settings to their own file.
 
 ## Tool Definition
 
@@ -47,6 +51,26 @@ A tool definition consists of its metadata, the command to execute, and how to m
             }
           }
         }
+      }
+    }
+  }
+}
+```
+
+### Example `cast-mcp.json` (Flat Structure)
+
+```json
+{
+  "port": 3000,
+  "hostname": "127.0.0.1",
+  "tools": {
+    "run_tests": {
+      "description": "Run the test suite",
+      "command": "cargo",
+      "args": ["test"],
+      "parameters": {
+        "type": "object",
+        "properties": {}
       }
     }
   }
