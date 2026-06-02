@@ -1,8 +1,8 @@
 use super::Config;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
 use tracing::info;
@@ -24,9 +24,15 @@ pub fn load_config() -> Result<Config> {
         figment = figment.merge(Json::file(global_path));
     }
 
+    // Load cast-mcp.json into an intermediate Value.
+    // This allows the file to have a flat structure (no root "mcp" key).
+    let mcp_json: figment::value::Value = Figment::from(Json::file("cast-mcp.json"))
+        .extract()
+        .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
+
     let config: Config = figment
         .merge(Json::file("cast.json"))
-        .merge(Json::file("cast-mcp.json"))
+        .merge(Serialized::defaults(mcp_json).key("mcp"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
         .context("Failed to load configuration")?;
@@ -96,13 +102,9 @@ mod tests {
         )
         .unwrap();
 
-        // Create cast-mcp.json
+        // Create cast-mcp.json (flat structure, no root "mcp" key)
         let mut mcp_json = File::create("cast-mcp.json").unwrap();
-        writeln!(
-            mcp_json,
-            r#"{{ "mcp": {{ "hostname": "0.0.0.0", "port": 4000 }} }}"#
-        )
-        .unwrap();
+        writeln!(mcp_json, r#"{{ "hostname": "0.0.0.0", "port": 4000 }}"#).unwrap();
 
         let config = load_config().unwrap();
 
