@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use crate::config::{format_config_diff, load_approval_store, Config};
+use crate::config::{Config, format_config_diff, load_approval_store};
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;

@@ -9,9 +9,10 @@ use tracing::info;
 
 /// Load configuration from all sources with proper precedence:
 /// 1. Environment variables (CAST_*)
-/// 2. Project config (./cast.json)
-/// 3. Global config (~/.config/cast/cast.json)
-/// 4. Defaults
+/// 2. MCP-specific project config (./cast-mcp.json)
+/// 3. Project config (./cast.json)
+/// 4. Global config (~/.config/cast/cast.json)
+/// 5. Defaults
 ///
 /// Environment variable format:
 /// - Use single underscore for field names: CAST_NIX_VOLUME_NAME → nix_volume_name
@@ -25,6 +26,7 @@ pub fn load_config() -> Result<Config> {
 
     let config: Config = figment
         .merge(Json::file("cast.json"))
+        .merge(Json::file("cast-mcp.json"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
         .context("Failed to load configuration")?;
@@ -49,9 +51,13 @@ fn global_config_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    static CWD_MUTEX: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_load_config_succeeds() {
+        let _guard = CWD_MUTEX.lock().unwrap();
         // Just verify it loads without error
         // Don't test specific values since they depend on user's environment
         let config = load_config().unwrap();
@@ -69,5 +75,68 @@ mod tests {
         assert!(config.agent_versions.is_empty());
         assert_eq!(config.memory, "1024m");
         assert_eq!(config.cpus, 1.0);
+    }
+
+    #[test]
+    fn test_merge_cast_and_mcp_json() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        let _guard = CWD_MUTEX.lock().unwrap();
+        let dir = tempdir().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        // Create cast.json
+        let mut cast_json = File::create("cast.json").unwrap();
+        writeln!(
+            cast_json,
+            r#"{{ "memory": "2048m", "mcp": {{ "port": 3000 }} }}"#
+        )
+        .unwrap();
+
+        // Create cast-mcp.json
+        let mut mcp_json = File::create("cast-mcp.json").unwrap();
+        writeln!(
+            mcp_json,
+            r#"{{ "mcp": {{ "hostname": "0.0.0.0", "port": 4000 }} }}"#
+        )
+        .unwrap();
+
+        let config = load_config().unwrap();
+
+        // Should have memory from cast.json
+        assert_eq!(config.memory, "2048m");
+        // Should have hostname from cast-mcp.json
+        assert_eq!(config.mcp.hostname, "0.0.0.0");
+        // Should have port from cast-mcp.json (precedence)
+        assert_eq!(config.mcp.port, 4000);
+
+        std::env::set_current_dir(original_cwd).unwrap();
+    }
+
+    #[test]
+    fn test_load_config_without_mcp_json() {
+        use std::fs::File;
+        use std::io::Write;
+        use tempfile::tempdir;
+
+        let _guard = CWD_MUTEX.lock().unwrap();
+        let dir = tempdir().unwrap();
+        let original_cwd = std::env::current_dir().unwrap();
+        std::env::set_current_dir(dir.path()).unwrap();
+
+        // Create cast.json only
+        let mut cast_json = File::create("cast.json").unwrap();
+        writeln!(cast_json, r#"{{ "memory": "2048m" }}"#).unwrap();
+
+        let config = load_config().unwrap();
+
+        assert_eq!(config.memory, "2048m");
+        // Should have defaults for MCP
+        assert_eq!(config.mcp.port, 8080);
+
+        std::env::set_current_dir(original_cwd).unwrap();
     }
 }

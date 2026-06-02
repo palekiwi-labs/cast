@@ -1,6 +1,8 @@
 # MCP Configuration in `cast`
 
-The `cast` MCP server allows you to define dynamic tools that can run commands on your host or in your development environment. These tools are defined in the `mcp.tools` section of your `cast.json` file.
+The `cast` MCP server allows you to define dynamic tools that can run commands on your host or in your development environment. These tools are defined in the `mcp.tools` section of your `cast.json` file or optionally in a separate `cast-mcp.json` file.
+
+When both files are present, `cast-mcp.json` takes precedence and its contents are merged with `cast.json`. This allows you to keep your main configuration clean by moving MCP-specific settings to their own file.
 
 ## Tool Definition
 
