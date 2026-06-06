@@ -82,7 +82,4 @@ RUN set -e; \
 USER ${USERNAME}
 WORKDIR /workspace
 
-# Default config directory isolation
-ENV PI_CODING_AGENT_DIR=/home/${USERNAME}/.pi
-
 CMD ["pi"]
