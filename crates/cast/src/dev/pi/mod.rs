@@ -76,9 +76,7 @@ impl Agent for Pi {
                 "{}:/home/{}/.pi:rw",
                 pi_config_host_dir.display(),
                 opts.user.username
-            ),
-            "-e".to_string(),
-            format!("PI_CODING_AGENT_DIR=/home/{}/.pi", opts.user.username),
+            )
         ]);
 
         // User flake mount (~/.config/cast/nix).
@@ -151,7 +149,6 @@ mod tests {
         assert!(args.contains(&"/home/testuser/.pi:/home/testuser/.pi:rw".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
-        assert!(args.contains(&"PI_CODING_AGENT_DIR=/home/testuser/.pi".to_string()));
     }
 
     #[test]
