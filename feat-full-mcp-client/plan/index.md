@@ -19,13 +19,14 @@ general-purpose client for any HTTP-based MCP server, driven by a
 |---|---|
 | Transport | HTTP remote only (no stdio) |
 | Auth | Static headers with `{env:VAR}` substitution (covers Bearer tokens, API keys) |
-| `list` output | Grouped by server: `{ "name": { "status", "tools" / "error" } }` |
+| `list` output | Flat array of tools: `[ { "name": "server/tool", ... } ]` — ideal for AI agents |
 | Tool reference format | `server/tool` — always required, no bare-name shorthand |
 | `--url` rename | `--cast-mcp-url` (makes cast-specific purpose explicit) |
 | Config locations | `~/.config/cast/cast-mcp-client.json` (global) + `./cast-mcp-client.json` (project, wins on conflict) |
 | Multi-server resolution | All `enabled: true` config entries + optional `"cast"` entry from flag/env |
-| Bad server behaviour | Listed as `"unreachable"` in output, never blocks other servers |
+| Bad server behaviour (list) | Warning to stderr, silently skipped from output, never blocks other servers |
 | Malformed config | Warning to stderr, silently skipped, falls back to `Default` |
+| Server Diagnostics | Handled by a dedicated `status` command showing server state / health |
 
 ---
 
@@ -112,20 +113,17 @@ config write a temp `cast-mcp-client.json` and set the command's working directo
 to that temp dir via `cmd.current_dir(tmpdir)`. The global config file is absent in
 CI, so only the project-local file is used.
 
-### Concurrency in list
+### Concurrency in list & status
 
-`list_tools_cmd` contacts all servers concurrently using `futures::future::join_all`.
-Each future resolves to `(name, Result<Vec<Tool>, _>)`. Errors are mapped to
-`"unreachable"` status; they never propagate out or block other servers.
-`futures` is a transitive dependency via rmcp — no new dep needed.
+Both `list` and `status` commands contact all servers concurrently using `futures::future::join_all`.
+Each future resolves to `(name, Result<...>)`. Errors are handled on a per-server basis
+and do not abort the command or block other healthy servers.
 
 ---
 
 ## Breaking Changes
 
-- `list` output changes from a flat `[{...}]` array to `{ "server": { ... } }`.
-  No known downstream consumers of this CLI output (opencode uses `CAST_MCP_URL`
-  directly, not this CLI).
+- `list` output remains a flat JSON array `[Tool]`, but each tool's `name` is now prefixed as `"server_name/tool_name"`.
 - `describe` and `call` now require `server/tool` format instead of bare `tool`.
   Existing callers (if any) must be updated.
 - `--url` flag is removed; replaced by `--cast-mcp-url`.
@@ -134,47 +132,17 @@ Each future resolves to `(name, Result<Vec<Tool>, _>)`. Errors are mapped to
 
 ## Implementation Slices
 
-Work is divided into seven vertical TDD slices. Each slice is independently
+Work is divided into eight vertical TDD slices. Each slice is independently
 committable: tests are written first (RED), then implementation (GREEN).
 
-### S1 — Config module
+### S1 — Config module [x]
 
 **Adds:** `src/config.rs` (new file), `pub mod config` in `src/lib.rs`.
-
-**Behaviors tested (unit tests in `config.rs`):**
-- Parses a minimal JSON config into `ClientConfig` with correct field values
-- `enabled` defaults to `true` when omitted from JSON
-- `headers` defaults to empty map when omitted from JSON
-- Server with `"enabled": false` is present in the raw parsed map (filtering
-  is `build_server_map`'s job, not `load()`'s)
-- `{env:VAR}` in a header value is replaced with the env var at load time;
-  unset vars are replaced with empty string (or left as-is — decide at impl)
-- Project-local config entries replace global entries of the same server name
-  (full replacement, no deep field merge)
-- Missing config files are silently skipped
-
-**Public API introduced:**
-```rust
-pub struct ClientConfig {
-    pub mcp: HashMap<String, RemoteServerConfig>,
-}
-pub struct RemoteServerConfig {
-    pub url: String,
-    pub headers: HashMap<String, String>,
-    pub enabled: bool,
-}
-pub fn load() -> ClientConfig
-pub fn load_from_files(
-    global: Option<&std::path::Path>,
-    project: Option<&std::path::Path>,
-) -> ClientConfig  // exposed for tests
-```
-
-**Files:** `src/config.rs` (new), `src/lib.rs` (add `pub mod config`)
+Completed and verified with unit tests.
 
 ---
 
-### S2 — Server map logic
+### S2 — Server map logic [ ]
 
 **Adds:** `resolve_cast_mcp_url` and `build_server_map` as pub functions in `src/lib.rs`.
 
@@ -206,7 +174,7 @@ pub fn build_server_map(
 
 ---
 
-### S3 — McpClient with custom headers
+### S3 — McpClient with custom headers [ ]
 
 **Adds:** Updated `McpClient::connect` that accepts a `&RemoteServerConfig` and
 forwards its headers to the rmcp transport.
@@ -216,131 +184,85 @@ forwards its headers to the rmcp transport.
   custom header is configured; the mock axum server uses a middleware layer to
   capture the header; the test asserts the header value was received
 
-**Implementation note:** Header values are converted via
-`http::HeaderName::from_str` / `http::HeaderValue::from_str`. Invalid header
-names/values return an `anyhow::Error`.
-
-**Signature change:**
-```rust
-// Before:
-pub async fn connect(url: &str) -> anyhow::Result<Self>
-
-// After:
-pub async fn connect(server: &config::RemoteServerConfig) -> anyhow::Result<Self>
-```
-
 **Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
 
 ---
 
-### S4 — CLI + command wiring
+### S4 — CLI + command wiring [ ]
 
 **Adds:** Config loading wired into `main.rs`; command function signatures updated;
 `--url` renamed to `--cast-mcp-url`; all existing integration tests updated.
 
 **Changes:**
 - `main.rs`: `config::load()` called at startup; `cast_mcp_url: Option<String>`
-  threaded through all three `Commands` variants; `--url` → `--cast-mcp-url`
-- `lib.rs`: command function signatures become:
-  ```rust
-  pub async fn list_tools_cmd(cast_mcp_url: Option<String>, config: &ClientConfig) -> anyhow::Result<()>
-  pub async fn describe_tool_cmd(tool_ref: String, cast_mcp_url: Option<String>, config: &ClientConfig) -> anyhow::Result<()>
-  pub async fn call_tool_cmd(tool_ref: String, params: Option<String>, cast_mcp_url: Option<String>, config: &ClientConfig) -> anyhow::Result<()>
-  ```
-- `tests/mcp_client_test.rs`: all 8 occurrences of `"--url"` renamed to
-  `"--cast-mcp-url"`; all existing tests must still pass at end of this slice
+  threaded through all commands; `--url` → `--cast-mcp-url`.
+- `lib.rs`: command function signatures updated.
+- `tests/mcp_client_test.rs`: all occurrences of `"--url"` renamed to `"--cast-mcp-url"`.
 
-**Note:** At this point the commands internally still use the old single-server
-logic (temporarily plumbed through), so existing tests remain green. The actual
-multi-server and `server/tool` behaviours are introduced in S5–S7.
+---
+
+### S5 — list: multi-server flat prefixed output [ ]
+
+**Adds:** Full rewrite of `list_tools_cmd` to gather tools concurrently from all configured
+servers and prefix each tool's name with `"{server_name}/"`.
+
+**Behaviors tested:**
+- `test_list_empty_config_returns_empty_array`: no servers configured → stdout is exactly `[]`
+- `test_list_prefixed_tools_single_server`: single server with tool `dummy_tool` outputs `[{"name":"cast/dummy_tool",...}]`
+
+**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
+
+---
+
+### S6 — list: handle unreachable servers gracefully [ ]
+
+**Adds:** Concurrent list error capturing. Unreachable servers print warnings to stderr,
+but are skipped from stdout without causing the command to fail.
+
+**Behaviors tested:**
+- `test_list_ignores_unreachable_server`: one good + one unreachable server → stdout lists only the good server's tools, stderr prints warning, exit code is 0.
+
+**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
+
+---
+
+### S7 — status command [ ]
+
+**Adds:** A new `status` CLI command that performs concurrent server health checks
+and displays diagnostic JSON of all configured servers.
+
+**Behaviors tested:**
+- `test_status_command_output`: verifies JSON format of both reachable and unreachable servers.
+
+**Output Schema:**
+```json
+{
+  "cast": {
+    "status": "ok",
+    "url": "http://127.0.0.1:8080/mcp",
+    "tools_count": 1
+  },
+  "sentry": {
+    "status": "unreachable",
+    "url": "https://mcp.sentry.dev/mcp",
+    "error": "..."
+  }
+}
+```
 
 **Files:** `src/main.rs`, `src/lib.rs`, `tests/mcp_client_test.rs`
 
 ---
 
-### S5 — list: multi-server grouped output
+### S8 — describe/call: server/tool format + error cases [ ]
 
-**Adds:** Full rewrite of `list_tools_cmd` with concurrent multi-server execution
-and grouped JSON output.
-
-**Behaviors tested (new integration tests):**
-- `test_list_empty_config_returns_empty_object`: no servers configured (empty
-  server map) → stdout is exactly `{}`
-- `test_list_grouped_output_single_server`: `CAST_MCP_URL` env injects one mock
-  server as the `"cast"` entry → stdout is
-  `{ "cast": { "status": "ok", "tools": [...] } }`
-
-**Output contract:**
-```json
-{
-  "server_name": {
-    "status": "ok",
-    "tools": [...]
-  }
-}
-```
-
-**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
-
----
-
-### S6 — list: unreachable server
-
-**Adds:** Error path in the concurrent list — bad URLs produce `"unreachable"`
-entries instead of failing the whole command.
+**Adds:** Full rewrite of `describe_tool_cmd` and `call_tool_cmd` to parse `server/tool` references
+and route to the designated server.
 
 **Behaviors tested:**
-- `test_list_includes_unreachable_server`: config file (via temp dir) defines two
-  servers — one pointing at the mock server, one at an invalid URL; the good
-  server shows `"status": "ok"`, the bad server shows `"status": "unreachable"`
-  with a non-empty `"error"` string; exit code is 0
-
-**Output contract for error case:**
-```json
-{
-  "server_name": {
-    "status": "unreachable",
-    "error": "...",
-    "tools": []
-  }
-}
-```
-
-**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
-
----
-
-### S7 — describe/call: server/tool format + error cases
-
-**Adds:** Full rewrite of `describe_tool_cmd` and `call_tool_cmd` to parse the
-`server/tool` reference format, validate inputs, and route to the named server.
-
-**Behaviors tested (new integration tests):**
-- `test_describe_server_slash_tool_format`: `describe myserver/dummy_tool` with
-  `CAST_MCP_URL` set as `"myserver"` → returns the tool's JSON object; exit 0
-- `test_call_server_slash_tool_format`: `call myserver/dummy_tool '{"message":"hi"}'`
-  with `CAST_MCP_URL` set as `"myserver"` → returns result JSON; exit 0
-- `test_describe_no_separator_fails`: `describe dummy_tool` (no slash) → non-zero
-  exit; stderr JSON error message contains `'server/tool'`
-- `test_describe_unknown_server_fails`: `describe ghost/dummy_tool` with no server
-  named `"ghost"` configured → non-zero exit; stderr JSON error mentions `'ghost'`
-
-**Parsing logic:**
-```rust
-let (server_name, tool_name) = tool_ref
-    .split_once('/')
-    .ok_or_else(|| anyhow::anyhow!(
-        "tool reference must be in 'server/tool' format, got: '{}'", tool_ref
-    ))?;
-let server = map.get(server_name).ok_or_else(|| anyhow::anyhow!(
-    "server '{}' is not configured", server_name
-))?;
-```
-
-**Note on test approach for server injection:** Since `describe` and `call` route
-by server name from the map (not by URL flag), tests inject the server via
-`CAST_MCP_URL` env var, which `build_server_map` inserts under `"cast"`. The
-tool ref becomes `cast/dummy_tool`. For tests that need a custom name, a temp
-config file is written to a temp working dir (same pattern as S6).
+- `test_describe_server_slash_tool_format`
+- `test_call_server_slash_tool_format`
+- `test_describe_no_separator_fails`
+- `test_describe_unknown_server_fails`
 
 **Files:** `src/lib.rs`, `tests/mcp_client_test.rs`

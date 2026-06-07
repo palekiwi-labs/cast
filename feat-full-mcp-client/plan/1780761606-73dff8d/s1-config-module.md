@@ -1,3 +1,5 @@
+## Status: Complete
+
 ## Foreword
 
 This executive plan covers **Slice S1: Config module** from the master plan at
@@ -37,13 +39,13 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Cycle 1 — Minimal parse
 
-- [ ] **RED:** Add `#[cfg(test)] mod tests` to the (not-yet-created) `config.rs`.
+- [x] **RED:** Add `#[cfg(test)] mod tests` to the (not-yet-created) `config.rs`.
   Write `test_parse_minimal_config`: call `parse_from_str` with a JSON string
   containing one server entry (`"myserver": { "url": "http://example.com/mcp" }`).
   Assert the returned `ClientConfig` has one entry with the correct URL.
   Confirm it does not compile / tests fail.
 
-- [ ] **GREEN:** Create `src/config.rs`. Define:
+- [x] **GREEN:** Create `src/config.rs`. Define:
   ```rust
   #[derive(Debug, Default, serde::Deserialize)]
   pub struct ClientConfig {
@@ -74,24 +76,24 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Cycle 2 — Defaults for omitted fields
 
-- [ ] **RED:** Write `test_default_enabled_and_headers`: parse a JSON entry that
+- [x] **RED:** Write `test_default_enabled_and_headers`: parse a JSON entry that
   omits both `"enabled"` and `"headers"`. Assert `enabled == true` and
   `headers.is_empty() == true`.
 
-- [ ] **GREEN:** The `#[serde(default)]` and `default_enabled` attributes from
+- [x] **GREEN:** The `#[serde(default)]` and `default_enabled` attributes from
   Cycle 1 should already satisfy this. Confirm the test passes. If not, adjust
   the serde annotations.
 
 ### Cycle 3 — `{env:VAR}` substitution
 
-- [ ] **RED:** Write `test_env_var_substitution`: using `std::env::set_var` in
+- [x] **RED:** Write `test_env_var_substitution`: using `std::env::set_var` in
   the test, set `CAST_TEST_TOKEN=secret`. Parse a config where a header value
   is `"Bearer {env:CAST_TEST_TOKEN}"`. Assert the resulting header value is
   `"Bearer secret"`. Also write `test_unset_env_var_becomes_empty`: reference an
   env var that is not set; assert the substituted value is `"Bearer "` (empty
   replacement). Clean up with `std::env::remove_var` in both tests.
 
-- [ ] **GREEN:** Add `apply_env_substitution(s: &str) -> String` to `config.rs`:
+- [x] **GREEN:** Add `apply_env_substitution(s: &str) -> String` to `config.rs`:
   ```rust
   fn apply_env_substitution(s: &str) -> String {
       let mut result = s.to_string();
@@ -117,14 +119,14 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Cycle 4 — Global + project merge
 
-- [ ] **RED:** Write `test_project_overrides_global`: build two `ClientConfig`
+- [x] **RED:** Write `test_project_overrides_global`: build two `ClientConfig`
   values in memory (or parse two JSON strings) where both define a server named
   `"myserver"` with different URLs. Call a `merge(global, project) -> ClientConfig`
   helper. Assert the returned config uses the project URL, not the global URL.
   Also write `test_merge_adds_project_only_servers`: global has `"serverA"`,
   project has `"serverB"`; merged result has both.
 
-- [ ] **GREEN:** Add `fn merge(global: ClientConfig, project: ClientConfig) -> ClientConfig`:
+- [x] **GREEN:** Add `fn merge(global: ClientConfig, project: ClientConfig) -> ClientConfig`:
   ```rust
   fn merge(mut global: ClientConfig, project: ClientConfig) -> ClientConfig {
       for (name, server) in project.mcp {
@@ -137,7 +139,7 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Cycle 5 — File loading
 
-- [ ] **RED:** Write `test_load_from_files_with_project_override` using real temp
+- [x] **RED:** Write `test_load_from_files_with_project_override` using real temp
   files:
   ```rust
   use std::io::Write;
@@ -153,7 +155,7 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
   let _ = std::fs::remove_file(&project_path);
   ```
 
-- [ ] **GREEN:** Add `pub fn load_from_files`:
+- [x] **GREEN:** Add `pub fn load_from_files`:
   ```rust
   pub fn load_from_files(
       global: Option<&std::path::Path>,
@@ -178,25 +180,25 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Cycle 6 — Missing files are silently skipped
 
-- [ ] **RED:** Write `test_missing_files_skipped`: call `load_from_files` with
+- [x] **RED:** Write `test_missing_files_skipped`: call `load_from_files` with
   paths that do not exist. Assert the result is an empty config
   (`config.mcp.is_empty() == true`) and no panic occurs.
 
-- [ ] **GREEN:** The `NotFound` branch in `read_file` from Cycle 5 already handles
+- [x] **GREEN:** The `NotFound` branch in `read_file` from Cycle 5 already handles
   this. Confirm the test passes with no code changes.
 
 ### Cycle 7 — Malformed config falls back gracefully
 
-- [ ] **RED:** Write `test_malformed_config_falls_back`: write `"not valid json"`
+- [x] **RED:** Write `test_malformed_config_falls_back`: write `"not valid json"`
   to a temp file, call `load_from_files` with it as the project path. Assert the
   result is an empty config and the process does not panic.
 
-- [ ] **GREEN:** The `parse_from_str` fallback to `ClientConfig::default()` from
+- [x] **GREEN:** The `parse_from_str` fallback to `ClientConfig::default()` from
   Cycle 1 already handles this. Confirm the test passes with no code changes.
 
 ### Final wiring — `load()` public entry point
 
-- [ ] Implement `pub fn load() -> ClientConfig` that resolves standard paths and
+- [x] Implement `pub fn load() -> ClientConfig` that resolves standard paths and
   delegates to `load_from_files`:
   ```rust
   pub fn load() -> ClientConfig {
@@ -225,6 +227,6 @@ change any command functions, the CLI flag, or the `McpClient::connect` signatur
 
 ### Verify and commit
 
-- [ ] Run `cargo test -p cast-mcp-client` — all tests (old and new) green
-- [ ] Run `cargo clippy -p cast-mcp-client -- -D warnings` — no warnings
-- [ ] Commit: `feat(mcp-client): add config module with loading and env substitution`
+- [x] Run `cargo test -p cast-mcp-client` — all tests (old and new) green
+- [x] Run `cargo clippy -p cast-mcp-client -- -D warnings` — no warnings
+- [x] Commit: `feat(mcp-client): add config module with loading and env substitution`
