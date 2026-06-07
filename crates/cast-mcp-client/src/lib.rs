@@ -4,6 +4,8 @@ use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::{ClientHandler, Peer, RoleClient, ServiceExt};
 
+pub mod config;
+
 /// Resolve the MCP server URL based on the following priority:
 /// 1. Explicitly provided `url` flag.
 /// 2. `CAST_MCP_URL` environment variable (typically injected by `cast run`).
