@@ -1,0 +1,19 @@
+{
+  "sync": {
+    "artifacts": [
+      "./spec/**/*"
+    ],
+    "include": [],
+    "instructions": null
+  },
+  "default": {
+    "artifacts": [
+      "./spec/index.md",
+      "./spec/log.md",
+      "./spec/plan.md",
+      "./spec/todo.md"
+    ],
+    "include": [],
+    "instructions": null
+  }
+}

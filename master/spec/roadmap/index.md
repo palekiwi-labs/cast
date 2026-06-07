@@ -5,6 +5,7 @@ This document tracks potential enhancements and features that could be added to 
 ## Security
 
 ## `cast config allow/deny`
+**status:** DONE
 
 see: `.mem/master/spec/roadmap/cast-config-allow-deny.md`
 

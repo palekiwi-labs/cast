@@ -50,3 +50,21 @@ Implemented the safety harness in exec.rs by explicitly setting stdin to null. A
 - **Found:** hostname configuration support in McpConfig
 - **Found:** Implicit inheritance of PATH and TMPDIR for tool execution
 
+## [d2576d8] Resolved Workspace Merge Conflicts and Restored Doc Tools
+
+Successfully resolved merge conflicts between 'feat/mcp-docs-tool' and the workspace-restructured 'dev' branch.
+
+Key actions:
+- Converted root Cargo.toml to a Workspace manifest.
+- Moved docs/ directory to crates/cast/docs/ to satisfy include_dir! macro within the cast crate.
+- Merged Nix source filter logic in flake.nix to include documentation in the build sandbox.
+- Added include_dir dependency to crates/cast/Cargo.toml.
+- Verified doc tools via 'cargo test -p cast documentation'.
+
+The project is now a clean workspace with built-in MCP documentation serving functional.
+
+- **Found:** include_dir macro expects paths relative to CARGO_MANIFEST_DIR
+- **Found:** Nix build requires explicit inclusion of non-source files via filter when cleanSource is used
+- **Decided:** Use Cargo Workspace for all future developments
+- **Decided:** Keep documentation within the crate that serves it (crates/cast/docs)
+

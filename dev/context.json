@@ -1,0 +1,7 @@
+{
+  "default": {
+    "artifacts": [],
+    "include": ["@master"],
+    "instructions": null
+  }
+}

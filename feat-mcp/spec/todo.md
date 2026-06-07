@@ -38,7 +38,7 @@
 - [x] Improve observability with `tracing::error!` logging for internal execution failures.
 
 ## Slice 5: Server Infrastructure & CLI Wire-up
-- [ ] Implement `tokio` runtime and `axum` server setup configuring `host.docker.internal` in `src/commands/mcp/server.rs`.
-- [ ] Register `Mcp` subcommand in `src/commands/cli.rs`.
-- [ ] Implement `ApprovedConfig` verification gate in `src/commands/mod.rs` for `mcp start`.
-- [ ] Commit: `feat(cli): add mcp start subcommand with approved config gate`
+- [x] Implement `tokio` runtime and `axum` server setup configuring `host.docker.internal` in `src/commands/mcp/server.rs`.
+- [x] Register `Mcp` subcommand in `src/commands/cli.rs`.
+- [x] Implement `ApprovedConfig` verification gate in `src/commands/mod.rs` for `mcp start`.
+- [x] Commit: `feat(cli): add mcp start subcommand with approved config gate`
