@@ -8,7 +8,7 @@
   "mcp": {
     "mcp-cast": {
       "type": "remote",
-      "url": "{env:CAST_MCP_CLIENT_URL}",
+      "url": "{env:CAST_MCP_URL}",
       "enabled": true
     }
   },

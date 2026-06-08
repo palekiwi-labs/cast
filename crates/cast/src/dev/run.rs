@@ -167,7 +167,7 @@ pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
 
     // MCP server URL injection.
     let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
-    run_args.extend(["-e".to_string(), format!("CAST_MCP_CLIENT_URL={}", mcp_url)]);
+    run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
 
     // Nix store.
     run_args.extend([
@@ -266,8 +266,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(run_args
-            .contains(&"CAST_MCP_CLIENT_URL=http://host.docker.internal:8080/mcp".to_string()));
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -294,8 +293,7 @@ mod tests {
         };
 
         let run_args = build_run_opts(&config, &opts);
-        assert!(run_args
-            .contains(&"CAST_MCP_CLIENT_URL=http://host.docker.internal:9000/mcp".to_string()));
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]
