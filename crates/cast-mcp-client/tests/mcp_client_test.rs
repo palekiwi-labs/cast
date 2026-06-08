@@ -742,6 +742,58 @@ async fn test_routing_unknown_server_fails() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// S7 — list: handle unreachable servers gracefully
+// ---------------------------------------------------------------------------
+
+/// One reachable + one unreachable server:
+/// - stdout lists only the reachable server's tools
+/// - stderr contains a warning mentioning the unreachable server name
+/// - exit code is 0
+#[tokio::test]
+async fn test_list_ignores_unreachable_server() -> anyhow::Result<()> {
+    let (good_url, ct) = spawn_mock_server().await?;
+
+    // Use a port that is not bound — guaranteed to be unreachable
+    let bad_url = "http://127.0.0.1:1/mcp";
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(
+            r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,
+        ),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("list")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().clone();
+
+        // stdout: only the good server's tool
+        let json: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON");
+        assert!(json.is_array());
+        let tools = json.as_array().unwrap();
+        assert_eq!(tools.len(), 1, "only the reachable server's tools should appear");
+        assert_eq!(tools[0]["name"], "good/dummy_tool");
+
+        // stderr: a warning mentioning the bad server
+        let stderr = std::str::from_utf8(&output.stderr).expect("stderr should be UTF-8");
+        assert!(
+            stderr.contains("bad"),
+            "stderr should warn about the unreachable server 'bad', got: {stderr}"
+        );
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
 /// When no --cast-mcp-url flag is passed, `list` should read the project-local
 /// cast-mcp-client.json and connect to the server configured there.
 #[tokio::test]

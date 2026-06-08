@@ -219,31 +219,37 @@ pub async fn list_tools_cmd(
     }
 
     // Query all target servers concurrently.
+    // Each future resolves to (server_name, Result<Vec<Tool>>) so errors can be
+    // attributed to the specific server that failed.
     let futures: Vec<_> = targets
         .into_iter()
         .map(|(name, server)| async move {
-            let client = McpClient::connect(&server).await?;
-            let tools = client.list_tools().await?;
-            client.shutdown().await?;
-            // Prefix each tool name with "server_name/"
-            let prefixed: Vec<Tool> = tools
-                .into_iter()
-                .map(|mut t| {
-                    t.name = format!("{}/{}", name, t.name).into();
-                    t
-                })
-                .collect();
-            Ok::<Vec<Tool>, anyhow::Error>(prefixed)
+            let result: anyhow::Result<Vec<Tool>> = async {
+                let client = McpClient::connect(&server).await?;
+                let tools = client.list_tools().await?;
+                client.shutdown().await?;
+                // Prefix each tool name with "server_name/"
+                let prefixed: Vec<Tool> = tools
+                    .into_iter()
+                    .map(|mut t| {
+                        t.name = format!("{}/{}", name, t.name).into();
+                        t
+                    })
+                    .collect();
+                Ok(prefixed)
+            }
+            .await;
+            (name, result)
         })
         .collect();
 
     let results = futures::future::join_all(futures).await;
 
     let mut all_tools: Vec<Tool> = Vec::new();
-    for result in results {
+    for (server_name, result) in results {
         match result {
             Ok(tools) => all_tools.extend(tools),
-            Err(e) => eprintln!("Warning: {}", e),
+            Err(e) => eprintln!("Warning: server '{}' is unreachable: {}", server_name, e),
         }
     }
 
