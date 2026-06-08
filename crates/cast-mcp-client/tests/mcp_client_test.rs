@@ -164,13 +164,13 @@ async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
         }
     });
 
-    // 2. Invoke `cast mcp list --url <mock_url>` as a subprocess.
+    // 2. Invoke `cast mcp list --cast-mcp-url <mock_url>` as a subprocess.
     // spawn_blocking prevents executor starvation: without it, the blocking
     // assert() would starve the Tokio reactor, preventing the mock server from
     // processing the client's delete_session cleanup request, causing a deadlock.
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["list", "--url", &url]);
+    cmd.args(["list", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -210,11 +210,11 @@ async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
         }
     });
 
-    // 2. Invoke `cast mcp describe dummy_tool --url <mock_url>` as a subprocess.
+    // 2. Invoke `cast mcp describe dummy_tool --cast-mcp-url <mock_url>` as a subprocess.
     // spawn_blocking prevents executor starvation (same pattern as list test).
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["describe", "dummy_tool", "--url", &url]);
+    cmd.args(["describe", "dummy_tool", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -255,7 +255,7 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
     // 2. Ask for a tool that does not exist — expect a non-zero exit with a helpful message.
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["describe", "nonexistent_tool", "--url", &url]);
+    cmd.args(["describe", "nonexistent_tool", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().failure().get_output().stderr.clone();
@@ -309,7 +309,7 @@ async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
         "call",
         "dummy_tool",
         r#"{"message": "hello"}"#,
-        "--url",
+        "--cast-mcp-url",
         &url,
     ]);
 
@@ -337,7 +337,7 @@ async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "dummy_tool", "-", "--url", &url])
+    cmd.args(["call", "dummy_tool", "-", "--cast-mcp-url", &url])
         .write_stdin(r#"{"message": "from stdin"}"#);
 
     tokio::task::spawn_blocking(move || {
@@ -364,7 +364,7 @@ async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "nonexistent_tool", "{}", "--url", &url]);
+    cmd.args(["call", "nonexistent_tool", "{}", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert().failure();
@@ -380,7 +380,7 @@ async fn test_mcp_call_tool_error_in_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "error_tool", "{}", "--url", &url]);
+    cmd.args(["call", "error_tool", "{}", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -405,7 +405,7 @@ async fn test_mcp_list_stdout_is_clean_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["list", "--url", &url]);
+    cmd.args(["list", "--cast-mcp-url", &url]);
     cmd.env("RUST_LOG", "debug");
 
     tokio::task::spawn_blocking(move || {
@@ -480,6 +480,41 @@ async fn test_headers_are_sent_to_server() -> anyhow::Result<()> {
     // Verify the header was received by the server
     let val = captured.lock().unwrap().clone();
     assert_eq!(val.as_deref(), Some("test-secret"));
+
+    ct.cancel();
+    Ok(())
+}
+
+/// When no --cast-mcp-url flag is passed, `list` should read the project-local
+/// cast-mcp-client.json and connect to the server configured there.
+#[tokio::test]
+async fn test_list_reads_project_config() -> anyhow::Result<()> {
+    // 1. Spawn a mock server
+    let (url, ct) = spawn_mock_server().await?;
+
+    // 2. Write a project-local config pointing at the mock server
+    let tmpdir = tempfile::tempdir()?;
+    let config_path = tmpdir.path().join("cast-mcp-client.json");
+    std::fs::write(
+        &config_path,
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    // 3. Run `list` without --cast-mcp-url; config should supply the URL.
+    // Unset CAST_MCP_URL so the ambient cast-injected env var does not override the config.
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("list")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_array());
+        assert_eq!(json[0]["name"], "dummy_tool");
+    })
+    .await?;
 
     ct.cancel();
     Ok(())

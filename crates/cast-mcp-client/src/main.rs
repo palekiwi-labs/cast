@@ -1,4 +1,8 @@
-use cast_mcp_client::{call_tool_cmd, describe_tool_cmd, list_tools_cmd, print_json_error};
+use cast_mcp_client::{
+    build_server_map, call_tool_cmd, describe_tool_cmd, list_tools_cmd, print_json_error,
+    resolve_cast_mcp_url,
+};
+use cast_mcp_client::config;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -13,18 +17,22 @@ struct Cli {
 enum Commands {
     /// List tools exposed by the MCP server
     List {
-        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        /// Cast MCP server URL (overrides CAST_MCP_URL env and config)
         #[arg(long)]
-        url: Option<String>,
+        cast_mcp_url: Option<String>,
+
+        /// Filter tools to a specific server by name
+        #[arg(long)]
+        server: Option<String>,
     },
     /// Show the input schema for a specific MCP tool
     Describe {
         /// Name of the tool to inspect
         tool_name: String,
 
-        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        /// Cast MCP server URL (overrides CAST_MCP_URL env and config)
         #[arg(long)]
-        url: Option<String>,
+        cast_mcp_url: Option<String>,
     },
     /// Call a tool on the MCP server with JSON arguments
     Call {
@@ -36,9 +44,9 @@ enum Commands {
         #[arg(value_name = "JSON")]
         params: Option<String>,
 
-        /// MCP server URL (overrides CAST_MCP_URL env and default)
+        /// Cast MCP server URL (overrides CAST_MCP_URL env and config)
         #[arg(long)]
-        url: Option<String>,
+        cast_mcp_url: Option<String>,
     },
 }
 
@@ -46,14 +54,37 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
+    // Load config from disk (global + project-local); env substitution applied inside.
+    let cfg = config::load();
+    // Read CAST_MCP_URL at the binary boundary and pass it as a pure value.
+    let env_url = std::env::var("CAST_MCP_URL").ok();
+
     let result = match cli.command {
-        Commands::List { url } => list_tools_cmd(url).await,
-        Commands::Describe { tool_name, url } => describe_tool_cmd(tool_name, url).await,
+        Commands::List {
+            cast_mcp_url,
+            server,
+        } => {
+            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
+            let server_map = build_server_map(cast_url, &cfg);
+            list_tools_cmd(server_map, server).await
+        }
+        Commands::Describe {
+            tool_name,
+            cast_mcp_url,
+        } => {
+            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
+            let server_map = build_server_map(cast_url, &cfg);
+            describe_tool_cmd(tool_name, server_map).await
+        }
         Commands::Call {
             tool_name,
             params,
-            url,
-        } => call_tool_cmd(tool_name, params, url).await,
+            cast_mcp_url,
+        } => {
+            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
+            let server_map = build_server_map(cast_url, &cfg);
+            call_tool_cmd(tool_name, params, server_map).await
+        }
     };
 
     if let Err(err) = result {

@@ -178,26 +178,39 @@ impl McpClient {
     }
 }
 
-pub async fn list_tools_cmd(url: Option<String>) -> anyhow::Result<()> {
-    let url = resolve_server_url(url);
-    let server = config::RemoteServerConfig {
-        url,
-        headers: HashMap::new(),
-        enabled: true,
-    };
+/// Resolve the first available server from the server map.
+///
+/// Prefers "cast" if present, otherwise takes the first entry.
+/// Returns an error if the map is empty.
+fn pick_server(
+    server_map: &HashMap<String, config::RemoteServerConfig>,
+) -> anyhow::Result<config::RemoteServerConfig> {
+    if let Some(s) = server_map.get("cast") {
+        return Ok(s.clone());
+    }
+    server_map
+        .values()
+        .next()
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("No servers configured. Pass --cast-mcp-url or add a server to cast-mcp-client.json."))
+}
+
+pub async fn list_tools_cmd(
+    server_map: HashMap<String, config::RemoteServerConfig>,
+    _server_filter: Option<String>,
+) -> anyhow::Result<()> {
+    let server = pick_server(&server_map)?;
     let mcp_client = McpClient::connect(&server).await?;
     let tools = mcp_client.list_tools().await?;
     println!("{}", serde_json::to_string_pretty(&tools)?);
     mcp_client.shutdown().await
 }
 
-pub async fn describe_tool_cmd(tool_name: String, url: Option<String>) -> anyhow::Result<()> {
-    let url = resolve_server_url(url);
-    let server = config::RemoteServerConfig {
-        url,
-        headers: HashMap::new(),
-        enabled: true,
-    };
+pub async fn describe_tool_cmd(
+    tool_name: String,
+    server_map: HashMap<String, config::RemoteServerConfig>,
+) -> anyhow::Result<()> {
+    let server = pick_server(&server_map)?;
     let mcp_client = McpClient::connect(&server).await?;
     let tools = mcp_client.list_tools().await?;
 
@@ -232,16 +245,11 @@ pub fn print_json_error(code: &str, message: &str) {
 pub async fn call_tool_cmd(
     tool_name: String,
     params: Option<String>,
-    url: Option<String>,
+    server_map: HashMap<String, config::RemoteServerConfig>,
 ) -> anyhow::Result<()> {
     let arguments = read_params(params)?;
 
-    let url = resolve_server_url(url);
-    let server = config::RemoteServerConfig {
-        url,
-        headers: HashMap::new(),
-        enabled: true,
-    };
+    let server = pick_server(&server_map)?;
     let mcp_client = McpClient::connect(&server).await?;
     let result = mcp_client.call_tool(tool_name.clone(), arguments).await?;
 
