@@ -25,6 +25,78 @@ pub fn resolve_server_url(explicit_url: Option<String>) -> String {
     "http://127.0.0.1:8080/mcp".to_string()
 }
 
+/// Build the active server map from config, optionally injecting a cast URL from flag/env.
+///
+/// - All config entries with `enabled: true` are included (except `"cast"`, which is special).
+/// - If `cast_url` is `Some(url)` (sourced from CLI flag or env var), a bare `"cast"` entry is
+///   injected with that URL and no headers, overriding any `"cast"` entry in the config.
+/// - If `cast_url` is `None`, the config's `"cast"` entry is included as-is (with its headers).
+pub fn build_server_map(
+    cast_url: Option<String>,
+    config: &config::ClientConfig,
+) -> std::collections::HashMap<String, config::RemoteServerConfig> {
+    let mut map = std::collections::HashMap::new();
+
+    // Include all enabled non-cast entries from config
+    for (name, server) in &config.mcp {
+        if name == "cast" {
+            continue; // handled separately below
+        }
+        if server.enabled {
+            map.insert(name.clone(), server.clone());
+        }
+    }
+
+    // Resolve the "cast" entry
+    match cast_url {
+        Some(url) => {
+            // URL came from flag/env — inject bare entry, no headers
+            map.insert(
+                "cast".to_string(),
+                config::RemoteServerConfig {
+                    url,
+                    headers: std::collections::HashMap::new(),
+                    enabled: true,
+                },
+            );
+        }
+        None => {
+            // URL from config (if present and enabled) — use full entry including headers
+            if let Some(server) = config.mcp.get("cast")
+                && server.enabled
+            {
+                map.insert("cast".to_string(), server.clone());
+            }
+        }
+    }
+
+    map
+}
+
+/// Resolve the cast server URL for the multi-server client, with priority:
+/// 1. Explicit `--cast-mcp-url` CLI flag value.
+/// 2. `CAST_MCP_CLIENT_URL` environment variable (injected by `cast run`).
+/// 3. `mcp.cast.url` from the loaded config file.
+///
+/// Returns `None` if no source provides a URL (cast server is simply absent).
+pub fn resolve_cast_mcp_url(
+    explicit: Option<String>,
+    config: &config::ClientConfig,
+) -> Option<String> {
+    // 1. CLI flag
+    if let Some(url) = explicit {
+        return Some(url);
+    }
+
+    // 2. Environment variable
+    if let Ok(url) = std::env::var("CAST_MCP_CLIENT_URL") {
+        return Some(url);
+    }
+
+    // 3. Config file entry
+    config.mcp.get("cast").map(|s| s.url.clone())
+}
+
 /// A minimal handler to manage client-side callbacks (e.g., logging or sampling).
 /// Required by the `rmcp` crate to serve as a client service.
 #[derive(Clone, Debug, Default)]
@@ -199,6 +271,10 @@ pub fn read_params(
 mod tests {
     use super::*;
     use std::env;
+    use std::sync::Mutex;
+
+    // Serialise all tests that touch CAST_MCP_CLIENT_URL to prevent parallel races.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_resolve_explicit_url() {
@@ -216,5 +292,118 @@ mod tests {
             env::remove_var("CAST_MCP_URL");
         }
         assert_eq!(result, "http://env.com/mcp");
+    }
+
+    // --- resolve_cast_mcp_url ---
+
+    #[test]
+    fn test_resolve_cast_mcp_url_flag_wins_over_env_and_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            env::set_var("CAST_MCP_CLIENT_URL", "http://env.com/mcp");
+        }
+        let config = config::parse_from_str(
+            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
+        );
+        let result = resolve_cast_mcp_url(Some("http://flag.com/mcp".to_string()), &config);
+        unsafe {
+            env::remove_var("CAST_MCP_CLIENT_URL");
+        }
+        assert_eq!(result, Some("http://flag.com/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_cast_mcp_url_env_wins_over_config() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            env::set_var("CAST_MCP_CLIENT_URL", "http://env.com/mcp");
+        }
+        let config = config::parse_from_str(
+            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
+        );
+        let result = resolve_cast_mcp_url(None, &config);
+        unsafe {
+            env::remove_var("CAST_MCP_CLIENT_URL");
+        }
+        assert_eq!(result, Some("http://env.com/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_cast_mcp_url_config_is_fallback() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            env::remove_var("CAST_MCP_CLIENT_URL");
+        }
+        let config = config::parse_from_str(
+            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
+        );
+        let result = resolve_cast_mcp_url(None, &config);
+        assert_eq!(result, Some("http://config.com/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_cast_mcp_url_returns_none_when_no_source() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            env::remove_var("CAST_MCP_CLIENT_URL");
+        }
+        let config = config::ClientConfig::default();
+        let result = resolve_cast_mcp_url(None, &config);
+        assert_eq!(result, None);
+    }
+
+    // --- build_server_map ---
+
+    #[test]
+    fn test_build_server_map_includes_enabled_servers() {
+        let config = config::parse_from_str(
+            r#"{"mcp":{"sentry":{"url":"http://sentry.com/mcp"},"ctx7":{"url":"http://ctx7.com/mcp"}}}"#,
+        );
+        let map = build_server_map(None, &config);
+        assert_eq!(map.len(), 2);
+        assert!(map.contains_key("sentry"));
+        assert!(map.contains_key("ctx7"));
+    }
+
+    #[test]
+    fn test_build_server_map_excludes_disabled_servers() {
+        let config = config::parse_from_str(
+            r#"{"mcp":{"sentry":{"url":"http://sentry.com/mcp"},"ctx7":{"url":"http://ctx7.com/mcp","enabled":false}}}"#,
+        );
+        let map = build_server_map(None, &config);
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("sentry"));
+        assert!(!map.contains_key("ctx7"));
+    }
+
+    #[test]
+    fn test_build_server_map_injects_bare_cast_entry_when_url_from_flag_or_env() {
+        // Config has a "cast" entry with a header — flag/env URL must override it (no headers)
+        let config = config::parse_from_str(
+            r#"{"mcp":{"cast":{"url":"http://config.com/mcp","headers":{"X-Token":"secret"}}}}"#,
+        );
+        let map = build_server_map(Some("http://flag.com/mcp".to_string()), &config);
+        let cast = map.get("cast").expect("cast entry should be present");
+        assert_eq!(cast.url, "http://flag.com/mcp");
+        assert!(cast.headers.is_empty(), "headers must be stripped when URL comes from flag/env");
+    }
+
+    #[test]
+    fn test_build_server_map_preserves_full_cast_entry_when_url_from_config() {
+        // No explicit URL provided — config entry (including headers) should be used as-is
+        let config = config::parse_from_str(
+            r#"{"mcp":{"cast":{"url":"http://config.com/mcp","headers":{"X-Token":"secret"}}}}"#,
+        );
+        let map = build_server_map(None, &config);
+        let cast = map.get("cast").expect("cast entry should be present");
+        assert_eq!(cast.url, "http://config.com/mcp");
+        assert_eq!(cast.headers.get("X-Token").map(String::as_str), Some("secret"));
+    }
+
+    #[test]
+    fn test_build_server_map_empty_when_no_servers() {
+        let config = config::ClientConfig::default();
+        let map = build_server_map(None, &config);
+        assert!(map.is_empty());
     }
 }
