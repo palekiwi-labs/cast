@@ -208,7 +208,7 @@ async fn test_mcp_describe_subcommand_output() -> anyhow::Result<()> {
     // spawn_blocking prevents executor starvation (same pattern as list test).
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["describe", "dummy_tool", "--cast-mcp-url", &url]);
+    cmd.args(["describe", "cast/dummy_tool", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -249,7 +249,7 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
     // 2. Ask for a tool that does not exist — expect a non-zero exit with a helpful message.
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["describe", "nonexistent_tool", "--cast-mcp-url", &url]);
+    cmd.args(["describe", "cast/nonexistent_tool", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().failure().get_output().stderr.clone();
@@ -301,7 +301,7 @@ async fn test_mcp_call_inline_json() -> anyhow::Result<()> {
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
     cmd.args([
         "call",
-        "dummy_tool",
+        "cast/dummy_tool",
         r#"{"message": "hello"}"#,
         "--cast-mcp-url",
         &url,
@@ -331,7 +331,7 @@ async fn test_mcp_call_stdin_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "dummy_tool", "-", "--cast-mcp-url", &url])
+    cmd.args(["call", "cast/dummy_tool", "-", "--cast-mcp-url", &url])
         .write_stdin(r#"{"message": "from stdin"}"#);
 
     tokio::task::spawn_blocking(move || {
@@ -358,7 +358,7 @@ async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "nonexistent_tool", "{}", "--cast-mcp-url", &url]);
+    cmd.args(["call", "cast/nonexistent_tool", "{}", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert().failure();
@@ -374,7 +374,7 @@ async fn test_mcp_call_tool_error_in_json() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "error_tool", "{}", "--cast-mcp-url", &url]);
+    cmd.args(["call", "cast/error_tool", "{}", "--cast-mcp-url", &url]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().success().get_output().stdout.clone();
@@ -599,6 +599,141 @@ async fn test_list_unknown_server_fails() -> anyhow::Result<()> {
         assert!(json["error"]["message"]
             .as_str()
             .unwrap()
+            .contains("ghost"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// S6 — describe/call: server/tool format + routing
+// ---------------------------------------------------------------------------
+
+/// `describe cast/dummy_tool` succeeds; stdout has bare name "dummy_tool" (no prefix in describe output).
+#[tokio::test]
+async fn test_describe_server_slash_tool_format() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["describe", "cast/dummy_tool"])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_object());
+        // describe returns the raw tool object — name is bare (not prefixed)
+        assert_eq!(json["name"], "dummy_tool");
+        assert_eq!(json["description"], "A mock tool for integration testing");
+        assert!(json["inputSchema"]["properties"]["message"].is_object());
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// `call cast/dummy_tool '{"message":"hello"}'` succeeds and echoes correctly.
+#[tokio::test]
+async fn test_call_server_slash_tool_format() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["call", "cast/dummy_tool", r#"{"message":"hello"}"#])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert_eq!(json["content"][0]["type"], "text");
+        assert!(json["content"][0]["text"]
+            .as_str()
+            .expect("content should be text")
+            .contains("echo: hello"));
+        assert!(json["isError"].is_null() || json["isError"] == false);
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// `describe dummy_tool` (no slash) → failure with COMMAND_ERROR mentioning "server/tool".
+#[tokio::test]
+async fn test_routing_no_separator_fails() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["describe", "dummy_tool"])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let stderr = cmd.assert().failure().get_output().stderr.clone();
+        let s = std::str::from_utf8(&stderr).unwrap().trim().to_string();
+        let json: serde_json::Value =
+            serde_json::from_str(&s).expect("stderr should be valid JSON");
+        assert_eq!(json["error"]["code"], "COMMAND_ERROR");
+        assert!(json["error"]["message"]
+            .as_str()
+            .expect("error message should be a string")
+            .contains("server/tool"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// `describe ghost/dummy_tool` (unknown server) → failure with COMMAND_ERROR mentioning "ghost".
+#[tokio::test]
+async fn test_routing_unknown_server_fails() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["describe", "ghost/dummy_tool"])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let stderr = cmd.assert().failure().get_output().stderr.clone();
+        let s = std::str::from_utf8(&stderr).unwrap().trim().to_string();
+        let json: serde_json::Value =
+            serde_json::from_str(&s).expect("stderr should be valid JSON");
+        assert_eq!(json["error"]["code"], "COMMAND_ERROR");
+        assert!(json["error"]["message"]
+            .as_str()
+            .expect("error message should be a string")
             .contains("ghost"));
     })
     .await?;

@@ -178,21 +178,17 @@ impl McpClient {
     }
 }
 
-/// Resolve the first available server from the server map.
+/// Split a `"server/tool"` reference into `(server_name, tool_name)`.
 ///
-/// Prefers "cast" if present, otherwise takes the first entry.
-/// Returns an error if the map is empty.
-fn pick_server(
-    server_map: &HashMap<String, config::RemoteServerConfig>,
-) -> anyhow::Result<config::RemoteServerConfig> {
-    if let Some(s) = server_map.get("cast") {
-        return Ok(s.clone());
-    }
-    server_map
-        .values()
-        .next()
-        .cloned()
-        .ok_or_else(|| anyhow::anyhow!("No servers configured. Pass --cast-mcp-url or add a server to cast-mcp-client.json."))
+/// Returns an error if there is no `/` separator, guiding the caller to use
+/// the correct `server/tool` format.
+fn parse_server_tool(reference: &str) -> anyhow::Result<(&str, &str)> {
+    reference.split_once('/').ok_or_else(|| {
+        anyhow::anyhow!(
+            "Tool reference must be in 'server/tool' format (got '{}').",
+            reference
+        )
+    })
 }
 
 pub async fn list_tools_cmd(
@@ -256,20 +252,29 @@ pub async fn list_tools_cmd(
 }
 
 pub async fn describe_tool_cmd(
-    tool_name: String,
+    tool_ref: String,
     server_map: HashMap<String, config::RemoteServerConfig>,
 ) -> anyhow::Result<()> {
-    let server = pick_server(&server_map)?;
-    let mcp_client = McpClient::connect(&server).await?;
+    let (server_name, bare_tool) = parse_server_tool(&tool_ref)?;
+
+    let server = server_map.get(server_name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown server '{}'. Check your cast-mcp-client.json or pass --cast-mcp-url.",
+            server_name
+        )
+    })?;
+
+    let mcp_client = McpClient::connect(server).await?;
     let tools = mcp_client.list_tools().await?;
 
     let tool = tools
         .into_iter()
-        .find(|t| t.name == tool_name)
+        .find(|t| t.name == bare_tool)
         .ok_or_else(|| {
             anyhow::anyhow!(
-                "Unknown tool '{}'. Run 'cast-mcp-client list' to see available tools.",
-                tool_name
+                "Unknown tool '{}' on server '{}'. Run 'cast-mcp-client list' to see available tools.",
+                bare_tool,
+                server_name
             )
         })?;
 
@@ -292,15 +297,22 @@ pub fn print_json_error(code: &str, message: &str) {
 }
 
 pub async fn call_tool_cmd(
-    tool_name: String,
+    tool_ref: String,
     params: Option<String>,
     server_map: HashMap<String, config::RemoteServerConfig>,
 ) -> anyhow::Result<()> {
-    let arguments = read_params(params)?;
+    let (server_name, bare_tool) = parse_server_tool(&tool_ref)?;
 
-    let server = pick_server(&server_map)?;
-    let mcp_client = McpClient::connect(&server).await?;
-    let result = mcp_client.call_tool(tool_name.clone(), arguments).await?;
+    let server = server_map.get(server_name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown server '{}'. Check your cast-mcp-client.json or pass --cast-mcp-url.",
+            server_name
+        )
+    })?;
+
+    let arguments = read_params(params)?;
+    let mcp_client = McpClient::connect(server).await?;
+    let result = mcp_client.call_tool(bare_tool.to_string(), arguments).await?;
 
     println!("{}", serde_json::to_string_pretty(&result)?);
 
