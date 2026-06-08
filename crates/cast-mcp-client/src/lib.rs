@@ -75,26 +75,21 @@ pub fn build_server_map(
 
 /// Resolve the cast server URL for the multi-server client, with priority:
 /// 1. Explicit `--cast-mcp-url` CLI flag value.
-/// 2. `CAST_MCP_CLIENT_URL` environment variable (injected by `cast run`).
+/// 2. `CAST_MCP_CLIENT_URL` environment variable (caller responsibility to read and pass in).
 /// 3. `mcp.cast.url` from the loaded config file.
 ///
 /// Returns `None` if no source provides a URL (cast server is simply absent).
+///
+/// This function is pure — it has no side effects and does not read the environment directly.
+/// The caller reads `std::env::var("CAST_MCP_CLIENT_URL").ok()` and passes it as `env_url`.
 pub fn resolve_cast_mcp_url(
     explicit: Option<String>,
+    env_url: Option<String>,
     config: &config::ClientConfig,
 ) -> Option<String> {
-    // 1. CLI flag
-    if let Some(url) = explicit {
-        return Some(url);
-    }
-
-    // 2. Environment variable
-    if let Ok(url) = std::env::var("CAST_MCP_CLIENT_URL") {
-        return Some(url);
-    }
-
-    // 3. Config file entry
-    config.mcp.get("cast").map(|s| s.url.clone())
+    explicit
+        .or(env_url)
+        .or_else(|| config.mcp.get("cast").map(|s| s.url.clone()))
 }
 
 /// A minimal handler to manage client-side callbacks (e.g., logging or sampling).
@@ -271,10 +266,6 @@ pub fn read_params(
 mod tests {
     use super::*;
     use std::env;
-    use std::sync::Mutex;
-
-    // Serialise all tests that touch CAST_MCP_CLIENT_URL to prevent parallel races.
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_resolve_explicit_url() {
@@ -298,57 +289,39 @@ mod tests {
 
     #[test]
     fn test_resolve_cast_mcp_url_flag_wins_over_env_and_config() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe {
-            env::set_var("CAST_MCP_CLIENT_URL", "http://env.com/mcp");
-        }
         let config = config::parse_from_str(
             r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
         );
-        let result = resolve_cast_mcp_url(Some("http://flag.com/mcp".to_string()), &config);
-        unsafe {
-            env::remove_var("CAST_MCP_CLIENT_URL");
-        }
+        let result = resolve_cast_mcp_url(
+            Some("http://flag.com/mcp".to_string()),
+            Some("http://env.com/mcp".to_string()),
+            &config,
+        );
         assert_eq!(result, Some("http://flag.com/mcp".to_string()));
     }
 
     #[test]
     fn test_resolve_cast_mcp_url_env_wins_over_config() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe {
-            env::set_var("CAST_MCP_CLIENT_URL", "http://env.com/mcp");
-        }
         let config = config::parse_from_str(
             r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
         );
-        let result = resolve_cast_mcp_url(None, &config);
-        unsafe {
-            env::remove_var("CAST_MCP_CLIENT_URL");
-        }
+        let result = resolve_cast_mcp_url(None, Some("http://env.com/mcp".to_string()), &config);
         assert_eq!(result, Some("http://env.com/mcp".to_string()));
     }
 
     #[test]
     fn test_resolve_cast_mcp_url_config_is_fallback() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe {
-            env::remove_var("CAST_MCP_CLIENT_URL");
-        }
         let config = config::parse_from_str(
             r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
         );
-        let result = resolve_cast_mcp_url(None, &config);
+        let result = resolve_cast_mcp_url(None, None, &config);
         assert_eq!(result, Some("http://config.com/mcp".to_string()));
     }
 
     #[test]
     fn test_resolve_cast_mcp_url_returns_none_when_no_source() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe {
-            env::remove_var("CAST_MCP_CLIENT_URL");
-        }
         let config = config::ClientConfig::default();
-        let result = resolve_cast_mcp_url(None, &config);
+        let result = resolve_cast_mcp_url(None, None, &config);
         assert_eq!(result, None);
     }
 
