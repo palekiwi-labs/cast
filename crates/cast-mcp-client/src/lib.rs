@@ -1,8 +1,11 @@
+use http::{HeaderName, HeaderValue};
 use rmcp::model::{ClientCapabilities, ClientInfo, Implementation, Tool};
 use rmcp::service::RunningService;
 use rmcp::transport::StreamableHttpClientTransport;
 use rmcp::transport::streamable_http_client::StreamableHttpClientTransportConfig;
 use rmcp::{ClientHandler, Peer, RoleClient, ServiceExt};
+use std::collections::HashMap;
+use std::str::FromStr;
 
 pub mod config;
 
@@ -34,8 +37,8 @@ pub fn resolve_server_url(explicit_url: Option<String>) -> String {
 pub fn build_server_map(
     cast_url: Option<String>,
     config: &config::ClientConfig,
-) -> std::collections::HashMap<String, config::RemoteServerConfig> {
-    let mut map = std::collections::HashMap::new();
+) -> HashMap<String, config::RemoteServerConfig> {
+    let mut map = HashMap::new();
 
     // Include all enabled non-cast entries from config
     for (name, server) in &config.mcp {
@@ -55,7 +58,7 @@ pub fn build_server_map(
                 "cast".to_string(),
                 config::RemoteServerConfig {
                     url,
-                    headers: std::collections::HashMap::new(),
+                    headers: HashMap::new(),
                     enabled: true,
                 },
             );
@@ -114,10 +117,23 @@ pub struct McpClient {
 
 impl McpClient {
     /// Connect to an MCP server and perform the initialization handshake.
-    pub async fn connect(url: &str) -> anyhow::Result<Self> {
-        // Configure standard SSE HttpClient transport with automatic recovery on expired sessions
-        let config =
-            StreamableHttpClientTransportConfig::with_uri(url).reinit_on_expired_session(true);
+    ///
+    /// Custom headers defined in `server.headers` are forwarded on every HTTP request.
+    /// Header values must already have `{env:VAR}` substitutions applied (see `config::parse_from_str`).
+    pub async fn connect(server: &config::RemoteServerConfig) -> anyhow::Result<Self> {
+        // Convert HashMap<String, String> → HashMap<HeaderName, HeaderValue> (required by rmcp)
+        let mut http_headers: HashMap<HeaderName, HeaderValue> = HashMap::new();
+        for (k, v) in &server.headers {
+            let name = HeaderName::from_str(k)
+                .map_err(|e| anyhow::anyhow!("invalid header name '{}': {}", k, e))?;
+            let value = HeaderValue::from_str(v)
+                .map_err(|e| anyhow::anyhow!("invalid header value for '{}': {}", k, e))?;
+            http_headers.insert(name, value);
+        }
+
+        let config = StreamableHttpClientTransportConfig::with_uri(server.url.as_str())
+            .custom_headers(http_headers)
+            .reinit_on_expired_session(true);
         let transport = StreamableHttpClientTransport::from_config(config);
 
         // Serving the client handler automatically triggers the standard JSON-RPC 2.0 handshake under the hood:
@@ -164,7 +180,12 @@ impl McpClient {
 
 pub async fn list_tools_cmd(url: Option<String>) -> anyhow::Result<()> {
     let url = resolve_server_url(url);
-    let mcp_client = McpClient::connect(&url).await?;
+    let server = config::RemoteServerConfig {
+        url,
+        headers: HashMap::new(),
+        enabled: true,
+    };
+    let mcp_client = McpClient::connect(&server).await?;
     let tools = mcp_client.list_tools().await?;
     println!("{}", serde_json::to_string_pretty(&tools)?);
     mcp_client.shutdown().await
@@ -172,7 +193,12 @@ pub async fn list_tools_cmd(url: Option<String>) -> anyhow::Result<()> {
 
 pub async fn describe_tool_cmd(tool_name: String, url: Option<String>) -> anyhow::Result<()> {
     let url = resolve_server_url(url);
-    let mcp_client = McpClient::connect(&url).await?;
+    let server = config::RemoteServerConfig {
+        url,
+        headers: HashMap::new(),
+        enabled: true,
+    };
+    let mcp_client = McpClient::connect(&server).await?;
     let tools = mcp_client.list_tools().await?;
 
     let tool = tools
@@ -211,7 +237,12 @@ pub async fn call_tool_cmd(
     let arguments = read_params(params)?;
 
     let url = resolve_server_url(url);
-    let mcp_client = McpClient::connect(&url).await?;
+    let server = config::RemoteServerConfig {
+        url,
+        headers: HashMap::new(),
+        enabled: true,
+    };
+    let mcp_client = McpClient::connect(&server).await?;
     let result = mcp_client.call_tool(tool_name.clone(), arguments).await?;
 
     println!("{}", serde_json::to_string_pretty(&result)?);
@@ -289,9 +320,7 @@ mod tests {
 
     #[test]
     fn test_resolve_cast_mcp_url_flag_wins_over_env_and_config() {
-        let config = config::parse_from_str(
-            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
-        );
+        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
         let result = resolve_cast_mcp_url(
             Some("http://flag.com/mcp".to_string()),
             Some("http://env.com/mcp".to_string()),
@@ -302,18 +331,14 @@ mod tests {
 
     #[test]
     fn test_resolve_cast_mcp_url_env_wins_over_config() {
-        let config = config::parse_from_str(
-            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
-        );
+        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
         let result = resolve_cast_mcp_url(None, Some("http://env.com/mcp".to_string()), &config);
         assert_eq!(result, Some("http://env.com/mcp".to_string()));
     }
 
     #[test]
     fn test_resolve_cast_mcp_url_config_is_fallback() {
-        let config = config::parse_from_str(
-            r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#,
-        );
+        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
         let result = resolve_cast_mcp_url(None, None, &config);
         assert_eq!(result, Some("http://config.com/mcp".to_string()));
     }
@@ -358,7 +383,10 @@ mod tests {
         let map = build_server_map(Some("http://flag.com/mcp".to_string()), &config);
         let cast = map.get("cast").expect("cast entry should be present");
         assert_eq!(cast.url, "http://flag.com/mcp");
-        assert!(cast.headers.is_empty(), "headers must be stripped when URL comes from flag/env");
+        assert!(
+            cast.headers.is_empty(),
+            "headers must be stripped when URL comes from flag/env"
+        );
     }
 
     #[test]
@@ -370,7 +398,10 @@ mod tests {
         let map = build_server_map(None, &config);
         let cast = map.get("cast").expect("cast entry should be present");
         assert_eq!(cast.url, "http://config.com/mcp");
-        assert_eq!(cast.headers.get("X-Token").map(String::as_str), Some("secret"));
+        assert_eq!(
+            cast.headers.get("X-Token").map(String::as_str),
+            Some("secret")
+        );
     }
 
     #[test]

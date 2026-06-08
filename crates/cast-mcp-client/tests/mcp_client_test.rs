@@ -1,4 +1,8 @@
 use assert_cmd::Command;
+use axum::extract::Request;
+use axum::middleware::Next;
+use cast_mcp_client::McpClient;
+use cast_mcp_client::config::RemoteServerConfig;
 use rmcp::{
     ErrorData as McpError, RoleServer, ServerHandler,
     model::{
@@ -10,11 +14,9 @@ use rmcp::{
         StreamableHttpServerConfig, StreamableHttpService, session::local::LocalSessionManager,
     },
 };
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
-
-// Import our client from the cast-mcp-client crate
-use cast_mcp_client::McpClient;
 
 /// Build a mock tool with a fully populated input schema for testing.
 fn make_mock_tool() -> Tool {
@@ -118,8 +120,12 @@ async fn test_mcp_client_handshake_and_discovery() -> anyhow::Result<()> {
     });
 
     // 2. Connect the McpClient to the mock server (performing handshake under the hood)
-    let server_url = format!("http://{addr}/mcp");
-    let client = McpClient::connect(&server_url).await?;
+    let server_cfg = RemoteServerConfig {
+        url: format!("http://{addr}/mcp"),
+        headers: HashMap::new(),
+        enabled: true,
+    };
+    let client = McpClient::connect(&server_cfg).await?;
 
     // 3. Verify discovery works (list_tools fetches tools from mock server)
     let tools = client.list_tools().await?;
@@ -408,6 +414,72 @@ async fn test_mcp_list_stdout_is_clean_json() -> anyhow::Result<()> {
             .expect("stdout should be valid JSON even with RUST_LOG=debug");
     })
     .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_headers_are_sent_to_server() -> anyhow::Result<()> {
+    // Shared storage for the captured header value
+    let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+
+    // MCP service
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+
+    // Middleware that captures the X-Test-Token header value
+    let router =
+        axum::Router::new()
+            .nest_service("/mcp", service)
+            .layer(axum::middleware::from_fn(
+                move |req: Request, next: Next| {
+                    let captured = captured_clone.clone();
+                    async move {
+                        if let Some(val) = req.headers().get("x-test-token") {
+                            let mut lock = captured.lock().unwrap();
+                            if lock.is_none() {
+                                *lock = Some(val.to_str().unwrap_or("").to_string());
+                            }
+                        }
+                        next.run(req).await
+                    }
+                },
+            ));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
+                .await;
+        }
+    });
+
+    // Connect with a custom header
+    let mut headers = HashMap::new();
+    headers.insert("X-Test-Token".to_string(), "test-secret".to_string());
+    let server_cfg = RemoteServerConfig {
+        url: format!("http://{addr}/mcp"),
+        headers,
+        enabled: true,
+    };
+
+    let client = McpClient::connect(&server_cfg).await?;
+    let tools = client.list_tools().await?;
+    assert_eq!(tools.len(), 1); // sanity-check: connection worked
+    client.shutdown().await?;
+
+    // Verify the header was received by the server
+    let val = captured.lock().unwrap().clone();
+    assert_eq!(val.as_deref(), Some("test-secret"));
 
     ct.cancel();
     Ok(())
