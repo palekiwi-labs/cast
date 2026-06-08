@@ -342,6 +342,7 @@ dependencies = [
  "assert_cmd",
  "axum",
  "clap",
+ "futures",
  "http",
  "predicates",
  "reqwest",

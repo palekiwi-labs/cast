@@ -197,13 +197,62 @@ fn pick_server(
 
 pub async fn list_tools_cmd(
     server_map: HashMap<String, config::RemoteServerConfig>,
-    _server_filter: Option<String>,
+    server_filter: Option<String>,
 ) -> anyhow::Result<()> {
-    let server = pick_server(&server_map)?;
-    let mcp_client = McpClient::connect(&server).await?;
-    let tools = mcp_client.list_tools().await?;
-    println!("{}", serde_json::to_string_pretty(&tools)?);
-    mcp_client.shutdown().await
+    // If a --server filter was given, validate it exists in the map first.
+    if let Some(ref name) = server_filter
+        && !server_map.contains_key(name.as_str()) {
+            anyhow::bail!(
+                "Unknown server '{}'. Check your cast-mcp-client.json or run without --server to list all.",
+                name
+            );
+        }
+
+    // Build the set of servers to query (all, or just the filtered one).
+    let targets: Vec<(String, config::RemoteServerConfig)> = match server_filter {
+        Some(ref name) => {
+            let server = server_map[name.as_str()].clone();
+            vec![(name.clone(), server)]
+        }
+        None => server_map.into_iter().collect(),
+    };
+
+    if targets.is_empty() {
+        println!("[]");
+        return Ok(());
+    }
+
+    // Query all target servers concurrently.
+    let futures: Vec<_> = targets
+        .into_iter()
+        .map(|(name, server)| async move {
+            let client = McpClient::connect(&server).await?;
+            let tools = client.list_tools().await?;
+            client.shutdown().await?;
+            // Prefix each tool name with "server_name/"
+            let prefixed: Vec<Tool> = tools
+                .into_iter()
+                .map(|mut t| {
+                    t.name = format!("{}/{}", name, t.name).into();
+                    t
+                })
+                .collect();
+            Ok::<Vec<Tool>, anyhow::Error>(prefixed)
+        })
+        .collect();
+
+    let results = futures::future::join_all(futures).await;
+
+    let mut all_tools: Vec<Tool> = Vec::new();
+    for result in results {
+        match result {
+            Ok(tools) => all_tools.extend(tools),
+            Err(e) => eprintln!("Warning: {}", e),
+        }
+    }
+
+    println!("{}", serde_json::to_string_pretty(&all_tools)?);
+    Ok(())
 }
 
 pub async fn describe_tool_cmd(

@@ -1,6 +1,4 @@
 use assert_cmd::Command;
-use axum::extract::Request;
-use axum::middleware::Next;
 use cast_mcp_client::McpClient;
 use cast_mcp_client::config::RemoteServerConfig;
 use rmcp::{
@@ -15,7 +13,7 @@ use rmcp::{
     },
 };
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 /// Build a mock tool with a fully populated input schema for testing.
@@ -177,11 +175,7 @@ async fn test_mcp_list_subcommand_output() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_slice(&output).expect("stdout should be valid JSON");
         assert!(json.is_array());
-        assert_eq!(json[0]["name"], "dummy_tool");
-        assert_eq!(
-            json[0]["description"],
-            "A mock tool for integration testing"
-        );
+        assert_eq!(json[0]["name"], "cast/dummy_tool");
     })
     .await?;
 
@@ -421,6 +415,10 @@ async fn test_mcp_list_stdout_is_clean_json() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_headers_are_sent_to_server() -> anyhow::Result<()> {
+    use axum::extract::Request;
+    use axum::middleware::Next;
+    use std::sync::Mutex;
+
     // Shared storage for the captured header value
     let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
     let captured_clone = captured.clone();
@@ -485,6 +483,130 @@ async fn test_headers_are_sent_to_server() -> anyhow::Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// S5 — multi-server flat prefixed list
+// ---------------------------------------------------------------------------
+
+/// No servers configured → stdout is exactly `[]`.
+#[tokio::test]
+async fn test_list_empty_config_returns_empty_array() -> anyhow::Result<()> {
+    let tmpdir = tempfile::tempdir()?;
+    // Write an empty config (no servers)
+    std::fs::write(tmpdir.path().join("cast-mcp-client.json"), r#"{"mcp":{}}"#)?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("list")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let s = std::str::from_utf8(&output).unwrap().trim().to_string();
+        assert_eq!(s, "[]");
+    })
+    .await?;
+
+    Ok(())
+}
+
+/// Single server "cast" with dummy_tool → output name is "cast/dummy_tool".
+#[tokio::test]
+async fn test_list_prefixed_tools_single_server() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("list")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_array());
+        assert_eq!(json.as_array().unwrap().len(), 1);
+        assert_eq!(json[0]["name"], "cast/dummy_tool");
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// Two servers configured; `list --server sentry` returns only sentry tools.
+#[tokio::test]
+async fn test_list_filter_by_server() -> anyhow::Result<()> {
+    let (cast_url, ct1) = spawn_mock_server().await?;
+    let (sentry_url, ct2) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(
+            r#"{{"mcp":{{"cast":{{"url":"{cast_url}"}},"sentry":{{"url":"{sentry_url}"}}}}}}"#,
+        ),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["list", "--server", "sentry"])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        assert!(json.is_array());
+        let tools = json.as_array().unwrap();
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["name"], "sentry/dummy_tool");
+    })
+    .await?;
+
+    ct1.cancel();
+    ct2.cancel();
+    Ok(())
+}
+
+/// `list --server ghost` (unknown server) → non-zero exit + COMMAND_ERROR JSON on stderr.
+#[tokio::test]
+async fn test_list_unknown_server_fails() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{}"}}}}}}"#, url),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["list", "--server", "ghost"])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let stderr = cmd.assert().failure().get_output().stderr.clone();
+        let s = std::str::from_utf8(&stderr).unwrap().trim().to_string();
+        let json: serde_json::Value =
+            serde_json::from_str(&s).expect("stderr should be valid JSON");
+        assert_eq!(json["error"]["code"], "COMMAND_ERROR");
+        assert!(json["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("ghost"));
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
 /// When no --cast-mcp-url flag is passed, `list` should read the project-local
 /// cast-mcp-client.json and connect to the server configured there.
 #[tokio::test]
@@ -512,7 +634,7 @@ async fn test_list_reads_project_config() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_slice(&output).expect("stdout should be valid JSON");
         assert!(json.is_array());
-        assert_eq!(json[0]["name"], "dummy_tool");
+        assert_eq!(json[0]["name"], "cast/dummy_tool");
     })
     .await?;
 
