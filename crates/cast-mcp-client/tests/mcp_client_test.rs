@@ -828,3 +828,69 @@ async fn test_list_reads_project_config() -> anyhow::Result<()> {
     ct.cancel();
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// S8 — status command
+// ---------------------------------------------------------------------------
+
+/// `status` with one reachable and one unreachable server:
+/// - stdout is a JSON array with one entry per configured server
+/// - reachable entry:   { "name": "good", "url": "...", "status": "ok" }
+/// - unreachable entry: { "name": "bad",  "url": "...", "status": "error", "error": "..." }
+/// - exit code is 0
+#[tokio::test]
+async fn test_status_command_output() -> anyhow::Result<()> {
+    let (good_url, ct) = spawn_mock_server().await?;
+    let bad_url = "http://127.0.0.1:1/mcp";
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(
+            r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,
+        ),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("status")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+
+        assert!(json.is_array(), "output should be a JSON array");
+        let entries = json.as_array().unwrap();
+        assert_eq!(entries.len(), 2, "one entry per server");
+
+        // Find entries by name (order is not guaranteed due to concurrent execution)
+        let good = entries
+            .iter()
+            .find(|e| e["name"] == "good")
+            .expect("should have a 'good' entry");
+        let bad = entries
+            .iter()
+            .find(|e| e["name"] == "bad")
+            .expect("should have a 'bad' entry");
+
+        assert_eq!(good["status"], "ok");
+        assert!(good["url"].as_str().is_some(), "good entry should have a url");
+        assert!(
+            good.get("error").is_none() || good["error"].is_null(),
+            "ok entry should not have an error field"
+        );
+
+        assert_eq!(bad["status"], "error");
+        assert!(bad["url"].as_str().is_some(), "bad entry should have a url");
+        assert!(
+            bad["error"].as_str().map(|s| !s.is_empty()).unwrap_or(false),
+            "error entry should have a non-empty error message"
+        );
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}

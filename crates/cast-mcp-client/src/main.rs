@@ -1,6 +1,6 @@
 use cast_mcp_client::{
     build_server_map, call_tool_cmd, describe_tool_cmd, list_tools_cmd, print_json_error,
-    resolve_cast_mcp_url,
+    resolve_cast_mcp_url, status_cmd,
 };
 use cast_mcp_client::config;
 use clap::{Parser, Subcommand};
@@ -48,6 +48,12 @@ enum Commands {
         #[arg(long)]
         cast_mcp_url: Option<String>,
     },
+    /// Check the health of all configured MCP servers
+    Status {
+        /// Cast MCP server URL (overrides CAST_MCP_URL env and config)
+        #[arg(long)]
+        cast_mcp_url: Option<String>,
+    },
 }
 
 #[tokio::main]
@@ -84,6 +90,11 @@ async fn main() {
             let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
             let server_map = build_server_map(cast_url, &cfg);
             call_tool_cmd(tool_name, params, server_map).await
+        }
+        Commands::Status { cast_mcp_url } => {
+            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
+            let server_map = build_server_map(cast_url, &cfg);
+            status_cmd(server_map).await
         }
     };
 
