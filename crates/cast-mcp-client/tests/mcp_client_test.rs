@@ -1006,7 +1006,8 @@ async fn test_generate_script_runs_correctly() -> anyhow::Result<()> {
             // Step 2: run the generated script.
             //   PATH includes the cargo bin dir so the script can find cast-mcp-client.
             //   CAST_MCP_URL points to the mock server so the script can reach it.
-            let output = std::process::Command::new(&script_path)
+            let output = std::process::Command::new("bash")
+                .arg(&script_path)
                 .args(["--message", "hello from script"])
                 .env("PATH", &path_env)
                 .env("CAST_MCP_URL", &url)
@@ -1062,7 +1063,8 @@ async fn test_generate_script_tool_error() -> anyhow::Result<()> {
     );
 
     tokio::task::spawn_blocking(move || {
-        let output = std::process::Command::new(&script_path)
+        let output = std::process::Command::new("bash")
+            .arg(&script_path)
             .env("PATH", &path_env)
             .env("CAST_MCP_URL", &url)
             .output()
