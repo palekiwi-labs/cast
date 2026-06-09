@@ -1,4 +1,6 @@
-## Status: Complete
+---
+status: complete
+---
 
 ## Foreword
 
