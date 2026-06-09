@@ -884,6 +884,71 @@ async fn test_status_command_output() -> anyhow::Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// P3 — generate: save manifest.json alongside scripts
+// ---------------------------------------------------------------------------
+
+/// `generate` writes a `manifest.json` in the output dir alongside the scripts.
+/// Schema: { "generated_at": "<ISO-8601>", "servers": { "<name>": { "url": "...", "tools": { "<tool>": "<filename>" } } } }
+#[tokio::test]
+async fn test_generate_saves_manifest() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+    let out_dir = tempfile::tempdir()?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args([
+        "generate",
+        "--cast-mcp-url",
+        &url,
+        "--dir",
+        out_dir.path().to_str().unwrap(),
+    ]);
+
+    tokio::task::spawn_blocking({
+        let out_path = out_dir.path().to_path_buf();
+        let url = url.clone();
+        move || {
+            cmd.assert().success();
+
+            let manifest_path = out_path.join("manifest.json");
+            assert!(manifest_path.exists(), "manifest.json should exist in --dir");
+
+            let content = std::fs::read_to_string(&manifest_path).unwrap();
+            let manifest: serde_json::Value =
+                serde_json::from_str(&content).expect("manifest.json should be valid JSON");
+
+            // generated_at: present and a positive integer (Unix timestamp)
+            assert!(
+                manifest["generated_at"].as_u64().is_some_and(|t| t > 0),
+                "generated_at should be a positive Unix timestamp"
+            );
+
+            // servers: object keyed by server name
+            let servers = manifest["servers"]
+                .as_object()
+                .expect("servers should be a JSON object");
+            assert!(servers.contains_key("cast"), "cast server in manifest");
+
+            let cast_entry = &servers["cast"];
+            assert_eq!(cast_entry["url"], url, "server url in manifest");
+
+            let tools = cast_entry["tools"]
+                .as_object()
+                .expect("tools should be a JSON object");
+            assert!(tools.contains_key("dummy_tool"), "dummy_tool in manifest");
+            assert_eq!(
+                tools["dummy_tool"],
+                "cast-dummy-tool.sh",
+                "manifest tool maps to script filename"
+            );
+        }
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // P1 — generate: create bash script wrappers from tool schemas
 // ---------------------------------------------------------------------------
 

@@ -314,6 +314,15 @@ pub async fn status_cmd(
 // generate command helpers
 // ---------------------------------------------------------------------------
 
+/// Return the current time as a Unix timestamp (seconds since epoch).
+fn unix_now() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
 /// Metadata extracted from a single JSON Schema property.
 struct ParamSpec {
     /// Original JSON property name (used as JSON key and jq variable name).
@@ -579,6 +588,12 @@ pub async fn generate_scripts_cmd(
             .collect()
     };
 
+    // Build a name → url lookup for the manifest (before targets is consumed).
+    let targets_with_url: HashMap<String, String> = targets
+        .iter()
+        .map(|(name, server)| (name.clone(), server.url.clone()))
+        .collect();
+
     // Fetch tool lists from all target servers concurrently.
     let futures: Vec<_> = targets
         .into_iter()
@@ -601,6 +616,9 @@ pub async fn generate_scripts_cmd(
     let abs_dir = output_dir.canonicalize()?;
 
     let mut script_entries: Vec<serde_json::Value> = Vec::new();
+    // manifest: servers -> { url, tools: { tool_name -> filename } }
+    let mut manifest_servers: serde_json::Map<String, serde_json::Value> =
+        serde_json::Map::new();
 
     for (server_name, result) in results {
         let tools = match result {
@@ -610,6 +628,16 @@ pub async fn generate_scripts_cmd(
                 continue;
             }
         };
+
+        // Retrieve the server URL for the manifest (empty string if somehow absent).
+        let server_url = targets_with_url
+            .get(&server_name)
+            .cloned()
+            .unwrap_or_default();
+
+        let mut manifest_tools: serde_json::Map<String, serde_json::Value> =
+            serde_json::Map::new();
+
         for tool in &tools {
             let script_content = generate_script(&server_name, tool);
             let filename = format!("{}-{}.sh", server_name, camel_to_kebab(tool.name.as_ref()));
@@ -625,8 +653,30 @@ pub async fn generate_scripts_cmd(
                 "tool": tool.name.as_ref(),
                 "path": path.to_string_lossy(),
             }));
+
+            manifest_tools.insert(
+                tool.name.as_ref().to_string(),
+                serde_json::Value::String(filename),
+            );
         }
+
+        manifest_servers.insert(
+            server_name.clone(),
+            serde_json::json!({
+                "url": server_url,
+                "tools": manifest_tools,
+            }),
+        );
     }
+
+    // Write manifest.json into the output directory.
+    let generated_at = unix_now();
+    let manifest = serde_json::json!({
+        "generated_at": generated_at,
+        "servers": manifest_servers,
+    });
+    let manifest_path = abs_dir.join("manifest.json");
+    std::fs::write(&manifest_path, serde_json::to_string_pretty(&manifest)?)?;
 
     let output = serde_json::json!({
         "output_dir": abs_dir.to_string_lossy(),
