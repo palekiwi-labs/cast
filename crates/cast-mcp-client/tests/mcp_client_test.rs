@@ -250,7 +250,13 @@ async fn test_mcp_describe_unknown_tool_fails() -> anyhow::Result<()> {
     // 2. Ask for a tool that does not exist — expect a non-zero exit with a helpful message.
     let url = format!("http://{addr}/mcp");
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["describe", "cast", "nonexistent_tool", "--cast-mcp-url", &url]);
+    cmd.args([
+        "describe",
+        "cast",
+        "nonexistent_tool",
+        "--cast-mcp-url",
+        &url,
+    ]);
 
     tokio::task::spawn_blocking(move || {
         let output = cmd.assert().failure().get_output().stderr.clone();
@@ -360,7 +366,14 @@ async fn test_mcp_call_unknown_tool_fails() -> anyhow::Result<()> {
     let (url, ct) = spawn_mock_server().await?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
-    cmd.args(["call", "cast", "nonexistent_tool", "{}", "--cast-mcp-url", &url]);
+    cmd.args([
+        "call",
+        "cast",
+        "nonexistent_tool",
+        "{}",
+        "--cast-mcp-url",
+        &url,
+    ]);
 
     tokio::task::spawn_blocking(move || {
         cmd.assert().failure();
@@ -550,9 +563,7 @@ async fn test_list_filter_by_server() -> anyhow::Result<()> {
     let tmpdir = tempfile::tempdir()?;
     std::fs::write(
         tmpdir.path().join("cast-mcp-client.json"),
-        format!(
-            r#"{{"mcp":{{"cast":{{"url":"{cast_url}"}},"sentry":{{"url":"{sentry_url}"}}}}}}"#,
-        ),
+        format!(r#"{{"mcp":{{"cast":{{"url":"{cast_url}"}},"sentry":{{"url":"{sentry_url}"}}}}}}"#,),
     )?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
@@ -565,7 +576,9 @@ async fn test_list_filter_by_server() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_slice(&output).expect("stdout should be valid JSON");
         assert!(json.is_object());
-        let tools = json["sentry"].as_array().expect("sentry key should be an array");
+        let tools = json["sentry"]
+            .as_array()
+            .expect("sentry key should be an array");
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["name"], "dummy_tool");
     })
@@ -598,10 +611,7 @@ async fn test_list_unknown_server_fails() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_str(&s).expect("stderr should be valid JSON");
         assert_eq!(json["error"]["code"], "COMMAND_ERROR");
-        assert!(json["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("ghost"));
+        assert!(json["error"]["message"].as_str().unwrap().contains("ghost"));
     })
     .await?;
 
@@ -666,10 +676,12 @@ async fn test_call_two_positional_args() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_slice(&output).expect("stdout should be valid JSON");
         assert_eq!(json["content"][0]["type"], "text");
-        assert!(json["content"][0]["text"]
-            .as_str()
-            .expect("content should be text")
-            .contains("echo: hello"));
+        assert!(
+            json["content"][0]["text"]
+                .as_str()
+                .expect("content should be text")
+                .contains("echo: hello")
+        );
         assert!(json["isError"].is_null() || json["isError"] == false);
     })
     .await?;
@@ -700,10 +712,12 @@ async fn test_routing_unknown_server_fails() -> anyhow::Result<()> {
         let json: serde_json::Value =
             serde_json::from_str(&s).expect("stderr should be valid JSON");
         assert_eq!(json["error"]["code"], "COMMAND_ERROR");
-        assert!(json["error"]["message"]
-            .as_str()
-            .expect("error message should be a string")
-            .contains("ghost"));
+        assert!(
+            json["error"]["message"]
+                .as_str()
+                .expect("error message should be a string")
+                .contains("ghost")
+        );
     })
     .await?;
 
@@ -729,9 +743,7 @@ async fn test_list_ignores_unreachable_server() -> anyhow::Result<()> {
     let tmpdir = tempfile::tempdir()?;
     std::fs::write(
         tmpdir.path().join("cast-mcp-client.json"),
-        format!(
-            r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,
-        ),
+        format!(r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,),
     )?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
@@ -748,7 +760,9 @@ async fn test_list_ignores_unreachable_server() -> anyhow::Result<()> {
         assert!(json.is_object());
         let obj = json.as_object().unwrap();
         assert_eq!(obj.len(), 1, "only the reachable server should appear");
-        let tools = json["good"].as_array().expect("good key should be an array");
+        let tools = json["good"]
+            .as_array()
+            .expect("good key should be an array");
         assert_eq!(tools[0]["name"], "dummy_tool");
 
         // stderr: a warning mentioning the bad server
@@ -816,9 +830,7 @@ async fn test_status_command_output() -> anyhow::Result<()> {
     let tmpdir = tempfile::tempdir()?;
     std::fs::write(
         tmpdir.path().join("cast-mcp-client.json"),
-        format!(
-            r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,
-        ),
+        format!(r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,),
     )?;
 
     let mut cmd = Command::cargo_bin("cast-mcp-client")?;
@@ -846,7 +858,10 @@ async fn test_status_command_output() -> anyhow::Result<()> {
             .expect("should have a 'bad' entry");
 
         assert_eq!(good["status"], "ok");
-        assert!(good["url"].as_str().is_some(), "good entry should have a url");
+        assert!(
+            good["url"].as_str().is_some(),
+            "good entry should have a url"
+        );
         assert!(
             good.get("error").is_none() || good["error"].is_null(),
             "ok entry should not have an error field"
@@ -855,8 +870,212 @@ async fn test_status_command_output() -> anyhow::Result<()> {
         assert_eq!(bad["status"], "error");
         assert!(bad["url"].as_str().is_some(), "bad entry should have a url");
         assert!(
-            bad["error"].as_str().map(|s| !s.is_empty()).unwrap_or(false),
+            bad["error"]
+                .as_str()
+                .map(|s| !s.is_empty())
+                .unwrap_or(false),
             "error entry should have a non-empty error message"
+        );
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// P1 — generate: create bash script wrappers from tool schemas
+// ---------------------------------------------------------------------------
+
+/// `generate --cast-mcp-url <url> --dir <tmpdir>` creates correctly named,
+/// executable scripts and emits a JSON result envelope.
+#[tokio::test]
+async fn test_generate_creates_scripts() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+    let out_dir = tempfile::tempdir()?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args([
+        "generate",
+        "--cast-mcp-url",
+        &url,
+        "--dir",
+        out_dir.path().to_str().unwrap(),
+    ]);
+
+    tokio::task::spawn_blocking({
+        let out_path = out_dir.path().to_path_buf();
+        move || {
+            let output = cmd.assert().success().get_output().stdout.clone();
+            let json: serde_json::Value =
+                serde_json::from_slice(&output).expect("stdout should be valid JSON");
+
+            // JSON schema: { output_dir, scripts: [{server, tool, path}] }
+            assert!(json["output_dir"].is_string(), "output_dir in JSON");
+            let scripts = json["scripts"]
+                .as_array()
+                .expect("scripts should be an array");
+            assert_eq!(scripts.len(), 1, "one script for dummy_tool");
+
+            let entry = &scripts[0];
+            assert_eq!(entry["server"], "cast");
+            assert_eq!(entry["tool"], "dummy_tool");
+            let path_str = entry["path"].as_str().expect("path should be a string");
+
+            // File should exist on disk
+            let script_path = std::path::Path::new(path_str);
+            assert!(script_path.exists(), "script file should exist on disk");
+
+            // Filename convention: cast-dummy-tool.sh
+            assert_eq!(
+                script_path.file_name().and_then(|n| n.to_str()),
+                Some("cast-dummy-tool.sh"),
+                "filename follows <server>-<tool>.sh convention"
+            );
+
+            // File should be in the requested output dir
+            assert_eq!(
+                script_path.parent(),
+                Some(out_path.as_path()),
+                "script lives inside --dir"
+            );
+
+            // Script must be executable (Unix permission bit 0o111)
+            use std::os::unix::fs::PermissionsExt;
+            let perms = std::fs::metadata(script_path).unwrap().permissions();
+            assert!(
+                perms.mode() & 0o111 != 0,
+                "script must have execute permission"
+            );
+
+            // Script content sanity check
+            let content = std::fs::read_to_string(script_path).unwrap();
+            assert!(
+                content.starts_with("#!/usr/bin/env bash"),
+                "shebang present"
+            );
+            assert!(content.contains("--message"), "--message flag in script");
+        }
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// Running a generated script with the correct args calls the tool and prints the text result.
+#[tokio::test]
+async fn test_generate_script_runs_correctly() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+    let out_dir = tempfile::tempdir()?;
+
+    let bin_dir = std::path::Path::new(env!("CARGO_BIN_EXE_cast-mcp-client"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let path_env = format!(
+        "{}:{}",
+        bin_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    // Both the generate step and the script execution run inside a single spawn_blocking.
+    // spawn_blocking prevents executor starvation: the mock server runs on the same
+    // single-threaded tokio reactor as the test. Any blocking call outside spawn_blocking
+    // would starve the reactor, preventing the server from responding → deadlock.
+    tokio::task::spawn_blocking({
+        let url = url.clone();
+        let out_path = out_dir.path().to_path_buf();
+        move || {
+            // Step 1: generate scripts (blocks on MCP list_tools round-trip).
+            Command::cargo_bin("cast-mcp-client")
+                .unwrap()
+                .args([
+                    "generate",
+                    "--cast-mcp-url",
+                    &url,
+                    "--dir",
+                    out_path.to_str().unwrap(),
+                ])
+                .assert()
+                .success();
+
+            let script_path = out_path.join("cast-dummy-tool.sh");
+            assert!(script_path.exists(), "script must have been generated");
+
+            // Step 2: run the generated script.
+            //   PATH includes the cargo bin dir so the script can find cast-mcp-client.
+            //   CAST_MCP_URL points to the mock server so the script can reach it.
+            let output = std::process::Command::new(&script_path)
+                .args(["--message", "hello from script"])
+                .env("PATH", &path_env)
+                .env("CAST_MCP_URL", &url)
+                .output()
+                .expect("failed to execute generated script");
+
+            assert!(
+                output.status.success(),
+                "script should exit 0; stderr: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            assert!(
+                stdout.contains("echo: hello from script"),
+                "stdout should contain tool output; got: {stdout}"
+            );
+        }
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
+
+/// Running a generated script against an `error_tool` exits 1 and writes the error to stderr.
+#[tokio::test]
+async fn test_generate_script_tool_error() -> anyhow::Result<()> {
+    let (url, ct) = spawn_mock_server().await?;
+    let out_dir = tempfile::tempdir()?;
+
+    // Generate the error_tool script directly using the pub helper,
+    // since MockServerHandler only lists dummy_tool.
+    let schema = serde_json::json!({"type": "object", "properties": {}});
+    let error_tool = rmcp::model::Tool::new_with_raw(
+        "error_tool".to_string(),
+        Some("A tool that always errors".into()),
+        schema.as_object().cloned().unwrap_or_default(),
+    );
+    let script_content = cast_mcp_client::generate_script("cast", &error_tool);
+    let script_path = out_dir.path().join("cast-error-tool.sh");
+    std::fs::write(&script_path, &script_content)?;
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))?;
+
+    let bin_dir = std::path::Path::new(env!("CARGO_BIN_EXE_cast-mcp-client"))
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let path_env = format!(
+        "{}:{}",
+        bin_dir.display(),
+        std::env::var("PATH").unwrap_or_default()
+    );
+
+    tokio::task::spawn_blocking(move || {
+        let output = std::process::Command::new(&script_path)
+            .env("PATH", &path_env)
+            .env("CAST_MCP_URL", &url)
+            .output()
+            .expect("failed to execute error script");
+
+        assert!(
+            !output.status.success(),
+            "script should exit non-zero on MCP error"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("something went wrong"),
+            "error message should be on stderr; got: {stderr}"
         );
     })
     .await?;

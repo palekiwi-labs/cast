@@ -1,8 +1,8 @@
-use cast_mcp_client::{
-    build_server_map, call_tool_cmd, describe_tool_cmd, list_tools_cmd, print_json_error,
-    resolve_cast_mcp_url, status_cmd,
-};
 use cast_mcp_client::config;
+use cast_mcp_client::{
+    build_server_map, call_tool_cmd, describe_tool_cmd, generate_scripts_cmd, list_tools_cmd,
+    print_json_error, resolve_cast_mcp_url, status_cmd,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -61,6 +61,20 @@ enum Commands {
         #[arg(long)]
         cast_mcp_url: Option<String>,
     },
+    /// Generate bash script wrappers for every tool on configured MCP servers
+    Generate {
+        /// Output directory for generated scripts (created if absent)
+        #[arg(long)]
+        dir: std::path::PathBuf,
+
+        /// Cast MCP server URL (overrides CAST_MCP_URL env and config)
+        #[arg(long)]
+        cast_mcp_url: Option<String>,
+
+        /// Optional server names to restrict generation (positional, repeatable)
+        #[arg(value_name = "SERVER")]
+        servers: Vec<String>,
+    },
 }
 
 #[tokio::main]
@@ -104,6 +118,15 @@ async fn main() {
             let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
             let server_map = build_server_map(cast_url, &cfg);
             status_cmd(server_map).await
+        }
+        Commands::Generate {
+            dir,
+            cast_mcp_url,
+            servers,
+        } => {
+            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
+            let server_map = build_server_map(cast_url, &cfg);
+            generate_scripts_cmd(servers, &dir, server_map).await
         }
     };
 
