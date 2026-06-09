@@ -159,43 +159,35 @@ impl McpClient {
     }
 }
 
-/// Split a `"server/tool"` reference into `(server_name, tool_name)`.
-///
-/// Returns an error if there is no `/` separator, guiding the caller to use
-/// the correct `server/tool` format.
-fn parse_server_tool(reference: &str) -> anyhow::Result<(&str, &str)> {
-    reference.split_once('/').ok_or_else(|| {
-        anyhow::anyhow!(
-            "Tool reference must be in 'server/tool' format (got '{}').",
-            reference
-        )
-    })
-}
-
 pub async fn list_tools_cmd(
     server_map: HashMap<String, config::RemoteServerConfig>,
-    server_filter: Option<String>,
+    servers: Vec<String>,
 ) -> anyhow::Result<()> {
-    // If a --server filter was given, validate it exists in the map first.
-    if let Some(ref name) = server_filter
-        && !server_map.contains_key(name.as_str()) {
+    // If server name filters were given, validate each one exists in the map first.
+    for name in &servers {
+        if !server_map.contains_key(name.as_str()) {
             anyhow::bail!(
-                "Unknown server '{}'. Check your cast-mcp-client.json or run without --server to list all.",
+                "Unknown server '{}'. Check your cast-mcp-client.json or run without a server filter to list all.",
                 name
             );
         }
+    }
 
-    // Build the set of servers to query (all, or just the filtered one).
-    let targets: Vec<(String, config::RemoteServerConfig)> = match server_filter {
-        Some(ref name) => {
-            let server = server_map[name.as_str()].clone();
-            vec![(name.clone(), server)]
-        }
-        None => server_map.into_iter().collect(),
+    // Build the set of servers to query (all, or the requested subset).
+    let targets: Vec<(String, config::RemoteServerConfig)> = if servers.is_empty() {
+        server_map.into_iter().collect()
+    } else {
+        servers
+            .into_iter()
+            .map(|name| {
+                let server = server_map[name.as_str()].clone();
+                (name, server)
+            })
+            .collect()
     };
 
     if targets.is_empty() {
-        println!("[]");
+        println!("{{}}");
         return Ok(());
     }
 
@@ -209,15 +201,7 @@ pub async fn list_tools_cmd(
                 let client = McpClient::connect(&server).await?;
                 let tools = client.list_tools().await?;
                 client.shutdown().await?;
-                // Prefix each tool name with "server_name/"
-                let prefixed: Vec<Tool> = tools
-                    .into_iter()
-                    .map(|mut t| {
-                        t.name = format!("{}/{}", name, t.name).into();
-                        t
-                    })
-                    .collect();
-                Ok(prefixed)
+                Ok(tools)
             }
             .await;
             (name, result)
@@ -226,25 +210,28 @@ pub async fn list_tools_cmd(
 
     let results = futures::future::join_all(futures).await;
 
-    let mut all_tools: Vec<Tool> = Vec::new();
+    // Build nested output object: { "server_name": [tools...] }
+    // Unreachable servers are warned on stderr and omitted from output.
+    let mut output: HashMap<String, Vec<Tool>> = HashMap::new();
     for (server_name, result) in results {
         match result {
-            Ok(tools) => all_tools.extend(tools),
+            Ok(tools) => {
+                output.insert(server_name, tools);
+            }
             Err(e) => eprintln!("Warning: server '{}' is unreachable: {}", server_name, e),
         }
     }
 
-    println!("{}", serde_json::to_string_pretty(&all_tools)?);
+    println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
 }
 
 pub async fn describe_tool_cmd(
-    tool_ref: String,
+    server_name: String,
+    tool_name: String,
     server_map: HashMap<String, config::RemoteServerConfig>,
 ) -> anyhow::Result<()> {
-    let (server_name, bare_tool) = parse_server_tool(&tool_ref)?;
-
-    let server = server_map.get(server_name).ok_or_else(|| {
+    let server = server_map.get(server_name.as_str()).ok_or_else(|| {
         anyhow::anyhow!(
             "Unknown server '{}'. Check your cast-mcp-client.json or pass --cast-mcp-url.",
             server_name
@@ -256,11 +243,11 @@ pub async fn describe_tool_cmd(
 
     let tool = tools
         .into_iter()
-        .find(|t| t.name == bare_tool)
+        .find(|t| t.name == tool_name.as_str())
         .ok_or_else(|| {
             anyhow::anyhow!(
                 "Unknown tool '{}' on server '{}'. Run 'cast-mcp-client list' to see available tools.",
-                bare_tool,
+                tool_name,
                 server_name
             )
         })?;
@@ -338,13 +325,12 @@ pub fn print_json_error(code: &str, message: &str) {
 }
 
 pub async fn call_tool_cmd(
-    tool_ref: String,
+    server_name: String,
+    tool_name: String,
     params: Option<String>,
     server_map: HashMap<String, config::RemoteServerConfig>,
 ) -> anyhow::Result<()> {
-    let (server_name, bare_tool) = parse_server_tool(&tool_ref)?;
-
-    let server = server_map.get(server_name).ok_or_else(|| {
+    let server = server_map.get(server_name.as_str()).ok_or_else(|| {
         anyhow::anyhow!(
             "Unknown server '{}'. Check your cast-mcp-client.json or pass --cast-mcp-url.",
             server_name
@@ -353,7 +339,7 @@ pub async fn call_tool_cmd(
 
     let arguments = read_params(params)?;
     let mcp_client = McpClient::connect(server).await?;
-    let result = mcp_client.call_tool(bare_tool.to_string(), arguments).await?;
+    let result = mcp_client.call_tool(tool_name, arguments).await?;
 
     println!("{}", serde_json::to_string_pretty(&result)?);
 
