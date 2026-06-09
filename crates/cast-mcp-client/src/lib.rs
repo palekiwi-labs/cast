@@ -603,7 +603,13 @@ pub async fn generate_scripts_cmd(
     let mut script_entries: Vec<serde_json::Value> = Vec::new();
 
     for (server_name, result) in results {
-        let tools = result?;
+        let tools = match result {
+            Ok(tools) => tools,
+            Err(e) => {
+                eprintln!("Warning: server '{}' is unreachable: {}", server_name, e);
+                continue;
+            }
+        };
         for tool in &tools {
             let script_content = generate_script(&server_name, tool);
             let filename = format!("{}-{}.sh", server_name, camel_to_kebab(tool.name.as_ref()));

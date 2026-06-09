@@ -1083,3 +1083,68 @@ async fn test_generate_script_tool_error() -> anyhow::Result<()> {
     ct.cancel();
     Ok(())
 }
+
+// P2 — generate: resilience against unreachable servers
+// ---------------------------------------------------------------------------
+
+/// Two servers configured: one reachable, one not.
+/// `generate` should:
+/// - write scripts for the reachable server
+/// - emit a warning on stderr naming the unreachable server
+/// - still emit valid JSON output containing the generated scripts
+/// - exit 0
+#[tokio::test]
+async fn test_generate_skips_unreachable_server() -> anyhow::Result<()> {
+    let (good_url, ct) = spawn_mock_server().await?;
+    let bad_url = "http://127.0.0.1:1/mcp"; // guaranteed unreachable
+    let out_dir = tempfile::tempdir()?;
+
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(r#"{{"mcp":{{"good":{{"url":"{good_url}"}},"bad":{{"url":"{bad_url}"}}}}}}"#,),
+    )?;
+
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.args(["generate", "--dir", out_dir.path().to_str().unwrap()])
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking({
+        let out_path = out_dir.path().to_path_buf();
+        move || {
+            let output = cmd.assert().success().get_output().clone();
+
+            // stderr: warning mentioning the bad server
+            let stderr = std::str::from_utf8(&output.stderr).expect("stderr should be UTF-8");
+            assert!(
+                stderr.contains("bad"),
+                "stderr should warn about unreachable server 'bad', got: {stderr}"
+            );
+
+            // stdout: valid JSON with scripts for the good server only
+            let json: serde_json::Value =
+                serde_json::from_slice(&output.stdout).expect("stdout should be valid JSON");
+            let scripts = json["scripts"]
+                .as_array()
+                .expect("scripts should be an array");
+            assert_eq!(
+                scripts.len(),
+                1,
+                "only good server's script should be present"
+            );
+            assert_eq!(scripts[0]["server"], "good");
+
+            // Script file exists on disk
+            let script_path = out_path.join("good-dummy-tool.sh");
+            assert!(
+                script_path.exists(),
+                "good server script file should exist on disk"
+            );
+        }
+    })
+    .await?;
+
+    ct.cancel();
+    Ok(())
+}
