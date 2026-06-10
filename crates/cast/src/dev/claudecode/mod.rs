@@ -49,6 +49,7 @@ impl Agent for ClaudeCode {
             .as_deref()
             .context("Failed to resolve user home directory")?;
         config_dir::ensure_config_dir(home)?;
+        config_dir::ensure_config_file(home)?;
         Ok(())
     }
 
@@ -76,6 +77,17 @@ impl Agent for ClaudeCode {
             format!(
                 "{}:/home/{}/.claude:rw",
                 claude_config_dir.display(),
+                opts.user.username
+            ),
+        ]);
+
+        // Claude Code global config file bind mount (~/.claude.json).
+        let claude_config_file = config_dir::get_config_file(home);
+        args.extend([
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.claude.json:rw",
+                claude_config_file.display(),
                 opts.user.username
             ),
         ]);
@@ -163,6 +175,23 @@ mod tests {
         assert!(
             args.contains(&"/home/testuser/.claude:/home/testuser/.claude:rw".to_string()),
             "expected claude config bind mount in args: {:?}",
+            args
+        );
+    }
+
+    #[test]
+    fn test_extra_run_args_includes_claude_json_mount() {
+        let config = Config::default();
+        let opts = basic_opts(PathBuf::from("/tmp/workspace"));
+        let env = HashMap::new();
+
+        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
+
+        assert!(
+            args.contains(
+                &"/home/testuser/.claude.json:/home/testuser/.claude.json:rw".to_string()
+            ),
+            "expected claude.json bind mount in args: {:?}",
             args
         );
     }
