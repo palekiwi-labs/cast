@@ -19,15 +19,16 @@ general-purpose client for any HTTP-based MCP server, driven by a
 |---|---|
 | Transport | HTTP remote only (no stdio) |
 | Auth | Static headers with `{env:VAR}` substitution (covers Bearer tokens, API keys) |
-| `list` output | Flat array of tools: `[ { "name": "server/tool", ... } ]` — ideal for AI agents |
-| `list --server` | Optional filter to list tools from a specific server only |
-| Tool reference format | `server/tool` — always required, no bare-name shorthand |
+| `list` output | Nested object keyed by server name: `{ "server": [Tool] }` |
+| `list` filtering | Positional varargs: `list [servers...]` |
+| `describe`/`call` args | Two positional args: `<server> <tool>` |
 | `--url` rename | `--cast-mcp-url` (makes cast-specific purpose explicit) |
 | Config locations | `~/.config/cast/cast-mcp-client.json` (global) + `./cast-mcp-client.json` (project, wins on conflict) |
 | Multi-server resolution | All `enabled: true` config entries + optional `"cast"` entry from flag/env |
 | Bad server behaviour (list) | Warning to stderr, silently skipped from output, never blocks other servers |
 | Malformed config | Warning to stderr, silently skipped, falls back to `Default` |
 | Server Diagnostics | Handled by a dedicated `status` command showing server state / health |
+
 
 ---
 
@@ -191,60 +192,13 @@ forwards its headers to the rmcp transport.
 
 ---
 
-### S4 — CLI + command wiring [ ]
+### S4 — CLI + command wiring [x]
 
-**Adds:** Config loading wired into `main.rs`; command function signatures updated;
-`--url` renamed to `--cast-mcp-url`; `--server` added to `list`; all existing integration tests updated.
+### S5 — list: multi-server nested output [x]
 
-**Changes:**
-- `main.rs`: `config::load()` called at startup; `cast_mcp_url: Option<String>`
-  threaded through all commands; `--url` → `--cast-mcp-url`; `list` gets optional `--server <NAME>`.
-- `lib.rs`: command function signatures updated.
-- `tests/mcp_client_test.rs`: all occurrences of `"--url"` renamed to `"--cast-mcp-url"`.
+### S6 — describe/call: two positional args + routing [x]
 
----
+### S7 — list: handle unreachable servers gracefully [x]
 
-### S5 — list: multi-server flat prefixed output [x]
-
-**Adds:** Full rewrite of `list_tools_cmd` to gather tools from all (or filtered) configured
-servers and prefix each tool's name with `"{server_name}/"`.
-
-**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`, `Cargo.toml`
-
----
-
-### S6 — describe/call: server/tool format + routing [ ]
-
-**Adds:** Full rewrite of `describe_tool_cmd` and `call_tool_cmd` to parse `server/tool` references,
-lookup the specific server in the map, and route the request using the bare tool name.
-
-**Behaviors tested:**
-- `test_describe_server_slash_tool_format`: Validates routing to the correct server.
-- `test_call_server_slash_tool_format`: Validates routing and execution.
-- `test_routing_no_separator_fails`: Error when format is just `tool`.
-- `test_routing_unknown_server_fails`: Error when server name is not in config.
-
-**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
-
----
-
-### S7 — list: handle unreachable servers gracefully [ ]
-
-**Adds:** Concurrent list error capturing. Unreachable servers print warnings to stderr,
-but are skipped from stdout without causing the command to fail.
-
-**Behaviors tested:**
-- `test_list_ignores_unreachable_server`: one good + one unreachable server → stdout lists only the good server's tools, stderr prints warning, exit code is 0.
-
-**Files:** `src/lib.rs`, `tests/mcp_client_test.rs`
-
----
-
-### S8 — status command [ ]
-
-**Adds:** A new `status` CLI command that performs concurrent server health checks
-and displays diagnostic JSON of all configured servers.
-
-**Behaviors tested:**
-- `test_status_command_output`: verifies JSON format of both reachable and unreachable servers.
+### S8 — status command [x]
 

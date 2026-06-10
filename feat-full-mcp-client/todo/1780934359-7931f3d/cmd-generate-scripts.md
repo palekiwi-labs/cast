@@ -1,5 +1,5 @@
 ---
-status: open
+status: complete
 ---
 
 # Proposal for a new client feature: generate scripts from tool schema
@@ -8,7 +8,7 @@ status: open
 
 `cast-mcp-client` is aware of the tools it offers and the precise schema
 of every tool. Calling these tools manually on the CLI by agents is 
-difficult though - it is verbose (`cast-mcp-client call my-server my-tool -d '{...}`),
+difficult though - it is verbose (`cast-mcp-client call my-server my-tool '{...}`),
 the experience is very clunky and requires knowledge and documentation.
 
 ## Proposed solution

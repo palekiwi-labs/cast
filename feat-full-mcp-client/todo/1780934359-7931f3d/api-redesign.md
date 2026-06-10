@@ -1,5 +1,5 @@
 ---
-status: open
+status: done
 ---
 
 # Redesign the client API

@@ -112,3 +112,69 @@ Removed resolve_server_url (the old single-server helper with a hardcoded defaul
 - **Decided:** Delete resolve_server_url and both its tests in a single commit (3921a90)
 - **Decided:** Mark todo/no-default-for-cast-mcp-url.md as done
 
+## [275f2db] API redesign complete: nested list output, two-arg describe/call
+
+Implemented the todo artifact api-redesign.md in a single TDD cycle. All three changes shipped in one atomic commit (275f2db).
+
+- **Found:** println!("{{}}"}) needed (escaped braces) for the empty-map case in list_tools_cmd — Rust format strings require {{ to emit a literal {
+- **Found:** HashMap output from serde_json::to_string_pretty serializes as a JSON object keyed by insertion order — non-deterministic for multi-server output, but acceptable since tests search by key not by index
+- **Found:** 38 tests pass after deletion of test_routing_no_separator_fails (previously 39)
+- **Decided:** list_tools_cmd(servers: Vec<String>) — empty vec means all servers; non-empty vec is validated then used as filter
+- **Decided:** describe_tool_cmd(server_name, tool_name, server_map) — two separate Strings, direct map lookup, no parse helper
+- **Decided:** call_tool_cmd(server_name, tool_name, params, server_map) — same pattern
+- **Decided:** parse_server_tool() deleted — no callers remain
+- **Decided:** test_routing_no_separator_fails deleted — clap rejects missing required positional arg with its own usage error; no custom JSON wrapping needed
+
+## [46eaaee] [46eaaee] P1 complete: generate command with bash script output
+
+All 5 TDD cycles for the generate command executed and committed. Previous agent had done the full implementation; this session cleaned up the two blocking items (debug test deletion, clippy lint fix) and committed.
+
+- **Found:** debug test test_debug_print_script was still present in lib.rs — deleted before commit
+- **Found:** clippy -D warnings caught map_or(false, ...) — fixed to is_some_and(...) at lib.rs:533
+- **Found:** spawn_blocking fix from previous agent worked correctly — test_generate_script_runs_correctly and test_generate_script_tool_error both passed without changes
+- **Found:** Final count: 20 unit + 23 integration = 43 tests, all green
+- **Decided:** Commit: feat(mcp-client): add generate command with bash script output (46eaaee)
+- **Decided:** Executive plan p1-generate-core.md marked Status: Complete, all checkboxes ticked
+
+## [6c44e3c] [6c44e3c] P2 complete: generate skips unreachable servers gracefully
+
+Single TDD cycle. Changed the `result?` abort in `generate_scripts_cmd` to a warn-and-skip match, mirroring the S7 list_tools_cmd pattern exactly. One new integration test (test_generate_skips_unreachable_server): two servers configured, one unreachable, asserts exit 0 + warning on stderr + only healthy server's scripts in output.
+
+- **Found:** The P1 generate_scripts_cmd used result? which aborts on first failure — exact same bug fixed in S7 for list_tools_cmd
+- **Found:** Fix is a 7-line match replacing the single ? — identical pattern to list_tools_cmd
+- **Found:** 44 tests (20 unit + 24 integration) all green after change
+- **Decided:** Commit: feat(mcp-client): P2 generate skips unreachable servers gracefully (6c44e3c)
+- **Decided:** Master plan generate-command.md Phase 2 checkbox marked [x]
+
+## [d530aa2] [d530aa2] fix: Nix build passes — bash+jq in nativeCheckInputs, tests scoped per crate
+
+- **Found:** nix build .#cast-mcp-client was failing with jq: command not found during checkPhase
+- **Found:** Root cause: cast package had no cargoTestFlags, so its checkPhase ran the entire workspace's tests including cast-mcp-client integration tests — but without bash or jq in its inputs
+- **Found:** bash fix (Command::new("bash").arg(&script)) unblocked the shebang issue but exposed the jq gap
+- **Found:** nativeBuildInputs does make packages available in checkPhase, but nativeCheckInputs is the correct idiomatic attribute for test-only deps
+- **Found:** Gemini Flash correctly identified the cast package missing cargoTestFlags as the true root cause
+- **Decided:** cargoTestFlags = [ "-p" "cast" ] added to cast package — prevents workspace-wide test runs from its checkPhase
+- **Decided:** cargoTestFlags = [ "-p" "cast-mcp-client" ] added to cast-mcp-client package
+- **Decided:** nativeCheckInputs = [ pkgs.bash pkgs.jq ] on cast-mcp-client — available during checkPhase only
+- **Decided:** test subprocess calls changed from Command::new(&script_path) to Command::new("bash").arg(&script_path) — bypasses shebang resolution in sandbox
+- **Decided:** Commit: fix(mcp-client): fix nix build — scope tests per crate, add bash+jq for checkPhase (d530aa2)
+
+## [8159616] [8159616] P3 complete: generate saves manifest.json
+
+- **Found:** unix_now() helper (3 lines, no deps) is sufficient for generated_at — no chrono needed
+- **Found:** targets_with_url HashMap built before targets is consumed by join_all futures — preserves server URLs for manifest without cloning RemoteServerConfig again
+- **Found:** 25 tests pass (20 unit + 25 integration)
+- **Decided:** manifest.json written to --dir alongside scripts after all server futures resolve
+- **Decided:** Schema: { generated_at: u64 (Unix seconds), servers: { name: { url, tools: { tool_name: filename } } } }
+- **Decided:** generated_at stored as Unix timestamp integer — no date formatting needed
+- **Decided:** unix_now() is a private fn, not pub — manifest writing is an implementation detail of generate_scripts_cmd
+
+## [8159616-dirty] fix: multiline MCP description no longer leaks prose into bash scripts
+
+- **Found:** generate_script() wrote the full description on a single '# name: description' line — any newlines in the description caused subsequent prose lines to be executed as bash commands (e.g. context7's 'You MUST call...' and 'Do not call...' lines caused 'You: command not found' and 'Do: command not found' at runtime)
+- **Found:** The bash syntax checker (bash -n) does not catch this class of bug because the prose lines are syntactically valid (they look like command invocations)
+- **Found:** The fix: write the description as a commented block by pushing '# ' before each line, keeping the header 100% comment lines regardless of description content
+- **Decided:** generate_script() now writes description as multi-line comment block: '# script-name:' on the first line, then '# <each line of description>' for every subsequent line
+- **Decided:** One new unit test test_generate_script_multiline_description: asserts every non-blank line in the header block (before set -euo pipefail) starts with '#'
+- **Decided:** TDD cycle: RED (test fails on 'You MUST call this first.' not starting with '#') → GREEN (all 45 tests pass)
+
