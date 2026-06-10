@@ -1,4 +1,4 @@
-FROM node:lts-trixie-slim
+FROM debian:trixie-slim
 
 ARG AGENT_VERSION=latest
 
@@ -9,7 +9,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ssh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code via npm
+# Copy official Node.js binaries from the node image.
+# Both node:lts-trixie-slim and debian:trixie-slim share the same Debian base,
+# so the binaries are 100% ABI-compatible. This avoids inheriting the pre-existing
+# 'node' user at UID 1000 that ships with node:lts-trixie-slim.
+COPY --from=node:lts-trixie-slim /usr/local /usr/local
+
+# Install Claude Code via npm (runs as root, installs to /usr/local)
 RUN npm install -g @anthropic-ai/claude-code@${AGENT_VERSION}
 
 # Configure Nix system-wide to enable flakes

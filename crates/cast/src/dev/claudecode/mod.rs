@@ -222,10 +222,15 @@ mod tests {
 
     #[test]
     fn test_dockerfile_has_correct_base_image() {
+        assert!(ClaudeCode.dockerfile().contains("FROM debian:trixie-slim"));
+    }
+
+    #[test]
+    fn test_dockerfile_copies_node_from_official_image() {
         assert!(
             ClaudeCode
                 .dockerfile()
-                .contains("FROM node:lts-trixie-slim")
+                .contains("COPY --from=node:lts-trixie-slim /usr/local /usr/local")
         );
     }
 }
