@@ -27,3 +27,26 @@ impl VersionFetcher for GithubReleaseFetcher {
         Ok(release.tag_name)
     }
 }
+
+/// Fetches the latest version of an npm package from the npm registry.
+pub struct NpmRegistryFetcher {
+    pub package: &'static str,
+}
+
+impl VersionFetcher for NpmRegistryFetcher {
+    fn fetch_latest_version(&self) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        struct NpmLatest {
+            version: String,
+        }
+
+        let url = format!("https://registry.npmjs.org/{}/latest", self.package);
+        let dist: NpmLatest = ureq::get(&url)
+            .set("User-Agent", "cast")
+            .call()
+            .context("Failed to reach npm registry")?
+            .into_json()
+            .context("Failed to parse npm registry response")?;
+        Ok(dist.version)
+    }
+}
