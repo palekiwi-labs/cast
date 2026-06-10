@@ -34,7 +34,7 @@ pub fn ensure_config_file(base: &Path) -> Result<PathBuf> {
     let config_file = get_config_file(base);
 
     if !config_file.exists() {
-        fs::File::create(&config_file).with_context(|| {
+        fs::write(&config_file, "{}").with_context(|| {
             format!("Failed to create config file at {}", config_file.display())
         })?;
     }
@@ -69,12 +69,14 @@ mod tests {
     }
 
     #[test]
-    fn test_ensure_config_file_creates_file() {
+    fn test_ensure_config_file_creates_file_with_empty_json() {
         let temp = tempfile::TempDir::new().unwrap();
         let result = ensure_config_file(temp.path()).unwrap();
         assert!(result.exists());
         assert!(result.is_file());
         assert_eq!(result, temp.path().join(".claude.json"));
+        let content = fs::read_to_string(&result).unwrap();
+        assert_eq!(content, "{}");
     }
 
     #[test]
