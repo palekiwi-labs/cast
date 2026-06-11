@@ -18,8 +18,8 @@ nix profile add github:palekiwi-labs/cast#cast
 
 ## 2. Run your first agent
 
-To run an agent, you first need to approve the project configuration. In your
-project directory, run:
+To run an agent, you first need to approve the project configuration.
+In your project directory, run:
 
 ```bash
 cast config allow
@@ -32,6 +32,7 @@ cast run opencode
 ```
 
 This will:
+
 1. Pull or build the `opencode` sandbox image.
 2. Start a Docker container with the current directory mounted.
 3. Start the built-in MCP server.

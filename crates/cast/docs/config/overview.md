@@ -11,6 +11,7 @@
 ## Loading Precedence
 
 Higher priority overrides lower priority:
+
 1. **Environment Variables** (`CAST_*`)
 2. **Flat MCP Config** (`./cast-mcp.json`)
 3. **Project Config** (`./cast.json`)
@@ -20,6 +21,7 @@ Higher priority overrides lower priority:
 ## Environment Variables
 
 Use `CAST_` prefix. Nested fields use double underscores:
+
 - `CAST_MEMORY` → `memory`
 - `CAST_MCP__PORT` → `mcp.port`
 

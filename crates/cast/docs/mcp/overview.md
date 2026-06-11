@@ -16,6 +16,7 @@ tools and documentation to the coding agent.
 
 When an agent starts, `cast` launches an Axum-based HTTP server. The agent
 connects to this server and can:
+
 1. **List Tools**: See what tools are available (defined in `cast.json`).
 2. **Call Tools**: Execute a tool with specific arguments.
 

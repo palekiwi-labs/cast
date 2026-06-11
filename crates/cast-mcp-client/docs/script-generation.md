@@ -6,16 +6,16 @@ feel like native CLI commands.
 ## How to Generate
 
 Run the `generate` command and pipe the output to a directory:
+
 ```bash
 mkdir -p .tools
-cast-mcp-client generate > .tools/gen.sh
-# Note: the generate command currently prints the scripts to stdout or a
-# directory depending on implementation.
+cast-mcp-client generate --dir .agents/scripts
 ```
 
 ## Anatomy of a Wrapper
 
 A generated wrapper handles:
+
 1. **Argument Parsing**: Converts CLI flags to the JSON structure required by
    the MCP tool.
 2. **Validation**: Ensures required arguments are present.

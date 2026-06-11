@@ -10,13 +10,13 @@ Every configuration field in `cast` can be overridden by environment variables.
 
 ## Examples
 
-| Config Field | Env Variable |
-|---|---|
-| `memory` | `CAST_MEMORY` |
-| `cpus` | `CAST_CPUS` |
-| `mcp.port` | `CAST_MCP__PORT` |
+| Config Field   | Env Variable         |
+| -------------- | -------------------- |
+| `memory`       | `CAST_MEMORY`        |
+| `cpus`         | `CAST_CPUS`          |
+| `mcp.port`     | `CAST_MCP__PORT`     |
 | `mcp.hostname` | `CAST_MCP__HOSTNAME` |
-| `use_flake` | `CAST_USE_FLAKE` |
+| `use_flake`    | `CAST_USE_FLAKE`     |
 
 ## Specialized Env Vars
 

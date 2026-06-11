@@ -12,14 +12,15 @@ isolated from your host system.
 
 ## Agents and Harnesses
 
-An **Agent** is a specific coding tool (like OpenCode, ClaudeCode, or Pi). A
-**Harness** is the implementation of the `Agent` trait in `cast` that knows how
+An **Agent** is a specific coding tool (like OpenCode, ClaudeCode, or Pi).
+A **Harness** is the implementation of the `Agent` trait in `cast` that knows how
 to build the Docker image and run the agent binary with the correct flags and
 environment.
 
 ## Nix Integration
 
 `cast` leverages Nix in two ways:
+
 1. **Flake Wrapping**: If `use_flake` is enabled, `cast` wraps the agent's
    execution in a `nix develop` shell, providing the agent with the exact tools
    defined in your project's `flake.nix`.
@@ -33,6 +34,7 @@ agent, `cast` starts this server, allowing the agent to call tools on the host
 (as defined in your `cast.json`) and access project documentation.
 
 For implementation details, refer to the source code:
+
 - Sandbox logic: [src/dev/][sandbox-src]
 - MCP implementation: [src/mcp/][mcp-src]
 

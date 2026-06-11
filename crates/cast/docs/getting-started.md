@@ -13,7 +13,7 @@ This guide covers the prerequisites and first steps for using `cast`.
 Install `cast` to your Nix profile:
 
 ```bash
-nix profile install github:palekiwi-labs/cast#cast
+nix profile add github:palekiwi-labs/cast#cast
 ```
 
 ## First Steps
@@ -51,6 +51,5 @@ process is automatic.
 
 ## Next Steps
 
-- See the [Command Reference](commands/reference.md) for all available
-  subcommands.
+- See the [Command Reference](commands/reference.md) for all available subcommands.
 - Learn about [Configuration](config/overview.md) options.

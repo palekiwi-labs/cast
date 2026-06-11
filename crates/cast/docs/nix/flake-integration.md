@@ -22,6 +22,7 @@ every agent session, regardless of the specific project.
 ## How it works
 
 If enabled, `cast` constructs a "Russian Doll" of shell wrappers:
+
 1. `nix develop <global_flake> -c` (optional)
 2. `nix develop <project_flake> -c`
 3. `<agent_binary>`

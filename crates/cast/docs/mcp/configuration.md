@@ -146,6 +146,7 @@ fields.
 ### Execution Environment
 
 For security and reproducibility:
+
 - `stdin` is set to `null` (tools cannot read interactive input).
 - The environment is cleared of all host variables except those explicitly
   inherited or set.

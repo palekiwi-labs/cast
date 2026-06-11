@@ -10,11 +10,13 @@ Context Protocol) server.
 The recommended way to use `cast` is via Nix.
 
 ### Run directly
+
 ```bash
 nix run github:palekiwi-labs/cast#cast -- --help
 ```
 
 ### Install to profile
+
 ```bash
 nix profile add github:palekiwi-labs/cast#cast
 ```
