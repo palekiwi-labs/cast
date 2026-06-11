@@ -500,14 +500,14 @@ pub fn generate_script(server_name: &str, tool: &Tool) -> String {
     // ── MCP output parsing ───────────────────────────────────────────────────
     s.push_str("IS_ERROR=$(echo \"$RESULT\" | jq -r '.isError // false')\n");
     s.push_str("[[ \"$IS_ERROR\" == \"true\" ]] && {\n");
-    s.push_str("  echo \"$RESULT\" | jq -r '.content[]|select(.type==\"text\")|.text' >&2\n");
+    s.push_str("  echo \"$RESULT\" | jq -r '.content[]?|select(.type==\"text\")|.text' >&2\n");
     s.push_str("  exit 1\n");
     s.push_str("}\n\n");
-    s.push_str("NON_TEXT=$(echo \"$RESULT\" | jq -r '[.content[]|select(.type!=\"text\")|.type]|unique|join(\", \")')\n");
+    s.push_str("NON_TEXT=$(echo \"$RESULT\" | jq -r '[.content[]?|select(.type!=\"text\")|.type]|unique|join(\", \")')\n");
     s.push_str(
         "[[ -n \"$NON_TEXT\" ]] && echo \"Warning: ignored non-text type(s): $NON_TEXT\" >&2\n\n",
     );
-    s.push_str("echo \"$RESULT\" | jq -r '[.content[]|select(.type==\"text\")|.text]|join(\"\")'");
+    s.push_str("echo \"$RESULT\" | jq -r '[.content[]?|select(.type==\"text\")|.text]|join(\"\")'");
 
     s
 }
@@ -877,6 +877,16 @@ mod tests {
         assert!(
             script.contains("cast-mcp-client call"),
             "delegates to cast-mcp-client call"
+        );
+
+        // Null-safe content iteration: .content[]? not .content[]
+        assert!(
+            script.contains(".content[]?"),
+            "uses .content[]? for null safety"
+        );
+        assert!(
+            !script.contains(".content[]|"),
+            "no bare .content[]| that crashes on null"
         );
     }
 
