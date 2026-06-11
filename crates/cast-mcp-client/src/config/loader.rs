@@ -1,24 +1,5 @@
-use serde::{Deserialize, Serialize};
+use super::schema::ClientConfig;
 use std::collections::HashMap;
-
-#[derive(Debug, Deserialize, Serialize, Clone, Default)]
-pub struct ClientConfig {
-    #[serde(default)]
-    pub mcp: HashMap<String, RemoteServerConfig>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct RemoteServerConfig {
-    pub url: String,
-    #[serde(default)]
-    pub headers: HashMap<String, String>,
-    #[serde(default = "default_enabled")]
-    pub enabled: bool,
-}
-
-fn default_enabled() -> bool {
-    true
-}
 
 pub fn parse_from_str(s: &str, env: &HashMap<String, String>) -> ClientConfig {
     let mut config: ClientConfig = serde_json::from_str(s).unwrap_or_else(|e| {
