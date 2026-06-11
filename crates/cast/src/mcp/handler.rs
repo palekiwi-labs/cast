@@ -78,7 +78,7 @@ impl McpHandler {
             for id in super::docs::list_docs() {
                 list.push_str(&format!("- `{}`\n", id));
             }
-            list.push_str("\nUse `fetch_cast_documentation(id=\"...\")` to read an entry.");
+            list.push_str("\nUse `fetch_cast_documentation` tool to read an entry.");
             return Ok(CallToolResult::success(vec![Content::text(list)]));
         }
 
