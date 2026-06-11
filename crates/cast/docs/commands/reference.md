@@ -4,11 +4,13 @@ Detailed reference for `cast` subcommands.
 
 ## `run <agent>`
 Starts an agent session.
-- `--version <version>`: Use a specific agent version.
-- `--no-pull`: Don't try to pull the latest image.
+- `[extra_args]`: Extra arguments to pass directly to the agent binary.
 
 ## `build <agent>`
 Builds the Docker image for an agent without running it.
+- `--base`: Also build the Nix daemon base image.
+- `--force`, `-f`: Force rebuild even if image already exists.
+- `--no-cache`: Do not use Docker cache.
 
 ## `shell <agent>`
 Starts an interactive shell inside the agent's sandbox.
@@ -27,10 +29,10 @@ Manages the containerized Nix daemon.
 - `nix-daemon stop`: Stop the nix-daemon container.
 - `nix-daemon shell`: Open a shell in the nix-daemon container.
 
-## `mcp`
+## `mcp start`
 Starts the built-in MCP server.
-- `--port <port>`: Specify the port to listen on.
-- `--hostname <hostname>`: Specify the hostname to bind to.
+- `--port <port>`: Specify the port to listen on (overrides cast.json).
+- `--host <host>`: Specify the host to bind to (overrides cast.json).
 
 ## `port <agent>`
 Prints the deterministic port assigned to the agent for the current workspace.
