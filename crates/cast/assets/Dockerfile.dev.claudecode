@@ -1,0 +1,72 @@
+FROM debian:trixie-slim
+
+ARG AGENT_VERSION=latest
+
+# Install essential tools for development
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    git \
+    ssh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy official Node.js binaries from the node image.
+# Both node:lts-trixie-slim and debian:trixie-slim share the same Debian base,
+# so the binaries are 100% ABI-compatible. This avoids inheriting the pre-existing
+# 'node' user at UID 1000 that ships with node:lts-trixie-slim.
+COPY --from=node:lts-trixie-slim /usr/local /usr/local
+
+# Install Claude Code via npm (runs as root, installs to /usr/local)
+RUN npm install -g @anthropic-ai/claude-code@${AGENT_VERSION}
+
+# Configure Nix system-wide to enable flakes
+# (Nix store will be mounted from nix-daemon volume)
+RUN mkdir -p /etc/nix && \
+    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
+
+# Add Nix to PATH (will be available if /nix is mounted)
+ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
+
+# Limit GC marker threads for Nix commands running in the container
+ENV GC_NPROCS=1
+
+# Ensure Nix client communicates via daemon socket (store is mounted read-only)
+ENV NIX_REMOTE=daemon
+
+ARG USERNAME=user
+ARG UID=1000
+ARG GID=1000
+ARG EXTRA_DIRS=""
+
+USER root
+
+# Create user and directories (idempotent - safe even if user/dirs exist)
+RUN set -e; \
+    if getent group ${GID} >/dev/null 2>&1; then \
+        GROUP_NAME=$(getent group ${GID} | cut -d: -f1); \
+    else \
+        groupadd -g ${GID} --non-unique ${USERNAME} 2>/dev/null || true; \
+        GROUP_NAME=${USERNAME}; \
+    fi && \
+    if ! getent passwd ${USERNAME} >/dev/null 2>&1; then \
+        useradd -u ${UID} -g ${GID} -m -d /home/${USERNAME} \
+            --non-unique -s /bin/bash ${USERNAME} 2>/dev/null || true; \
+    fi && \
+    mkdir -p /home/${USERNAME} && \
+    mkdir -p /workspace \
+             /home/${USERNAME}/.cache \
+             /home/${USERNAME}/.claude \
+             /home/${USERNAME}/.config \
+             /home/${USERNAME}/.local \
+             ${EXTRA_DIRS} && \
+    chown -R ${UID}:${GID} /workspace \
+                           /home/${USERNAME}/.cache \
+                           /home/${USERNAME}/.claude \
+                           /home/${USERNAME}/.config \
+                           /home/${USERNAME}/.local \
+                           /home/${USERNAME} \
+                           ${EXTRA_DIRS} 2>/dev/null || true
+
+USER ${USERNAME}
+WORKDIR /workspace
+
+CMD ["claude"]

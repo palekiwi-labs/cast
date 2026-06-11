@@ -4,6 +4,7 @@ use super::{config, nix_daemon, port};
 use crate::config::{ApprovedConfig, Config, load_config};
 use crate::dev;
 use crate::dev::agent::Agent;
+use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
 use crate::dev::workspace::get_workspace;
@@ -66,6 +67,18 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             dev::build_agent(&Pi, &approved, base, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
+        Some(Commands::Build {
+            agent:
+                BuildAgent::Claudecode {
+                    base,
+                    force,
+                    no_cache,
+                },
+        }) => {
+            let approved = verify_config(cfg)?;
+            dev::build_agent(&ClaudeCode, &approved, base, force, no_cache)?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
         Some(Commands::NixDaemon { command }) => {
             let approved = verify_config(cfg)?;
@@ -80,6 +93,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                 match &agent {
                     RunAgent::Opencode { extra_args } => extra_args.clone(),
                     RunAgent::Pi { extra_args } => extra_args.clone(),
+                    RunAgent::Claudecode { extra_args } => extra_args.clone(),
                 },
             )?;
             Ok(to_exit_code(status))
@@ -96,6 +110,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }) => {
             let approved = verify_config(cfg)?;
             let status = dev::shell(&Pi, &approved)?;
+            Ok(to_exit_code(status))
+        }
+        Some(Commands::Shell {
+            agent: ShellAgent::Claudecode,
+        }) => {
+            let approved = verify_config(cfg)?;
+            let status = dev::shell(&ClaudeCode, &approved)?;
             Ok(to_exit_code(status))
         }
         #[cfg(feature = "mcp")]
@@ -139,6 +160,18 @@ pub enum BuildAgent {
         #[arg(long)]
         no_cache: bool,
     },
+    /// Build the ClaudeCode agent's Docker image
+    Claudecode {
+        /// Also build the Nix daemon base image
+        #[arg(long)]
+        base: bool,
+        /// Force rebuild even if image already exists
+        #[arg(short, long)]
+        force: bool,
+        /// Do not use Docker cache
+        #[arg(long)]
+        no_cache: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -158,6 +191,13 @@ pub enum RunAgent {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         extra_args: Vec<String>,
     },
+    /// Start an interactive ClaudeCode session
+    #[command(alias = "c", disable_help_flag = true)]
+    Claudecode {
+        /// Extra arguments to pass to the claude command
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
+        extra_args: Vec<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -167,6 +207,8 @@ pub enum ShellAgent {
     Opencode,
     /// Drop into an interactive shell in the Pi container
     Pi,
+    /// Drop into an interactive shell in the ClaudeCode container
+    Claudecode,
 }
 
 #[cfg(feature = "mcp")]
@@ -230,6 +272,7 @@ impl RunAgent {
         match self {
             RunAgent::Opencode { .. } => &OpenCode,
             RunAgent::Pi { .. } => &Pi,
+            RunAgent::Claudecode { .. } => &ClaudeCode,
         }
     }
 }

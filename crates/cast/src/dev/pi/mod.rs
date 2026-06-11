@@ -76,7 +76,7 @@ impl Agent for Pi {
                 "{}:/home/{}/.pi:rw",
                 pi_config_host_dir.display(),
                 opts.user.username
-            )
+            ),
         ]);
 
         // User flake mount (~/.config/cast/nix).
