@@ -35,3 +35,40 @@ Wired ClaudeCode into commands/cli.rs: import, BuildAgent::Claudecode, RunAgent:
 
 - **Decided:** Use alias 'c' for claudecode run subcommand (matches plan)
 
+## [ee54947] Fix: Dockerfile switched to debian:trixie-slim + multi-stage COPY
+
+Replaced FROM node:lts-trixie-slim with FROM debian:trixie-slim + COPY --from=node:lts-trixie-slim /usr/local /usr/local. Root cause: node image's pre-existing 'node' user at UID 1000 caused our username-based useradd check to silently fail. Multi-stage COPY gives official Node.js binaries without inheriting the conflicting user. Added test_dockerfile_copies_node_from_official_image. All 11 unit tests pass.
+
+- **Decided:** Use multi-stage COPY from node:lts-trixie-slim rather than usermod rename or NodeSource curl-pipe-bash (per Gemini Flash consultation)
+
+## [38be528] feat: bind-mount ~/.claude.json for global config persistence
+
+- **Found:** ~/.claude.json is a file at the home root, separate from the ~/.claude/ directory — both need to be mounted
+- **Found:** Docker creates a directory at a non-existent bind-mount path; prepare_host must touch the file first to prevent corruption
+- **Decided:** Bind mount (not named volume) — Docker named volumes only mount to directories
+- **Decided:** ensure_config_file is idempotent: only creates the file if absent, never truncates existing content
+
+## [bfd75b9] fix: ~/.claude.json must be initialised with {}
+
+- **Found:** Claude Code rejects an empty file with 'invalid JSON' — it requires a valid JSON object, even if empty
+- **Decided:** Write "{}" on first creation; idempotency test updated to assert the content
+
+## [11b8034] fix: add 10s timeout to NpmRegistryFetcher
+
+Applied code review fix: NpmRegistryFetcher now uses a ureq::AgentBuilder with an explicit 10-second timeout instead of the default (no timeout). This prevents the CLI from hanging indefinitely when the npm registry is unreachable or the network is degraded.
+
+- **Decided:** Use ureq::AgentBuilder with .timeout(Duration::from_secs(10)) — matches ureq 2.x API and keeps the fix minimal/contained to the fetcher impl
+
+## [0026033-dirty] refactor: trim claudecode PASSTHROUGH_VARS to documented-only set
+
+- **Found:** OPENAI_API_KEY and GOOGLE_GENERATIVE_AI_API_KEY were copied from other agents but are absent from the Claude Code env-vars reference
+- **Found:** AWS_ACCESS_KEY_ID/SECRET/PROFILE are standard AWS SDK conventions — not Claude Code-specific; Claude Code only documents AWS_REGION explicitly
+- **Found:** GOOGLE_APPLICATION_CREDENTIALS is a host file path that will not exist inside the container, causing silent Vertex AI auth failure — confirmed by code reviewer and docs research
+- **Found:** CLOUD_ML_REGION is absent from the official Claude Code env-vars reference
+- **Found:** CLAUDE_CODE_MAX_OUTPUT_TOKENS is documented (was wrongly flagged as spurious in earlier research)
+- **Found:** The official env-vars reference lives at code.claude.com/docs/en/env-vars.md
+- **Decided:** Only include passthrough vars with a strong documented reason in the Claude Code env-vars reference
+- **Decided:** Remove GOOGLE_APPLICATION_CREDENTIALS because it is a file path that cannot safely be passed through without a corresponding bind-mount
+- **Decided:** Retain 8 variables: ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, ANTHROPIC_BASE_URL, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, CLAUDE_CODE_MAX_OUTPUT_TOKENS, AWS_REGION, GOOGLE_CLOUD_PROJECT
+- **Decided:** Add doc-comment to PASSTHROUGH_VARS explaining each notable omission so future contributors understand the rationale
+
