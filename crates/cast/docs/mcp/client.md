@@ -12,15 +12,15 @@ cast-mcp-client list
 ```
 
 ### Describe a Tool
-To see the input schema for a specific tool:
+To see the input schema for a specific tool on the `cast` server:
 ```bash
-cast-mcp-client describe <tool_name>
+cast-mcp-client describe cast list_cast_documentation
 ```
 
 ### Call a Tool
 To execute a tool with JSON arguments:
 ```bash
-cast-mcp-client call <tool_name> '{"arg": "value"}'
+cast-mcp-client call cast fetch_cast_documentation '{"id": "mcp/configuration"}'
 ```
 
 ## How it Connects
