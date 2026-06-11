@@ -12,6 +12,13 @@ Set `use_flake` to `true` in your `cast.json`:
 }
 ```
 
+## Global Flake
+
+`cast` also supports a global flake that applies to all projects. If a
+`flake.nix` is found in `~/.config/cast/nix/`, it will be used as the outer
+layer of the shell wrapping. This is useful for tools you want available in
+every agent session, regardless of the specific project.
+
 ## How it works
 
 If enabled, `cast` constructs a "Russian Doll" of shell wrappers:
