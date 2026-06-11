@@ -1,7 +1,6 @@
 # Core Concepts
 
-`cast` is built on a few key concepts that provide its security and
-flexibility.
+`cast` is built on a few key concepts that provide its security and flexibility.
 
 ## The Sandbox
 
@@ -13,9 +12,9 @@ isolated from your host system.
 ## Agents and Harnesses
 
 An **Agent** is a specific coding tool (like OpenCode, ClaudeCode, or Pi).
-A **Harness** is the implementation of the `Agent` trait in `cast` that knows how
-to build the Docker image and run the agent binary with the correct flags and
-environment.
+A **Harness** is the implementation of the `Agent` trait in `cast` that knows
+how to build the Docker image and run the agent binary with the correct flags
+and environment.
 
 ## Nix Integration
 
@@ -32,6 +31,13 @@ environment.
 `cast` includes a built-in Model Context Protocol (MCP) server. When you run an
 agent, `cast` starts this server, allowing the agent to call tools on the host
 (as defined in your `cast.json`) and access project documentation.
+
+## Persistence and Host Access
+
+While sandboxes are isolated, you can configure persistent storage and host
+access through `extra_data_volumes`. This allows you to share caches (like
+`~/.cargo` or `~/.npm`) between sessions or mount specific host directories
+into the sandbox.
 
 For implementation details, refer to the source code:
 

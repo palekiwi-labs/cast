@@ -17,6 +17,7 @@ Every configuration field in `cast` can be overridden by environment variables.
 | `mcp.port`     | `CAST_MCP__PORT`     |
 | `mcp.hostname` | `CAST_MCP__HOSTNAME` |
 | `use_flake`    | `CAST_USE_FLAKE`     |
+| `extra_data_volumes.cargo.target` | `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET` |
 
 ## Specialized Env Vars
 

@@ -20,8 +20,8 @@ nix profile add github:palekiwi-labs/cast#cast
 
 ### 1. Initialize Configuration
 
-`cast` looks for a `cast.json` file in your project root. You can create a
-minimal one:
+`cast` looks for a `cast.json` file in your project root.
+You can create a minimal one:
 
 ```json
 {
@@ -31,8 +31,7 @@ minimal one:
 
 ### 2. Approve Configuration
 
-For security, `cast` requires you to approve the configuration for each
-workspace:
+For security, `cast` requires you to approve the configuration for each workspace:
 
 ```bash
 cast config allow
@@ -46,8 +45,8 @@ Run the `opencode` agent:
 cast run opencode
 ```
 
-The first time you run an agent, `cast` may build its Docker image. This
-process is automatic.
+The first time you run an agent, `cast` will build its Docker image.
+This process is automatic.
 
 ## Next Steps
 
