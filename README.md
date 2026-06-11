@@ -16,7 +16,7 @@ nix run github:palekiwi-labs/cast#cast -- --help
 
 ### Install to profile
 ```bash
-nix profile install github:palekiwi-labs/cast#cast
+nix profile add github:palekiwi-labs/cast#cast
 ```
 
 ## Documentation

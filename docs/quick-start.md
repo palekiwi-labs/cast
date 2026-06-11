@@ -13,7 +13,7 @@ This guide will help you get `cast` up and running in 5 minutes using Nix.
 Install `cast` to your Nix profile:
 
 ```bash
-nix profile install github:palekiwi-labs/cast#cast
+nix profile add github:palekiwi-labs/cast#cast
 ```
 
 ## 2. Run your first agent
