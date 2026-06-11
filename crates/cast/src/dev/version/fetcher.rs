@@ -41,7 +41,11 @@ impl VersionFetcher for NpmRegistryFetcher {
         }
 
         let url = format!("https://registry.npmjs.org/{}/latest", self.package);
-        let dist: NpmLatest = ureq::get(&url)
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(10))
+            .build();
+        let dist: NpmLatest = agent
+            .get(&url)
             .set("User-Agent", "cast")
             .call()
             .context("Failed to reach npm registry")?
