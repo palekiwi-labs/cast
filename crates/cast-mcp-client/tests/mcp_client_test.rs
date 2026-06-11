@@ -1215,3 +1215,97 @@ async fn test_generate_skips_unreachable_server() -> anyhow::Result<()> {
     ct.cancel();
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Critical fix: config-defined cast headers must not be stripped
+// ---------------------------------------------------------------------------
+
+/// When the cast URL comes from config (no --cast-mcp-url flag, no CAST_MCP_URL
+/// env var), custom headers defined in the config entry must be forwarded.
+/// This test exercises the full binary path through main.rs → build_server_map.
+#[tokio::test]
+async fn test_cast_config_headers_are_forwarded_when_url_from_config() -> anyhow::Result<()> {
+    use axum::extract::Request;
+    use axum::middleware::Next;
+    use std::sync::Mutex;
+
+    // Shared storage for the captured header value
+    let captured: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let captured_clone = captured.clone();
+
+    // MCP service with header-capturing middleware
+    let ct = CancellationToken::new();
+    let service = StreamableHttpService::new(
+        || Ok(MockServerHandler),
+        Arc::new(LocalSessionManager::default()),
+        StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
+    );
+    let router = axum::Router::new()
+        .nest_service("/mcp", service)
+        .layer(axum::middleware::from_fn(
+            move |req: Request, next: Next| {
+                let captured = captured_clone.clone();
+                async move {
+                    if let Some(val) = req.headers().get("x-cast-secret") {
+                        let mut lock = captured.lock().unwrap();
+                        if lock.is_none() {
+                            *lock =
+                                Some(val.to_str().unwrap_or("").to_string());
+                        }
+                    }
+                    next.run(req).await
+                }
+            },
+        ));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    tokio::spawn({
+        let ct = ct.clone();
+        async move {
+            let _ = axum::serve(listener, router)
+                .with_graceful_shutdown(async move {
+                    ct.cancelled_owned().await
+                })
+                .await;
+        }
+    });
+
+    let url = format!("http://{addr}/mcp");
+
+    // Write a project-local config with a cast entry that includes a custom header.
+    let tmpdir = tempfile::tempdir()?;
+    std::fs::write(
+        tmpdir.path().join("cast-mcp-client.json"),
+        format!(
+            r#"{{"mcp":{{"cast":{{"url":"{url}","headers":{{"X-Cast-Secret":"my-secret"}}}}}}}}"#,
+        ),
+    )?;
+
+    // Run `list` with no --cast-mcp-url flag and no CAST_MCP_URL env var.
+    // The binary must use the config entry including its custom header.
+    let mut cmd = Command::cargo_bin("cast-mcp-client")?;
+    cmd.arg("list")
+        .current_dir(tmpdir.path())
+        .env_remove("CAST_MCP_URL");
+
+    tokio::task::spawn_blocking(move || {
+        let output = cmd.assert().success().get_output().stdout.clone();
+        let json: serde_json::Value =
+            serde_json::from_slice(&output).expect("stdout should be valid JSON");
+        // The cast server should appear in the output
+        assert!(json["cast"].is_array(), "cast entry should be present");
+    })
+    .await?;
+
+    // Verify the custom header was actually forwarded to the server
+    let val = captured.lock().unwrap().clone();
+    assert_eq!(
+        val.as_deref(),
+        Some("my-secret"),
+        "X-Cast-Secret header must be forwarded when cast URL from config"
+    );
+
+    ct.cancel();
+    Ok(())
+}

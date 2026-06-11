@@ -1,7 +1,7 @@
 use cast_mcp_client::config;
 use cast_mcp_client::{
     build_server_map, call_tool_cmd, describe_tool_cmd, generate_scripts_cmd, list_tools_cmd,
-    print_json_error, resolve_cast_mcp_url, status_cmd,
+    print_json_error, status_cmd,
 };
 use clap::{Parser, Subcommand};
 
@@ -91,8 +91,10 @@ async fn main() {
             cast_mcp_url,
             servers,
         } => {
-            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
-            let server_map = build_server_map(cast_url, &cfg);
+            // Only flag or env var counts as an override; config-sourced URL is
+            // handled directly inside build_server_map (preserves headers).
+            let cast_override = cast_mcp_url.or(env_url);
+            let server_map = build_server_map(cast_override, &cfg);
             list_tools_cmd(server_map, servers).await
         }
         Commands::Describe {
@@ -100,8 +102,8 @@ async fn main() {
             tool_name,
             cast_mcp_url,
         } => {
-            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
-            let server_map = build_server_map(cast_url, &cfg);
+            let cast_override = cast_mcp_url.or(env_url);
+            let server_map = build_server_map(cast_override, &cfg);
             describe_tool_cmd(server_name, tool_name, server_map).await
         }
         Commands::Call {
@@ -110,13 +112,13 @@ async fn main() {
             params,
             cast_mcp_url,
         } => {
-            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
-            let server_map = build_server_map(cast_url, &cfg);
+            let cast_override = cast_mcp_url.or(env_url);
+            let server_map = build_server_map(cast_override, &cfg);
             call_tool_cmd(server_name, tool_name, params, server_map).await
         }
         Commands::Status { cast_mcp_url } => {
-            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
-            let server_map = build_server_map(cast_url, &cfg);
+            let cast_override = cast_mcp_url.or(env_url);
+            let server_map = build_server_map(cast_override, &cfg);
             status_cmd(server_map).await
         }
         Commands::Generate {
@@ -124,8 +126,8 @@ async fn main() {
             cast_mcp_url,
             servers,
         } => {
-            let cast_url = resolve_cast_mcp_url(cast_mcp_url, env_url, &cfg);
-            let server_map = build_server_map(cast_url, &cfg);
+            let cast_override = cast_mcp_url.or(env_url);
+            let server_map = build_server_map(cast_override, &cfg);
             generate_scripts_cmd(servers, &dir, server_map).await
         }
     };

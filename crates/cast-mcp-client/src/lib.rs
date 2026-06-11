@@ -57,25 +57,6 @@ pub fn build_server_map(
     map
 }
 
-/// Resolve the cast server URL for the multi-server client, with priority:
-/// 1. Explicit `--cast-mcp-url` CLI flag value.
-/// 2. `CAST_MCP_CLIENT_URL` environment variable (caller responsibility to read and pass in).
-/// 3. `mcp.cast.url` from the loaded config file.
-///
-/// Returns `None` if no source provides a URL (cast server is simply absent).
-///
-/// This function is pure — it has no side effects and does not read the environment directly.
-/// The caller reads `std::env::var("CAST_MCP_CLIENT_URL").ok()` and passes it as `env_url`.
-pub fn resolve_cast_mcp_url(
-    explicit: Option<String>,
-    env_url: Option<String>,
-    config: &config::ClientConfig,
-) -> Option<String> {
-    explicit
-        .or(env_url)
-        .or_else(|| config.mcp.get("cast").map(|s| s.url.clone()))
-}
-
 /// A minimal handler to manage client-side callbacks (e.g., logging or sampling).
 /// Required by the `rmcp` crate to serve as a client service.
 #[derive(Clone, Debug, Default)]
@@ -890,40 +871,6 @@ mod tests {
         // The description text is present somewhere in the script.
         assert!(script.contains("First line summary."), "description in script");
         assert!(script.contains("You MUST call this first."), "second paragraph present");
-    }
-
-    // --- resolve_cast_mcp_url ---
-
-    #[test]
-    fn test_resolve_cast_mcp_url_flag_wins_over_env_and_config() {
-        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
-        let result = resolve_cast_mcp_url(
-            Some("http://flag.com/mcp".to_string()),
-            Some("http://env.com/mcp".to_string()),
-            &config,
-        );
-        assert_eq!(result, Some("http://flag.com/mcp".to_string()));
-    }
-
-    #[test]
-    fn test_resolve_cast_mcp_url_env_wins_over_config() {
-        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
-        let result = resolve_cast_mcp_url(None, Some("http://env.com/mcp".to_string()), &config);
-        assert_eq!(result, Some("http://env.com/mcp".to_string()));
-    }
-
-    #[test]
-    fn test_resolve_cast_mcp_url_config_is_fallback() {
-        let config = config::parse_from_str(r#"{"mcp":{"cast":{"url":"http://config.com/mcp"}}}"#);
-        let result = resolve_cast_mcp_url(None, None, &config);
-        assert_eq!(result, Some("http://config.com/mcp".to_string()));
-    }
-
-    #[test]
-    fn test_resolve_cast_mcp_url_returns_none_when_no_source() {
-        let config = config::ClientConfig::default();
-        let result = resolve_cast_mcp_url(None, None, &config);
-        assert_eq!(result, None);
     }
 
     // --- build_server_map ---
