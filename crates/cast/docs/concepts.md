@@ -36,5 +36,5 @@ For implementation details, refer to the source code:
 - Sandbox logic: [src/dev/][sandbox-src]
 - MCP implementation: [src/mcp/][mcp-src]
 
-[sandbox-src]: https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/dev
-[mcp-src]: https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/mcp
+[sandbox-src]: ../src/dev/
+[mcp-src]: ../src/mcp/
