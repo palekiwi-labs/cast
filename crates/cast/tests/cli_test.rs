@@ -63,9 +63,21 @@ fn test_cast_port_different_for_different_agents() {
     let stdout_p = String::from_utf8_lossy(&output_p.get_output().stdout);
     let port_p: u16 = stdout_p.trim().parse().unwrap();
 
+    let output_c = cast().args(["port", "claudecode"]).assert().success();
+    let stdout_c = String::from_utf8_lossy(&output_c.get_output().stdout);
+    let port_c: u16 = stdout_c.trim().parse().unwrap();
+
     assert_ne!(
         port_o, port_p,
-        "Different agents should have different ports"
+        "opencode and pi should have different ports"
+    );
+    assert_ne!(
+        port_o, port_c,
+        "opencode and claudecode should have different ports"
+    );
+    assert_ne!(
+        port_p, port_c,
+        "pi and claudecode should have different ports"
     );
 }
 
@@ -133,6 +145,25 @@ fn test_cast_shell_help() {
 fn test_cast_shell_opencode_help() {
     cast()
         .args(["shell", "opencode", "--help"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cast_build_claudecode_help() {
+    cast()
+        .args(["build", "claudecode", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--base"))
+        .stdout(predicate::str::contains("--force"))
+        .stdout(predicate::str::contains("--no-cache"));
+}
+
+#[test]
+fn test_cast_shell_claudecode_help() {
+    cast()
+        .args(["shell", "claudecode", "--help"])
         .assert()
         .success();
 }

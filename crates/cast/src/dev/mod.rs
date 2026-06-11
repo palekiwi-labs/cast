@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod build;
 pub mod build_command;
+pub mod claudecode;
 pub mod container_name;
 pub mod env_file;
 pub mod extra_dirs;
