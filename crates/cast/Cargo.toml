@@ -1,6 +1,7 @@
 [package]
 description = "cast - coding agent sandbox tool"
 authors = ["palekiwi"]
+license = "MIT"
 name = "cast"
 version = "0.1.0"
 edition = "2024"

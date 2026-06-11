@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Lightweight MCP client for cast"
 authors = ["palekiwi"]
+license = "MIT"
 
 [dependencies]
 anyhow = "1.0.102"

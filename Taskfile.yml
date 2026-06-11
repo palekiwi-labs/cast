@@ -1,0 +1,19 @@
+version: '3'
+
+tasks:
+  prepare-release:
+    desc: "Prepares a release by tagging the current commit and pushing it."
+    cmds:
+      - |
+        VERSION=$(grep '^version =' crates/cast/Cargo.toml | head -1 | cut -d '"' -f 2)
+        echo "Preparing release v$VERSION"
+        git fetch origin master
+        BRANCH=$(git branch --show-current)
+        if [ "$BRANCH" != "master" ]; then
+          echo "Error: Releases must be tagged from the 'master' branch."
+          exit 1
+        fi
+        git diff --quiet || (echo "Error: Uncommitted changes." && exit 1)
+        git tag -a "v$VERSION" -m "Release v$VERSION"
+        git push origin "v$VERSION"
+        echo "Release v$VERSION tagged and pushed."
