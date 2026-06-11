@@ -470,23 +470,27 @@ pub fn generate_script(server_name: &str, tool: &Tool) -> String {
     }
 
     // ── JSON payload construction ────────────────────────────────────────────
-    s.push_str("PARAMS='{}'\n");
+    // Accumulate --arg/--argjson flags into a bash array, then call
+    // jq -n '$ARGS.named' exactly once — O(1) subprocess spawns regardless
+    // of parameter count.
+    s.push_str("JQ_ARGS=()\n");
     for p in &params {
         let jq_flag = if p.json_arg { "--argjson" } else { "--arg" };
         if p.required {
             // Always included — validation already guarantees non-empty.
             s.push_str(&format!(
-                "PARAMS=$(echo \"$PARAMS\" | jq {} {} \"${{{}}}\" '. + {{\"{}\" : ${}}}')\n",
-                jq_flag, p.name, p.var, p.name, p.name
+                "JQ_ARGS+=({} {} \"${{{}}}\")\n",
+                jq_flag, p.name, p.var
             ));
         } else {
             // Conditionally included only when the user provided a value.
             s.push_str(&format!(
-                "[[ -n \"${{{}:-}}\" ]] && PARAMS=$(echo \"$PARAMS\" | jq {} {} \"${{{}}}\" '. + {{\"{}\" : ${}}}')\n",
-                p.var, jq_flag, p.name, p.var, p.name, p.name
+                "[[ -n \"${{{}:-}}\" ]] && JQ_ARGS+=({} {} \"${{{}}}\")\n",
+                p.var, jq_flag, p.name, p.var
             ));
         }
     }
+    s.push_str("PARAMS=$(jq -n \"${JQ_ARGS[@]}\" '$ARGS.named')\n");
     s.push('\n');
 
     // ── Call cast-mcp-client ─────────────────────────────────────────────────
@@ -850,6 +854,18 @@ mod tests {
         assert!(
             script.contains("--argjson count"),
             "integer param uses --argjson"
+        );
+
+        // Single jq invocation via JQ_ARGS array
+        assert!(script.contains("JQ_ARGS=()"), "JQ_ARGS array init");
+        assert!(script.contains("jq -n"), "single jq -n invocation");
+        assert!(
+            script.contains("'$ARGS.named'"),
+            "uses $ARGS.named builtin"
+        );
+        assert!(
+            !script.contains("echo \"$PARAMS\" | jq"),
+            "no sequential pipe-to-jq pattern"
         );
 
         // SERVER/TOOL constants
