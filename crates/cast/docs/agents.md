@@ -18,13 +18,18 @@ lifecycle of an agent session:
 4. Docker argument generation
 5. Command wrapping (including Nix support)
 
-For the full trait definition, see [crates/cast/src/dev/agent.rs](../src/dev/agent.rs).
+For the full trait definition, see [src/dev/agent.rs][agent-trait].
 
 ## Adding New Agents
 
 Adding a new agent involves implementing the `Agent` trait and registering the
 new harness in the CLI. The source code for existing harnesses provides the
 best template:
-- OpenCode: [crates/cast/src/dev/opencode/mod.rs](../src/dev/opencode/mod.rs)
-- ClaudeCode: [crates/cast/src/dev/claudecode/mod.rs](../src/dev/claudecode/mod.rs)
-- Pi: [crates/cast/src/dev/pi/mod.rs](../src/dev/pi/mod.rs)
+- OpenCode: [src/dev/opencode/mod.rs][opencode-harness]
+- ClaudeCode: [src/dev/claudecode/mod.rs][claudecode-harness]
+- Pi: [src/dev/pi/mod.rs][pi-harness]
+
+[agent-trait]: ../src/dev/agent.rs
+[opencode-harness]: ../src/dev/opencode/mod.rs
+[claudecode-harness]: ../src/dev/claudecode/mod.rs
+[pi-harness]: ../src/dev/pi/mod.rs

@@ -33,5 +33,8 @@ agent, `cast` starts this server, allowing the agent to call tools on the host
 (as defined in your `cast.json`) and access project documentation.
 
 For implementation details, refer to the source code:
-- Sandbox logic: [src/dev/](https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/dev)
-- MCP implementation: [src/mcp/](https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/mcp)
+- Sandbox logic: [src/dev/][sandbox-src]
+- MCP implementation: [src/mcp/][mcp-src]
+
+[sandbox-src]: https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/dev
+[mcp-src]: https://github.com/palekiwi-labs/cast/tree/master/crates/cast/src/mcp

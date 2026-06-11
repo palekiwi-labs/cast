@@ -1,7 +1,7 @@
 # Configuration Reference
 
 This page lists key configuration fields available in `cast.json`. For the full
-schema, see [crates/cast/src/config/schema.rs](../../src/config/schema.rs).
+schema, see [src/config/schema.rs][schema-src].
 
 ## Sandbox Settings
 
@@ -20,9 +20,12 @@ schema, see [crates/cast/src/config/schema.rs](../../src/config/schema.rs).
 
 - `port`: Port for the MCP server (default: `8080`).
 - `hostname`: Hostname for the MCP server (default: `"127.0.0.1"`).
-- `tools`: Map of tool definitions. See [MCP Configuration](../mcp/configuration.md)
+- `tools`: Map of tool definitions. See [MCP Configuration][mcp-config]
   for details.
 
 ## Agent Versions
 
 - `agent_versions`: Map of agent names to version strings.
+
+[schema-src]: ../../src/config/schema.rs
+[mcp-config]: ../mcp/configuration.md
