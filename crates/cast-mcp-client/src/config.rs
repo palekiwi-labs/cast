@@ -20,7 +20,7 @@ fn default_enabled() -> bool {
     true
 }
 
-pub fn parse_from_str(s: &str) -> ClientConfig {
+pub fn parse_from_str(s: &str, env: &HashMap<String, String>) -> ClientConfig {
     let mut config: ClientConfig = serde_json::from_str(s).unwrap_or_else(|e| {
         eprintln!("Warning: Failed to parse MCP config: {}", e);
         ClientConfig::default()
@@ -28,7 +28,7 @@ pub fn parse_from_str(s: &str) -> ClientConfig {
 
     for server in config.mcp.values_mut() {
         for value in server.headers.values_mut() {
-            *value = apply_env_substitution(value);
+            *value = apply_env_substitution(value, env);
         }
     }
 
@@ -45,15 +45,16 @@ pub(crate) fn merge(mut global: ClientConfig, project: ClientConfig) -> ClientCo
 pub fn load_from_files(
     global: Option<&std::path::Path>,
     project: Option<&std::path::Path>,
+    env: &HashMap<String, String>,
 ) -> ClientConfig {
     let global_config = if let Some(path) = global {
-        load_single_file(path)
+        load_single_file(path, env)
     } else {
         ClientConfig::default()
     };
 
     let project_config = if let Some(path) = project {
-        load_single_file(path)
+        load_single_file(path, env)
     } else {
         ClientConfig::default()
     };
@@ -61,10 +62,10 @@ pub fn load_from_files(
     merge(global_config, project_config)
 }
 
-pub fn load() -> ClientConfig {
+pub fn load(env: &HashMap<String, String>) -> ClientConfig {
     let global = global_config_path();
     let project = std::path::Path::new("cast-mcp-client.json");
-    load_from_files(global.as_deref(), Some(project))
+    load_from_files(global.as_deref(), Some(project), env)
 }
 
 fn global_config_path() -> Option<std::path::PathBuf> {
@@ -82,9 +83,9 @@ fn global_config_path() -> Option<std::path::PathBuf> {
     None
 }
 
-fn load_single_file(path: &std::path::Path) -> ClientConfig {
+fn load_single_file(path: &std::path::Path, env: &HashMap<String, String>) -> ClientConfig {
     match std::fs::read_to_string(path) {
-        Ok(s) => parse_from_str(&s),
+        Ok(s) => parse_from_str(&s, env),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => ClientConfig::default(),
         Err(e) => {
             eprintln!("Warning: Failed to read MCP config at {:?}: {}", path, e);
@@ -93,7 +94,7 @@ fn load_single_file(path: &std::path::Path) -> ClientConfig {
     }
 }
 
-fn apply_env_substitution(s: &str) -> String {
+fn apply_env_substitution(s: &str, env: &HashMap<String, String>) -> String {
     let mut result = String::new();
     let mut current = s;
 
@@ -102,7 +103,7 @@ fn apply_env_substitution(s: &str) -> String {
         let remaining = &current[start_index + 5..];
         if let Some(end_index) = remaining.find('}') {
             let var_name = &remaining[..end_index];
-            let val = std::env::var(var_name).unwrap_or_default();
+            let val = env.get(var_name).cloned().unwrap_or_default();
             result.push_str(&val);
             current = &remaining[end_index + 1..];
         } else {
@@ -121,7 +122,7 @@ mod tests {
     #[test]
     fn test_parse_minimal_config() {
         let json = r#"{"mcp":{"myserver":{"url":"http://example.com/mcp"}}}"#;
-        let config = parse_from_str(json);
+        let config = parse_from_str(json, &HashMap::new());
         assert_eq!(config.mcp.len(), 1);
         assert_eq!(config.mcp["myserver"].url, "http://example.com/mcp");
     }
@@ -129,7 +130,7 @@ mod tests {
     #[test]
     fn test_default_enabled_and_headers() {
         let json = r#"{"mcp":{"myserver":{"url":"http://example.com/mcp"}}}"#;
-        let config = parse_from_str(json);
+        let config = parse_from_str(json, &HashMap::new());
         let server = &config.mcp["myserver"];
         assert!(server.enabled);
         assert!(server.headers.is_empty());
@@ -137,14 +138,11 @@ mod tests {
 
     #[test]
     fn test_env_var_substitution() {
-        unsafe {
-            std::env::set_var("CAST_TEST_TOKEN", "secret");
-        }
+        let env: HashMap<String, String> = [("CAST_TEST_TOKEN".to_string(), "secret".to_string())]
+            .into_iter()
+            .collect();
         let json = r#"{"mcp":{"myserver":{"url":"http://example.com/mcp", "headers": {"Authorization": "Bearer {env:CAST_TEST_TOKEN}"}}}}"#;
-        let config = parse_from_str(json);
-        unsafe {
-            std::env::remove_var("CAST_TEST_TOKEN");
-        }
+        let config = parse_from_str(json, &env);
         assert_eq!(
             config.mcp["myserver"].headers["Authorization"],
             "Bearer secret"
@@ -154,22 +152,34 @@ mod tests {
     #[test]
     fn test_unset_env_var_becomes_empty() {
         let json = r#"{"mcp":{"myserver":{"url":"http://example.com/mcp", "headers": {"Authorization": "Bearer {env:NON_EXISTENT_VAR}"}}}}"#;
-        let config = parse_from_str(json);
+        let config = parse_from_str(json, &HashMap::new());
         assert_eq!(config.mcp["myserver"].headers["Authorization"], "Bearer ");
     }
 
     #[test]
     fn test_project_overrides_global() {
-        let global = parse_from_str(r#"{"mcp":{"server":{"url":"http://global"}}}"#);
-        let project = parse_from_str(r#"{"mcp":{"server":{"url":"http://project"}}}"#);
+        let global = parse_from_str(
+            r#"{"mcp":{"server":{"url":"http://global"}}}"#,
+            &HashMap::new(),
+        );
+        let project = parse_from_str(
+            r#"{"mcp":{"server":{"url":"http://project"}}}"#,
+            &HashMap::new(),
+        );
         let merged = merge(global, project);
         assert_eq!(merged.mcp["server"].url, "http://project");
     }
 
     #[test]
     fn test_merge_adds_project_only_servers() {
-        let global = parse_from_str(r#"{"mcp":{"serverA":{"url":"http://globalA"}}}"#);
-        let project = parse_from_str(r#"{"mcp":{"serverB":{"url":"http://projectB"}}}"#);
+        let global = parse_from_str(
+            r#"{"mcp":{"serverA":{"url":"http://globalA"}}}"#,
+            &HashMap::new(),
+        );
+        let project = parse_from_str(
+            r#"{"mcp":{"serverB":{"url":"http://projectB"}}}"#,
+            &HashMap::new(),
+        );
         let merged = merge(global, project);
         assert_eq!(merged.mcp.len(), 2);
         assert_eq!(merged.mcp["serverA"].url, "http://globalA");
@@ -194,7 +204,7 @@ mod tests {
         )
         .unwrap();
 
-        let config = load_from_files(Some(&global_path), Some(&project_path));
+        let config = load_from_files(Some(&global_path), Some(&project_path), &HashMap::new());
 
         fs::remove_file(global_path).unwrap();
         fs::remove_file(project_path).unwrap();
@@ -207,6 +217,7 @@ mod tests {
         let config = load_from_files(
             Some(std::path::Path::new("/non/existent/global.json")),
             Some(std::path::Path::new("/non/existent/project.json")),
+            &HashMap::new(),
         );
         assert!(config.mcp.is_empty());
     }
@@ -219,7 +230,7 @@ mod tests {
 
         fs::write(&malformed_path, "not valid json").unwrap();
 
-        let config = load_from_files(Some(&malformed_path), None);
+        let config = load_from_files(Some(&malformed_path), None, &HashMap::new());
 
         fs::remove_file(malformed_path).unwrap();
 

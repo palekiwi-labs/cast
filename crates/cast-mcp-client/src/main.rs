@@ -1,4 +1,5 @@
 use cast_mcp_client::config;
+use std::collections::HashMap;
 use cast_mcp_client::{
     build_server_map, call_tool_cmd, describe_tool_cmd, generate_scripts_cmd, list_tools_cmd,
     print_json_error, status_cmd,
@@ -81,10 +82,13 @@ enum Commands {
 async fn main() {
     let cli = Cli::parse();
 
-    // Load config from disk (global + project-local); env substitution applied inside.
-    let cfg = config::load();
+    // Capture the process environment once at the binary boundary.
+    // Library code receives an immutable snapshot — no env reads inside.
+    let env_snapshot: HashMap<String, String> = std::env::vars().collect();
     // Read CAST_MCP_URL at the binary boundary and pass it as a pure value.
-    let env_url = std::env::var("CAST_MCP_URL").ok();
+    let env_url = env_snapshot.get("CAST_MCP_URL").cloned();
+    // Load config from disk (global + project-local); env substitution applied inside.
+    let cfg = config::load(&env_snapshot);
 
     let result = match cli.command {
         Commands::List {

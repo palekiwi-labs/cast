@@ -914,6 +914,7 @@ mod tests {
     fn test_build_server_map_includes_enabled_servers() {
         let config = config::parse_from_str(
             r#"{"mcp":{"sentry":{"url":"http://sentry.com/mcp"},"ctx7":{"url":"http://ctx7.com/mcp"}}}"#,
+            &HashMap::new(),
         );
         let map = build_server_map(None, &config);
         assert_eq!(map.len(), 2);
@@ -925,6 +926,7 @@ mod tests {
     fn test_build_server_map_excludes_disabled_servers() {
         let config = config::parse_from_str(
             r#"{"mcp":{"sentry":{"url":"http://sentry.com/mcp"},"ctx7":{"url":"http://ctx7.com/mcp","enabled":false}}}"#,
+            &HashMap::new(),
         );
         let map = build_server_map(None, &config);
         assert_eq!(map.len(), 1);
@@ -937,6 +939,7 @@ mod tests {
         // Config has a "cast" entry with a header — flag/env URL must override it (no headers)
         let config = config::parse_from_str(
             r#"{"mcp":{"cast":{"url":"http://config.com/mcp","headers":{"X-Token":"secret"}}}}"#,
+            &HashMap::new(),
         );
         let map = build_server_map(Some("http://flag.com/mcp".to_string()), &config);
         let cast = map.get("cast").expect("cast entry should be present");
@@ -952,6 +955,7 @@ mod tests {
         // No explicit URL provided — config entry (including headers) should be used as-is
         let config = config::parse_from_str(
             r#"{"mcp":{"cast":{"url":"http://config.com/mcp","headers":{"X-Token":"secret"}}}}"#,
+            &HashMap::new(),
         );
         let map = build_server_map(None, &config);
         let cast = map.get("cast").expect("cast entry should be present");
