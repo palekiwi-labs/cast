@@ -1,6 +1,7 @@
 # Usage Guide
 
-`cast-mcp-client` provides several subcommands for interacting with MCP servers.
+`cast-mcp-client` provides several subcommands for interacting with MCP
+servers.
 
 ## Commands
 

@@ -4,7 +4,8 @@ This guide will help you get `cast` up and running in 5 minutes using Nix.
 
 ## Prerequisites
 
-- **Docker**: `cast` uses Docker to run sandboxes. Ensure Docker is installed and the daemon is running.
+- **Docker**: `cast` uses Docker to run sandboxes. Ensure Docker is installed
+  and the daemon is running.
 - **Nix**: `cast` is distributed via Nix flakes.
 
 ## 1. Install `cast`
@@ -17,7 +18,8 @@ nix profile install github:palekiwi-labs/cast#cast
 
 ## 2. Run your first agent
 
-To run an agent, you first need to approve the project configuration. In your project directory, run:
+To run an agent, you first need to approve the project configuration. In your
+project directory, run:
 
 ```bash
 cast config allow
@@ -37,5 +39,6 @@ This will:
 
 ## Next Steps
 
-- Explore the [cast crate documentation](../crates/cast/docs/README.md) for detailed configuration and usage.
+- Explore the [cast crate documentation](../crates/cast/docs/README.md) for
+  detailed configuration and usage.
 - Learn how to use the [MCP server](../crates/cast/docs/mcp/overview.md).

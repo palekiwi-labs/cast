@@ -4,7 +4,8 @@ This guide covers the prerequisites and first steps for using `cast`.
 
 ## Prerequisites
 
-- **Docker**: `cast` requires Docker to run sandboxes. Ensure your user has permission to run Docker commands.
+- **Docker**: `cast` requires Docker to run sandboxes. Ensure your user has
+  permission to run Docker commands.
 - **Nix**: Recommended for the best experience with flakes and build support.
 
 ## Installation
@@ -19,7 +20,8 @@ nix profile install github:palekiwi-labs/cast#cast
 
 ### 1. Initialize Configuration
 
-`cast` looks for a `cast.json` file in your project root. You can create a minimal one:
+`cast` looks for a `cast.json` file in your project root. You can create a
+minimal one:
 
 ```json
 {
@@ -29,7 +31,8 @@ nix profile install github:palekiwi-labs/cast#cast
 
 ### 2. Approve Configuration
 
-For security, `cast` requires you to approve the configuration for each workspace:
+For security, `cast` requires you to approve the configuration for each
+workspace:
 
 ```bash
 cast config allow
@@ -43,9 +46,11 @@ Run the `opencode` agent:
 cast run opencode
 ```
 
-The first time you run an agent, `cast` may build its Docker image. This process is automatic.
+The first time you run an agent, `cast` may build its Docker image. This
+process is automatic.
 
 ## Next Steps
 
-- See the [Command Reference](commands/reference.md) for all available subcommands.
+- See the [Command Reference](commands/reference.md) for all available
+  subcommands.
 - Learn about [Configuration](config/overview.md) options.

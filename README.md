@@ -1,6 +1,9 @@
 # cast
 
-`cast` is a coding agent sandbox tool that orchestrates Docker-based sandboxes for coding agents like OpenCode, ClaudeCode, and Pi. It provides a secure, reproducible environment with Nix build support and a built-in MCP (Model Context Protocol) server.
+`cast` is a coding agent sandbox tool that orchestrates Docker-based sandboxes
+for coding agents like OpenCode, ClaudeCode, and Pi. It provides a secure,
+reproducible environment with Nix build support and a built-in MCP (Model
+Context Protocol) server.
 
 ## Installation (Nix)
 

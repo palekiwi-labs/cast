@@ -10,7 +10,8 @@
 
 ## The `Agent` Trait
 
-The system is extensible via the `Agent` trait. This trait defines the lifecycle of an agent session:
+The system is extensible via the `Agent` trait. This trait defines the
+lifecycle of an agent session:
 1. Version resolution
 2. Image building (from an embedded Dockerfile)
 3. Host preparation (creating directories/volumes)
@@ -21,7 +22,9 @@ For the full trait definition, see [crates/cast/src/dev/agent.rs](../src/dev/age
 
 ## Adding New Agents
 
-Adding a new agent involves implementing the `Agent` trait and registering the new harness in the CLI. The source code for existing harnesses provides the best template:
+Adding a new agent involves implementing the `Agent` trait and registering the
+new harness in the CLI. The source code for existing harnesses provides the
+best template:
 - OpenCode: [crates/cast/src/dev/opencode/mod.rs](../src/dev/opencode/mod.rs)
 - ClaudeCode: [crates/cast/src/dev/claudecode/mod.rs](../src/dev/claudecode/mod.rs)
 - Pi: [crates/cast/src/dev/pi/mod.rs](../src/dev/pi/mod.rs)

@@ -48,4 +48,5 @@ A typical project flake for use with `cast` might look like this:
 }
 ```
 
-When you run `cast run opencode`, the agent will have `node`, `python3`, and `jq` available in its `PATH`.
+When you run `cast run opencode`, the agent will have `node`, `python3`, and
+`jq` available in its `PATH`.

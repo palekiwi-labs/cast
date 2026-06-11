@@ -1,6 +1,7 @@
 # Using the MCP Client
 
-When you are inside a `cast` agent sandbox, you can use `cast-mcp-client` to interact with the built-in MCP server.
+When you are inside a `cast` agent sandbox, you can use `cast-mcp-client` to
+interact with the built-in MCP server.
 
 ## Common Tasks
 
@@ -24,6 +25,9 @@ cast-mcp-client call <tool_name> '{"arg": "value"}'
 
 ## How it Connects
 
-The client uses the `CAST_MCP_URL` environment variable, which `cast` sets automatically inside the sandbox. By default, it points to the host's bridge IP and the deterministic port assigned to the session.
+The client uses the `CAST_MCP_URL` environment variable, which `cast` sets
+automatically inside the sandbox. By default, it points to the host's bridge IP
+and the deterministic port assigned to the session.
 
-For more details on the client, see the [cast-mcp-client documentation](../../cast-mcp-client/docs/README.md).
+For more details on the client, see the [cast-mcp-client
+documentation](../../cast-mcp-client/docs/README.md).
