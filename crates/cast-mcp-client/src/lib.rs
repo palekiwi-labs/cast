@@ -447,7 +447,11 @@ pub fn generate_script(server_name: &str, tool: &Tool) -> String {
     s.push_str("while [[ $# -gt 0 ]]; do\n");
     s.push_str("  case \"$1\" in\n");
     for p in &params {
-        s.push_str(&format!("    --{}) {}=\"$2\"; shift 2 ;;\n", p.flag, p.var));
+        s.push_str(&format!(
+            "    --{flag}) [[ $# -lt 2 ]] && {{ echo \"Error: --{flag} requires a value\" >&2; exit 1; }}; {var}=\"$2\"; shift 2 ;;\n",
+            flag = p.flag,
+            var = p.var,
+        ));
     }
     s.push_str("    -h|--help) usage; exit 0 ;;\n");
     s.push_str("    *) echo \"Unknown option: $1\" >&2; usage >&2; exit 1 ;;\n");
@@ -773,6 +777,37 @@ mod tests {
     }
 
     // --- generate_script ---
+
+    #[test]
+    fn test_generate_script_missing_flag_value_guard() {
+        // Each --flag case must guard against a missing value before accessing $2.
+        // Without the guard, `set -u` fires with the unhelpful "unbound variable"
+        // error when the user passes --flag as the last argument.
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "query": { "type": "string", "description": "Search query" }
+            },
+            "required": ["query"]
+        });
+        let tool = rmcp::model::Tool::new_with_raw(
+            "search".to_string(),
+            Some("Search something".into()),
+            schema.as_object().cloned().unwrap_or_default(),
+        );
+        let script = generate_script("cast", &tool);
+
+        // The guard must appear in the argument-parsing case arm for --query.
+        assert!(
+            script.contains("--query) [[ $# -lt 2 ]]"),
+            "missing guard: {script}"
+        );
+        // The error message must name the offending flag.
+        assert!(
+            script.contains("--query requires a value"),
+            "missing error message: {script}"
+        );
+    }
 
     #[test]
     fn test_generate_script_content() {
