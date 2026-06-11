@@ -33,10 +33,9 @@ cast run opencode
 
 This will:
 
-1. Pull or build the `opencode` sandbox image.
+1. Build the `opencode` sandbox image.
 2. Start a Docker container with the current directory mounted.
-3. Start the built-in MCP server.
-4. Launch the `opencode` agent inside the sandbox.
+3. Launch the `opencode` agent inside the sandbox.
 
 ## Next Steps
 
