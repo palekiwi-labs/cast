@@ -1216,10 +1216,6 @@ async fn test_generate_skips_unreachable_server() -> anyhow::Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Critical fix: config-defined cast headers must not be stripped
-// ---------------------------------------------------------------------------
-
 /// When the cast URL comes from config (no --cast-mcp-url flag, no CAST_MCP_URL
 /// env var), custom headers defined in the config entry must be forwarded.
 /// This test exercises the full binary path through main.rs → build_server_map.
