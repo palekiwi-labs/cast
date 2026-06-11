@@ -39,14 +39,6 @@ ARG EXTRA_DIRS=""
 
 USER root
 
-# Configure git defaults (system-level, immutable)
-RUN git config --system user.name "claudecode" && \
-    git config --system user.email "claudecode@local" && \
-    git config --system init.defaultBranch "main" && \
-    git config --system commit.gpgsign false && \
-    git config --system core.autocrlf input && \
-    git config --system pull.rebase false;
-
 # Create user and directories (idempotent - safe even if user/dirs exist)
 RUN set -e; \
     if getent group ${GID} >/dev/null 2>&1; then \
