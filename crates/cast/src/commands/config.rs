@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::process::ExitCode;
 
-use crate::config::{Config, format_config_diff, load_approval_store};
+use crate::config::{ApprovalStatus, Config, format_config_diff, load_approval_store};
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
 use anyhow::Result;
@@ -29,13 +29,21 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
             let user = get_user()?;
             let workspace = get_workspace(&user.username)?;
             let store = load_approval_store()?;
-            let hash = crate::config::compute_config_hash(config, &workspace.root)?;
-            if !store.is_approved(&hash) {
+            let canonical = std::fs::canonicalize(&workspace.root)?;
+            let canonical_str = canonical.to_string_lossy();
+            let hash = crate::config::compute_config_hash(config, &canonical)?;
+            let hint = match store.check_status(&hash, &canonical_str) {
+                ApprovalStatus::Approved => None,
+                ApprovalStatus::Changed => Some(
+                    "Note: config changed since last approval — run `cast config diff` to see what changed, or `cast config allow` to approve.",
+                ),
+                ApprovalStatus::Unapproved => Some(
+                    "Note: config not yet approved — run `cast config allow` to approve the current configuration.",
+                ),
+            };
+            if let Some(msg) = hint {
                 let stderr = std::io::stderr();
-                writeln!(
-                    &mut stderr.lock(),
-                    "Note: config not approved — run `cast config diff` to see what changed, or `cast config allow` to approve."
-                )?;
+                writeln!(&mut stderr.lock(), "{}", msg)?;
             }
 
             Ok(ExitCode::SUCCESS)

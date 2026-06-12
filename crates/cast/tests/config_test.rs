@@ -166,7 +166,7 @@ fn test_config_diff_shows_diff_when_config_changed() {
 }
 
 #[test]
-fn test_config_show_hints_diff_when_unapproved() {
+fn test_config_show_hints_allow_when_unapproved() {
     let workspace = TempDir::new().unwrap();
     let data_dir = TempDir::new().unwrap();
 
@@ -183,11 +183,57 @@ fn test_config_show_hints_diff_when_unapproved() {
     serde_json::from_str::<serde_json::Value>(stdout.trim())
         .expect("stdout must still be valid JSON");
 
-    // stderr must contain the hint
+    // stderr must suggest `cast config allow` (not `cast config diff`) — no prior approval
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cast config allow"),
+        "stderr should mention cast config allow for never-approved workspace, got: {}",
+        stderr
+    );
+    assert!(
+        !stderr.contains("cast config diff"),
+        "stderr should NOT mention cast config diff when there is no prior approval, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_config_show_hints_diff_when_changed() {
+    let workspace = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    // Write config A and approve it
+    let config_a = serde_json::json!({ "memory": "1024m" });
+    fs::write(workspace.path().join("cast.json"), config_a.to_string()).unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .args(["config", "allow"])
+        .assert()
+        .success();
+
+    // Change to config B
+    let config_b = serde_json::json!({ "memory": "4096m" });
+    fs::write(workspace.path().join("cast.json"), config_b.to_string()).unwrap();
+
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .args(["config", "show"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    // stdout must still be valid JSON
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    serde_json::from_str::<serde_json::Value>(stdout.trim())
+        .expect("stdout must still be valid JSON");
+
+    // stderr must suggest `cast config diff` — prior approval exists but config changed
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("cast config diff"),
-        "stderr should mention cast config diff, got: {}",
+        "stderr should mention cast config diff when config has changed, got: {}",
         stderr
     );
 }
