@@ -1,9 +1,18 @@
 ## Agent Skills
 
-Load the following skills:
+Always load:
 
 - `tdd`: we will apply TDD techniques as much as practical and possible
 - `git-commit`
+
+## Documentation
+
+Docs are organized for progressive discovery: each README is a table of
+contents — read it first, then fetch individual entries as needed.
+
+- **Project**: `docs/README.md`
+- **`cast` crate**: `crates/cast/docs/README.md`
+- **`cast-mcp-client` crate**: `crates/cast-mcp-client/docs/README.md`
 
 ## Supported platforms
 
