@@ -244,6 +244,81 @@ pub fn check_approved(config: Config, workspace_root: &Path) -> Result<ApprovedC
     store.verify(config, workspace_root)
 }
 
+/// Return the approval status of the current config for a workspace.
+///
+/// Convenience wrapper used by `cast config show` to decide which hint to emit.
+pub fn get_approval_status(config: &Config, workspace_root: &Path) -> Result<ApprovalStatus> {
+    let store = load_approval_store()?;
+    get_approval_status_with(config, workspace_root, &store)
+}
+
+fn get_approval_status_with(
+    config: &Config,
+    workspace_root: &Path,
+    store: &ApprovalStore,
+) -> Result<ApprovalStatus> {
+    let canonical = std::fs::canonicalize(workspace_root)
+        .context("Failed to canonicalize workspace root path")?;
+    let canonical_str = canonical.to_string_lossy();
+    let hash = compute_config_hash_canonical(config, &canonical)?;
+    Ok(store.check_status(&hash, &canonical_str))
+}
+
+/// The result of comparing the current configuration against the last approved snapshot.
+#[derive(Debug, PartialEq)]
+pub enum ConfigDiffOutput {
+    /// No approval entry exists for this workspace.
+    Unapproved,
+    /// Config matches the approved snapshot — nothing to show.
+    Unchanged,
+    /// Config has changed; the plain unified diff string is enclosed.
+    Changed(String),
+}
+
+/// Compute the diff between the current config and the last approved snapshot.
+///
+/// Convenience wrapper used by `cast config diff`.
+pub fn compute_workspace_diff(config: &Config, workspace_root: &Path) -> Result<ConfigDiffOutput> {
+    let store = load_approval_store()?;
+    compute_workspace_diff_with(config, workspace_root, &store)
+}
+
+fn compute_workspace_diff_with(
+    config: &Config,
+    workspace_root: &Path,
+    store: &ApprovalStore,
+) -> Result<ConfigDiffOutput> {
+    use crate::config::diff::format_config_diff;
+
+    let canonical = std::fs::canonicalize(workspace_root)
+        .context("Failed to canonicalize workspace root path")?;
+    let canonical_str = canonical.to_string_lossy();
+
+    let Some(entry) = store.find_by_workspace(&canonical_str) else {
+        return Ok(ConfigDiffOutput::Unapproved);
+    };
+
+    let current_hash = compute_config_hash_canonical(config, &canonical)?;
+    let is_unchanged = store
+        .entries
+        .get(&current_hash)
+        .map(|e| e.workspace == canonical_str)
+        .unwrap_or(false);
+
+    if is_unchanged {
+        return Ok(ConfigDiffOutput::Unchanged);
+    }
+
+    let current_value = serde_json::to_value(config)?;
+    let diff = format_config_diff(&entry.approved_config, &current_value);
+
+    if diff.is_empty() {
+        Ok(ConfigDiffOutput::Unchanged)
+    } else {
+        Ok(ConfigDiffOutput::Changed(diff))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -641,5 +716,120 @@ mod tests {
         assert!(store.find_by_workspace("/workspace/a").is_some());
         assert!(store.find_by_workspace("/workspace/b").is_some());
         assert!(store.find_by_workspace("/workspace/c").is_none());
+    }
+
+    // --- get_approval_status ---
+    //
+    // Tests use the private `get_approval_status_with` helper to pass an
+    // in-memory store, avoiding I/O to the global `CAST_DATA_DIR` path.
+
+    #[test]
+    fn test_get_approval_status_approved() {
+        let tmp = TempDir::new().unwrap();
+        let config = Config::default();
+        let canonical = std::fs::canonicalize(tmp.path()).unwrap();
+        let workspace = canonical.to_string_lossy().into_owned();
+        let hash = compute_config_hash(&config, tmp.path()).unwrap();
+        let snapshot = serde_json::to_value(&config).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry(hash, workspace, snapshot);
+
+        assert_eq!(
+            get_approval_status_with(&config, tmp.path(), &store).unwrap(),
+            ApprovalStatus::Approved
+        );
+    }
+
+    #[test]
+    fn test_get_approval_status_changed() {
+        let tmp = TempDir::new().unwrap();
+        let config_a = Config::default();
+        let canonical = std::fs::canonicalize(tmp.path()).unwrap();
+        let workspace = canonical.to_string_lossy().into_owned();
+        let hash_a = compute_config_hash(&config_a, tmp.path()).unwrap();
+        let snapshot = serde_json::to_value(&config_a).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry(hash_a, workspace, snapshot);
+
+        let config_b = Config {
+            memory: "2048m".to_string(),
+            ..Config::default()
+        };
+        assert_eq!(
+            get_approval_status_with(&config_b, tmp.path(), &store).unwrap(),
+            ApprovalStatus::Changed
+        );
+    }
+
+    #[test]
+    fn test_get_approval_status_unapproved() {
+        let tmp = TempDir::new().unwrap();
+        let config = Config::default();
+        let store = ApprovalStore::default();
+        assert_eq!(
+            get_approval_status_with(&config, tmp.path(), &store).unwrap(),
+            ApprovalStatus::Unapproved
+        );
+    }
+
+    // --- compute_workspace_diff ---
+    //
+    // Tests use the private `compute_workspace_diff_with` helper for the
+    // same reason.
+
+    #[test]
+    fn test_compute_workspace_diff_unapproved() {
+        let tmp = TempDir::new().unwrap();
+        let config = Config::default();
+        let store = ApprovalStore::default();
+        assert_eq!(
+            compute_workspace_diff_with(&config, tmp.path(), &store).unwrap(),
+            ConfigDiffOutput::Unapproved
+        );
+    }
+
+    #[test]
+    fn test_compute_workspace_diff_unchanged() {
+        let tmp = TempDir::new().unwrap();
+        let config = Config::default();
+        let canonical = std::fs::canonicalize(tmp.path()).unwrap();
+        let workspace = canonical.to_string_lossy().into_owned();
+        let hash = compute_config_hash(&config, tmp.path()).unwrap();
+        let snapshot = serde_json::to_value(&config).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry(hash, workspace, snapshot);
+
+        assert_eq!(
+            compute_workspace_diff_with(&config, tmp.path(), &store).unwrap(),
+            ConfigDiffOutput::Unchanged
+        );
+    }
+
+    #[test]
+    fn test_compute_workspace_diff_changed() {
+        let tmp = TempDir::new().unwrap();
+        let config_a = Config::default();
+        let canonical = std::fs::canonicalize(tmp.path()).unwrap();
+        let workspace = canonical.to_string_lossy().into_owned();
+        let hash_a = compute_config_hash(&config_a, tmp.path()).unwrap();
+        let snapshot = serde_json::to_value(&config_a).unwrap();
+
+        let mut store = ApprovalStore::default();
+        store.add_entry(hash_a, workspace, snapshot);
+
+        let config_b = Config {
+            memory: "4096m".to_string(),
+            ..Config::default()
+        };
+        match compute_workspace_diff_with(&config_b, tmp.path(), &store).unwrap() {
+            ConfigDiffOutput::Changed(diff) => {
+                assert!(diff.contains("1024m"), "diff should mention old value");
+                assert!(diff.contains("4096m"), "diff should mention new value");
+            }
+            other => panic!("expected Changed, got {:?}", other),
+        }
     }
 }
