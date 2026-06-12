@@ -218,7 +218,7 @@ impl ApprovalStore {
 pub fn approve_workspace_config(config: &Config, workspace_root: &Path) -> Result<()> {
     let canonical_root =
         std::fs::canonicalize(workspace_root).context("Failed to canonicalize workspace root")?;
-    let hash = compute_config_hash(config, &canonical_root)?;
+    let hash = compute_config_hash_canonical(config, &canonical_root)?;
     let snapshot = serde_json::to_value(config).context("Failed to serialize config snapshot")?;
     let mut store = load_approval_store()?;
     store.add_entry(
@@ -656,7 +656,7 @@ mod tests {
         // Helper to simulate approve_workspace_config with a custom path
         let approve = |cfg: &Config, p: &Path| -> Result<()> {
             let canonical_root = std::fs::canonicalize(p)?;
-            let hash = compute_config_hash(cfg, &canonical_root)?;
+            let hash = compute_config_hash_canonical(cfg, &canonical_root)?;
             let mut store = ApprovalStore::load_from(&store_path)?;
             store.add_entry(
                 hash,
