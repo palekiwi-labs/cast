@@ -98,9 +98,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             )?;
             Ok(to_exit_code(status))
         }
-        Some(Commands::Shell { agent }) => {
+        Some(Commands::Shell { agent, raw }) => {
             let approved = verify_config(cfg)?;
-            let status = dev::shell(agent.as_agent(), &approved, agent.is_raw())?;
+            let status = dev::shell(agent.as_agent(), &approved, raw)?;
             Ok(to_exit_code(status))
         }
         #[cfg(feature = "mcp")]
@@ -188,23 +188,11 @@ pub enum RunAgent {
 #[command(subcommand_required = true)]
 pub enum ShellAgent {
     /// Drop into an interactive shell in the OpenCode container
-    Opencode {
-        /// Skip Nix devshell wrapping and open a bare shell
-        #[arg(long)]
-        raw: bool,
-    },
+    Opencode,
     /// Drop into an interactive shell in the Pi container
-    Pi {
-        /// Skip Nix devshell wrapping and open a bare shell
-        #[arg(long)]
-        raw: bool,
-    },
+    Pi,
     /// Drop into an interactive shell in the ClaudeCode container
-    Claudecode {
-        /// Skip Nix devshell wrapping and open a bare shell
-        #[arg(long)]
-        raw: bool,
-    },
+    Claudecode,
 }
 
 #[cfg(feature = "mcp")]
@@ -252,6 +240,9 @@ pub enum Commands {
     },
     /// Drop into an interactive shell in an agent's container
     Shell {
+        /// Skip Nix devshell wrapping and open a bare shell
+        #[arg(long)]
+        raw: bool,
         #[command(subcommand)]
         agent: ShellAgent,
     },
@@ -276,17 +267,9 @@ impl RunAgent {
 impl ShellAgent {
     pub fn as_agent(&self) -> &'static dyn Agent {
         match self {
-            ShellAgent::Opencode { .. } => &OpenCode,
-            ShellAgent::Pi { .. } => &Pi,
-            ShellAgent::Claudecode { .. } => &ClaudeCode,
-        }
-    }
-
-    pub fn is_raw(&self) -> bool {
-        match self {
-            ShellAgent::Opencode { raw } => *raw,
-            ShellAgent::Pi { raw } => *raw,
-            ShellAgent::Claudecode { raw } => *raw,
+            ShellAgent::Opencode => &OpenCode,
+            ShellAgent::Pi => &Pi,
+            ShellAgent::Claudecode => &ClaudeCode,
         }
     }
 }
