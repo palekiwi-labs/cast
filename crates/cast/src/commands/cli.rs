@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
@@ -98,25 +98,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             )?;
             Ok(to_exit_code(status))
         }
-        Some(Commands::Shell {
-            agent: ShellAgent::Opencode,
-        }) => {
+        Some(Commands::Shell { agent }) => {
             let approved = verify_config(cfg)?;
-            let status = dev::shell(&OpenCode, &approved)?;
-            Ok(to_exit_code(status))
-        }
-        Some(Commands::Shell {
-            agent: ShellAgent::Pi,
-        }) => {
-            let approved = verify_config(cfg)?;
-            let status = dev::shell(&Pi, &approved)?;
-            Ok(to_exit_code(status))
-        }
-        Some(Commands::Shell {
-            agent: ShellAgent::Claudecode,
-        }) => {
-            let approved = verify_config(cfg)?;
-            let status = dev::shell(&ClaudeCode, &approved)?;
+            let status = dev::shell(agent.as_agent(), &approved, agent.is_raw())?;
             Ok(to_exit_code(status))
         }
         #[cfg(feature = "mcp")]
@@ -204,11 +188,23 @@ pub enum RunAgent {
 #[command(subcommand_required = true)]
 pub enum ShellAgent {
     /// Drop into an interactive shell in the OpenCode container
-    Opencode,
+    Opencode {
+        /// Skip Nix devshell wrapping and open a bare shell
+        #[arg(long)]
+        raw: bool,
+    },
     /// Drop into an interactive shell in the Pi container
-    Pi,
+    Pi {
+        /// Skip Nix devshell wrapping and open a bare shell
+        #[arg(long)]
+        raw: bool,
+    },
     /// Drop into an interactive shell in the ClaudeCode container
-    Claudecode,
+    Claudecode {
+        /// Skip Nix devshell wrapping and open a bare shell
+        #[arg(long)]
+        raw: bool,
+    },
 }
 
 #[cfg(feature = "mcp")]
@@ -273,6 +269,24 @@ impl RunAgent {
             RunAgent::Opencode { .. } => &OpenCode,
             RunAgent::Pi { .. } => &Pi,
             RunAgent::Claudecode { .. } => &ClaudeCode,
+        }
+    }
+}
+
+impl ShellAgent {
+    pub fn as_agent(&self) -> &'static dyn Agent {
+        match self {
+            ShellAgent::Opencode { .. } => &OpenCode,
+            ShellAgent::Pi { .. } => &Pi,
+            ShellAgent::Claudecode { .. } => &ClaudeCode,
+        }
+    }
+
+    pub fn is_raw(&self) -> bool {
+        match self {
+            ShellAgent::Opencode { raw } => *raw,
+            ShellAgent::Pi { raw } => *raw,
+            ShellAgent::Claudecode { raw } => *raw,
         }
     }
 }
