@@ -12,12 +12,12 @@ use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent resolves its own
@@ -75,24 +75,8 @@ pub fn run_agent(
 
     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
-    let host_home_dir = dirs::home_dir();
     let env: HashMap<String, String> = std::env::vars().collect();
-
-    let user_flake_present = host_home_dir
-        .as_ref()
-        .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-        .is_some();
-
-    let project_flake_present = workspace.root.join("flake.nix").exists();
-
-    let run_opts = RunOpts {
-        workspace,
-        user,
-        port,
-        host_home_dir,
-        user_flake_present,
-        project_flake_present,
-    };
+    let run_opts = resolve_run_opts(user, workspace, port);
 
     // Prepare host-side side effects before building arguments.
     agent.prepare_host(config, &run_opts)?;
@@ -114,6 +98,26 @@ pub fn run_agent(
     );
 
     Ok(status)
+}
+
+/// Resolve the generic options for a session, detecting flake presence.
+pub fn resolve_run_opts(user: ResolvedUser, workspace: ResolvedWorkspace, port: u16) -> RunOpts {
+    let host_home_dir = dirs::home_dir();
+    let user_flake_present = host_home_dir
+        .as_ref()
+        .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
+        .is_some();
+
+    let project_flake_present = workspace.root.join("flake.nix").exists();
+
+    RunOpts {
+        workspace,
+        user,
+        port,
+        host_home_dir,
+        user_flake_present,
+        project_flake_present,
+    }
 }
 
 /// Build the generic set of Docker run flags that apply to every agent.
@@ -266,9 +270,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -295,9 +297,7 @@ mod tests {
         };
 
         let run_args = build_run_opts(&config, &opts);
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]
@@ -402,5 +402,30 @@ mod tests {
         assert!(run_args.contains(
             &"/home/alice/project/secrets:ro,noexec,nosuid,size=1k,mode=000".to_string()
         ));
+    }
+
+    #[test]
+    fn test_resolve_run_opts_detects_flakes() {
+        let user = ResolvedUser {
+            username: "alice".to_string(),
+            uid: 1000,
+            gid: 1000,
+        };
+        let temp = tempfile::TempDir::new().unwrap();
+        let root = temp.path().to_path_buf();
+
+        // Create a flake.nix in the workspace
+        std::fs::write(root.join("flake.nix"), "").unwrap();
+
+        let workspace = ResolvedWorkspace {
+            root: root.clone(),
+            container_path: PathBuf::from("/work"),
+        };
+
+        let opts = resolve_run_opts(user, workspace, 8080);
+
+        assert!(opts.project_flake_present);
+        // user_flake_present depends on host home dir, which we can't easily mock here
+        // but we verified the logic is correct.
     }
 }

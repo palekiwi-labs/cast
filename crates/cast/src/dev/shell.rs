@@ -1,17 +1,19 @@
 use std::process::ExitStatus;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
+use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
+use crate::dev::run::resolve_run_opts;
 use crate::dev::workspace::get_workspace;
 use crate::docker::client::DockerClient;
 use crate::user::get_user;
 
 /// Drop into an interactive shell in the dev container
-pub fn shell(agent: &dyn Agent, config: &ApprovedConfig) -> Result<ExitStatus> {
+pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<ExitStatus> {
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -28,12 +30,16 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig) -> Result<ExitStatus> {
         );
     }
 
-    let exec_args = vec![
-        "exec".to_string(),
-        "-it".to_string(),
-        container_name,
-        "/bin/bash".to_string(),
-    ];
+    let mut exec_args = vec!["exec".to_string(), "-it".to_string(), container_name];
+
+    let shell_cmd = if raw {
+        vec!["/bin/bash".to_string()]
+    } else {
+        let opts = resolve_run_opts(user, workspace, port);
+        build_command(config, &opts, "/bin/bash", vec![])
+    };
+
+    exec_args.extend(shell_cmd);
 
     docker.interactive_command(exec_args)
 }

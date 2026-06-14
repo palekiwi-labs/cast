@@ -27,6 +27,9 @@ If enabled, `cast` constructs a "Russian Doll" of shell wrappers:
 2. `nix develop <project_flake> -c`
 3. `<agent_binary>`
 
+This wrapping also applies to `cast shell`, so an interactive shell starts
+inside the devshell by default. Use `cast shell --raw <agent>` to bypass it.
+
 ## Example `flake.nix`
 
 A typical project flake for use with `cast` might look like this:

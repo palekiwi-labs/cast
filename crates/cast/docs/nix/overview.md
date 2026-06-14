@@ -12,6 +12,9 @@ wraps the agent's entrypoint command in `nix develop -c`. This means the agent
 sees exactly the same `PATH` and environment variables as if you had run `nix
 develop` on your host.
 
+This wrapping also applies to `cast shell`, so an interactive shell starts
+inside the devshell by default. Use `cast shell --raw <agent>` to bypass it.
+
 ### 2. Nix Daemon Volume
 
 `cast` can run a dedicated Nix daemon in a Docker container.

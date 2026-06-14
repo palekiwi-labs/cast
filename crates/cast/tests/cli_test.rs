@@ -138,7 +138,27 @@ fn test_cast_shell_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage: cast shell"))
-        .stdout(predicate::str::contains("opencode"));
+        .stdout(predicate::str::contains("opencode"))
+        .stdout(predicate::str::contains("--raw"));
+}
+
+#[test]
+fn test_cast_shell_raw_opencode_help() {
+    cast()
+        .args(["shell", "--raw", "opencode", "--help"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cast_shell_opencode_raw_fails() {
+    cast()
+        .args(["shell", "opencode", "--raw"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "unexpected argument '--raw' found",
+        ));
 }
 
 #[test]

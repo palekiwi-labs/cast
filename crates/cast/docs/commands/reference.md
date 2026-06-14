@@ -16,9 +16,18 @@ Builds the Docker image for an agent without running it.
 - `--force`, `-f`: Force rebuild even if image already exists.
 - `--no-cache`: Do not use Docker cache.
 
-## `shell <agent>`
+## `shell [--raw] <agent>`
 
-Starts an interactive shell inside the agent's sandbox.
+Starts an interactive shell inside the agent's sandbox. By default, the
+shell is wrapped in the Nix devshell (using the same flake detection as
+`cast run`) so you have access to the project's tools.
+
+- `--raw`: Skip Nix devshell wrapping and open a bare shell.
+
+```bash
+cast shell opencode        # devshell by default
+cast shell --raw opencode  # bare shell
+```
 
 ## `config`
 

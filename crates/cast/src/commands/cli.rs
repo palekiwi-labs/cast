@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
@@ -98,25 +98,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             )?;
             Ok(to_exit_code(status))
         }
-        Some(Commands::Shell {
-            agent: ShellAgent::Opencode,
-        }) => {
+        Some(Commands::Shell { agent, raw }) => {
             let approved = verify_config(cfg)?;
-            let status = dev::shell(&OpenCode, &approved)?;
-            Ok(to_exit_code(status))
-        }
-        Some(Commands::Shell {
-            agent: ShellAgent::Pi,
-        }) => {
-            let approved = verify_config(cfg)?;
-            let status = dev::shell(&Pi, &approved)?;
-            Ok(to_exit_code(status))
-        }
-        Some(Commands::Shell {
-            agent: ShellAgent::Claudecode,
-        }) => {
-            let approved = verify_config(cfg)?;
-            let status = dev::shell(&ClaudeCode, &approved)?;
+            let status = dev::shell(agent.as_agent(), &approved, raw)?;
             Ok(to_exit_code(status))
         }
         #[cfg(feature = "mcp")]
@@ -256,6 +240,9 @@ pub enum Commands {
     },
     /// Drop into an interactive shell in an agent's container
     Shell {
+        /// Skip Nix devshell wrapping and open a bare shell
+        #[arg(long)]
+        raw: bool,
         #[command(subcommand)]
         agent: ShellAgent,
     },
@@ -273,6 +260,16 @@ impl RunAgent {
             RunAgent::Opencode { .. } => &OpenCode,
             RunAgent::Pi { .. } => &Pi,
             RunAgent::Claudecode { .. } => &ClaudeCode,
+        }
+    }
+}
+
+impl ShellAgent {
+    pub fn as_agent(&self) -> &'static dyn Agent {
+        match self {
+            ShellAgent::Opencode => &OpenCode,
+            ShellAgent::Pi => &Pi,
+            ShellAgent::Claudecode => &ClaudeCode,
         }
     }
 }
