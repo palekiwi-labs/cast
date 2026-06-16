@@ -72,3 +72,8 @@ Applied code review fix: NpmRegistryFetcher now uses a ureq::AgentBuilder with a
 - **Decided:** Retain 8 variables: ANTHROPIC_API_KEY, CLAUDE_CODE_USE_BEDROCK, CLAUDE_CODE_USE_VERTEX, ANTHROPIC_BASE_URL, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, CLAUDE_CODE_MAX_OUTPUT_TOKENS, AWS_REGION, GOOGLE_CLOUD_PROJECT
 - **Decided:** Add doc-comment to PASSTHROUGH_VARS explaining each notable omission so future contributors understand the rationale
 
+## [ccafa3f] refactor: remove git system config from Dockerfile.dev.claudecode
+
+- **Decided:** Remove system-level git identity and defaults from the claudecode image only — the user's ~/.gitconfig is available via the workspace bind-mount at runtime, making the baked-in config unnecessary
+- **Decided:** Leave opencode and pi Dockerfiles unchanged — out of scope for this PR
+

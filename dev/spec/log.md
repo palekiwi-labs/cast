@@ -27,3 +27,24 @@
 - **Found:** opencode uses a mature 'mcp' config format that can be adapted for cast-mcp-client.json.
 - **Found:** Implementation requires configuration loading, transport abstraction, and CLI updates.
 
+## [1506bfd] Research `nix develop` integration for `cast shell`
+
+Researched how `nix develop` is integrated into `cast`.
+Found that `build_command.rs` handles the wrapping logic for `cast run`.
+`shell.rs` handles `cast shell` but currently hardcodes `/bin/bash`.
+Global flake is at `~/.config/cast/nix/` and is mounted into the container.
+Plan to implement the feature by adding a `--dev` flag to `cast shell` and using `Agent::build_command` to wrap a bash shell.
+
+- **Found:** `build_command.rs` implements nested `nix develop` wrapping.
+- **Found:** `shell.rs` currently uses a simple `docker exec` with `/bin/bash`.
+- **Found:** Flake detection logic is in `run.rs` and should probably be shared.
+- **Decided:** Add `--dev` flag to `ShellAgent` variants in `cli.rs`.
+- **Decided:** Update `dev::shell` to support starting in a devshell using `build_command` logic.
+
+## [1506bfd] Research complete: Allow starting shell in devshell
+
+- **Found:** cast shell is currently a direct docker exec into /bin/bash
+- **Found:** nix develop wrapping logic exists in build_command.rs and is used by cast run
+- **Found:** global flake is already detected and mounted at ~/.config/cast/nix/
+- **Found:** ShellAgent enum in cli.rs needs to be updated to support flags
+

@@ -1,3 +1,7 @@
+---
+status: complete
+---
+
 # Handoff Trace: P1 generate command — in progress
 
 ## Session summary

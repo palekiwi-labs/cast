@@ -178,3 +178,61 @@ Single TDD cycle. Changed the `result?` abort in `generate_scripts_cmd` to a war
 - **Decided:** One new unit test test_generate_script_multiline_description: asserts every non-blank line in the header block (before set -euo pipefail) starts with '#'
 - **Decided:** TDD cycle: RED (test fails on 'You MUST call this first.' not starting with '#') → GREEN (all 45 tests pass)
 
+## [7dca9ed] [7dca9ed] fix: cast config headers no longer stripped when URL from config
+
+Fixed the critical bug identified in the diff review. resolve_cast_mcp_url was collapsing all three URL sources (flag, env, config) into a single Option<String>, causing build_server_map to always treat config-sourced URLs as flag/env overrides and silently strip headers. Fix: main.rs now computes only flag.or(env_url) as the override and passes None when neither is set, letting build_server_map read the full config entry directly.
+
+- **Found:** resolve_cast_mcp_url had no callers outside main.rs — deleted from lib.rs along with its 4 unit tests
+- **Found:** main.rs had 5 identical call sites all with the same bug — all fixed in one pass
+- **Found:** The existing unit test test_build_server_map_preserves_full_cast_entry_when_url_from_config already passed because it bypassed resolve_cast_mcp_url — no change needed to lib.rs build_server_map logic
+- **Found:** New integration test test_cast_config_headers_are_forwarded_when_url_from_config confirms the fix end-to-end through the binary
+- **Found:** 43 tests pass (17 unit + 26 integration), clippy clean
+- **Decided:** Delete resolve_cast_mcp_url entirely — it was the source of confusion and has no callers outside main.rs
+- **Decided:** main.rs computes cast_override = cast_mcp_url.or(env_url) — only flag/env override is passed to build_server_map
+- **Decided:** No changes to lib.rs build_server_map or config.rs — they were already correct
+
+## [67da5bf] Decision: McpClient::shutdown() on error path — won't fix
+
+- **Found:** RunningService::drop() already cancels the CancellationToken via its DropGuard — cleanup happens asynchronously even without an explicit shutdown() call
+- **Found:** The only difference between explicit shutdown() and drop is that shutdown() awaits the background JoinHandle (synchronous, bounded), whereas drop fires the token and moves on
+- **Found:** The '5-second block' concern applies to long-lived servers/runtimes, not to a short-lived CLI binary that exits immediately after the command returns — the OS reclaims all resources on exit
+- **Decided:** No fix needed for the missing shutdown() on error paths in list_tools_cmd, describe_tool_cmd, call_tool_cmd, and generate_scripts_cmd — the CLI process exits shortly after, making the distinction moot
+- **Decided:** Issue closed as 'not applicable for a CLI binary'
+
+## [322ffe6] [322ffe6] fix: guard against missing flag value in generated bash scripts
+
+- **Found:** Under set -euo pipefail, passing --flag as the last argument without a value caused set -u (nounset) to fire on $2 with an unhelpful 'unbound variable' error — no context about which flag was the problem
+- **Found:** The fix is a one-liner guard before $2 is accessed: [[ $# -lt 2 ]] && { echo "Error: --flag requires a value" >&2; exit 1; }
+- **Found:** 46 tests pass (20 unit + 26 integration)
+- **Decided:** Generate a bounds-check guard in every --flag case arm of the argument-parsing loop
+- **Decided:** New unit test test_generate_script_missing_flag_value_guard asserts both the guard expression and the error message are present in the generated script
+- **Decided:** Commit: fix(mcp-client): guard against missing flag value in generated bash scripts (322ffe6)
+
+## [7d64d46] [7d64d46] refactor: inject env snapshot at binary boundary, remove unsafe env mutation
+
+- **Found:** apply_env_substitution called std::env::var() deep in the call stack — tests had to use unsafe { set_var/remove_var } to exercise it, creating a race condition with parallel tests
+- **Found:** Option B (capture entire env at startup, pass as &HashMap) was chosen over static Mutex (band-aid) and closure injection (more boilerplate)
+- **Found:** env_url in main.rs was already a second std::env::var call — now also reads from the snapshot for consistency
+- **Found:** Call chain: main captures snapshot → config::load(&env) → load_from_files → load_single_file → parse_from_str → apply_env_substitution — env threaded through all levels
+- **Decided:** apply_env_substitution(s, env: &HashMap<String,String>) — pure function, no env side effects
+- **Decided:** config::load(env), load_from_files(..., env), parse_from_str(s, env) all take &HashMap<String,String>
+- **Decided:** main.rs captures std::env::vars().collect() once; env_url and config::load both use the snapshot
+- **Decided:** test_env_var_substitution now passes a HashMap literal — no unsafe, no locks, no process mutation
+- **Decided:** All 44 tests pass (18 unit + 26 integration)
+
+## [d36466a] [d36466a] perf: single jq invocation in generated scripts
+
+- **Found:** Generated scripts were spawning O(N) jq subprocesses (one per parameter) to build the JSON payload
+- **Found:** Replacing with JQ_ARGS=() array accumulation + single 'jq -n $ARGS.named' call reduces process spawns to O(1)
+- **Found:** test_generate_script_runs_correctly integration test confirmed the new pattern executes correctly end-to-end
+- **Decided:** Use JQ_ARGS bash array + jq -n '$ARGS.named' — no new deps, clean generated scripts
+- **Decided:** Required params emit unconditional JQ_ARGS+=(--arg/--argjson name value), optional emit guarded variant
+- **Decided:** test_generate_script_content extended with 4 new assertions (JQ_ARGS=(), jq -n, $ARGS.named, absence of pipe-to-jq)
+
+## [5b9b0e7] [5b9b0e7] fix: null-safe .content[]? in generated scripts
+
+- **Found:** Three jq .content[] expressions in generated bash scripts would throw 'Cannot iterate over null' if MCP response has no content field
+- **Found:** Fix is minimal: add ? operator to all three occurrences — .content[]? silently produces empty output on null rather than aborting
+- **Decided:** Change all three .content[]| to .content[]?| in generate_script()
+- **Decided:** test_generate_script_content extended with assertions for .content[]? presence and absence of bare .content[]|
+
