@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 
-/// Resolve the XDG config base directory as `$HOME/.config`.
+/// Resolve the config base directory as `$HOME/.config`.
 ///
 /// Prefer this over [`dirs::config_dir`] because on macOS `dirs::config_dir`
 /// returns `~/Library/Application Support`, which does not map 1-to-1 to paths
 /// inside a Linux container. Both platforms store cast / opencode config under
 /// `~/.config`, so we always derive the path from `$HOME`.
+///
+/// Note: `$XDG_CONFIG_HOME` is intentionally not respected. Container agents
+/// always read from `~/.config`, so the host path must match that layout
+/// regardless of any host-specific XDG overrides.
 ///
 /// Returns `None` if the home directory cannot be determined.
 pub fn home_config_dir() -> Option<PathBuf> {

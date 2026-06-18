@@ -1,9 +1,9 @@
 use super::Config;
-use crate::xdg::home_config_dir;
+use crate::paths::home_config_dir;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
 use tracing::info;
