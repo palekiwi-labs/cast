@@ -7,3 +7,4 @@ pub mod logging;
 pub mod mcp;
 pub mod nix_daemon;
 pub mod user;
+pub mod paths;

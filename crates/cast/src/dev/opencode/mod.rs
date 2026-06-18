@@ -43,9 +43,12 @@ impl Agent for OpenCode {
         resolve_version(config)
     }
 
-    fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
-        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
-        config_dir::ensure_config_dir(&base)?;
+    fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        config_dir::ensure_config_dir(&home.join(".config"))?;
         Ok(())
     }
 
@@ -83,8 +86,11 @@ impl Agent for OpenCode {
 
         // OpenCode config directory bind mount.
         // Skip if the workspace root is the same as the config dir (workspace mount covers it).
-        let base = dirs::config_dir().context("Failed to resolve user config directory")?;
-        let opencode_config_dir = config_dir::get_config_dir(&base);
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        let opencode_config_dir = config_dir::get_config_dir(&home.join(".config"));
         if opencode_config_dir != opts.workspace.root {
             args.extend([
                 "-v".to_string(),
@@ -196,7 +202,7 @@ mod tests {
     fn test_extra_run_args_workspace_conflict_no_double_mount() {
         let config = Config::default();
         // workspace root == opencode config dir → no duplicate mount
-        let workspace_root = dirs::config_dir().unwrap().join("opencode");
+        let workspace_root = PathBuf::from("/home/alice/.config/opencode");
 
         let opts = RunOpts {
             workspace: ResolvedWorkspace {

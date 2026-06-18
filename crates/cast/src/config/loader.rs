@@ -1,8 +1,9 @@
 use super::Config;
+use crate::paths::home_config_dir;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
 use tracing::info;
@@ -54,14 +55,26 @@ pub fn load_config_from(base_dir: &std::path::Path) -> Result<Config> {
 }
 
 /// Resolve the global config path (~/.config/cast/cast.json)
-/// Returns None if the system config directory cannot be determined
+/// Returns None if the home directory cannot be determined
 fn global_config_path() -> Option<PathBuf> {
-    dirs::config_dir().map(|p| p.join("cast").join("cast.json"))
+    home_config_dir().map(|p| p.join("cast").join("cast.json"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_global_config_path_is_under_home_config() {
+        let path = global_config_path().expect("global config path should resolve");
+        let home = dirs::home_dir().expect("home dir should resolve");
+        assert!(
+            path.starts_with(home.join(".config")),
+            "expected path under $HOME/.config, got: {}",
+            path.display()
+        );
+        assert!(path.ends_with("cast/cast.json"));
+    }
 
     #[test]
     fn test_load_config_succeeds() {
