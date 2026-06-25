@@ -42,14 +42,11 @@ ARG EXTRA_DIRS=""
 
 USER root
 
-# Configure git defaults (system-level, immutable)
-# This ensures agents can commit without configuration errors
-RUN git config --system user.name "opencode" && \
-    git config --system user.email "opencode@local" && \
-    git config --system init.defaultBranch "main" && \
-    git config --system commit.gpgsign false && \
-    git config --system core.autocrlf input && \
-    git config --system pull.rebase false;
+# Allow git operations on bind-mounted workspaces owned by a different UID.
+# Required for `nix develop .` (libgit2) when the workspace UID does not match
+# the container process UID — triggered by Docker Desktop on macOS and by Linux
+# setups with userns-remap. Mirrors Dockerfile.nix-daemon.
+RUN git config --system safe.directory "*"
 
 # Ensure /usr/local/bin is in PATH (defensive for custom base images)
 ENV PATH="/usr/local/bin:${PATH}"
