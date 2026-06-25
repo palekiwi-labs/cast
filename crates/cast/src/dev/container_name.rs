@@ -2,18 +2,33 @@ use crate::config::Config;
 
 /// Resolve the Docker container name for an agent session.
 ///
-/// - If `cfg.container_name` is set: `"{name}-{port}"`
-/// - Otherwise: `"cast-{agent}-{basename}-{port}"` where `agent` is the
-///   agent identifier and `basename` is the name of the current working directory.
+/// Priority:
+/// 1. `explicit_name` set via `--name` → returned as-is
+/// 2. `token` present (headless) → `cast-{agent}-{basename}-headless-{token}`
+/// 3. Otherwise (interactive default) → `cast-{agent}-{basename}-{port}`
+///    (or `cfg.container_name`-based when config override is set)
 ///
-/// Both `agent_name` and `cwd_basename` are injected by the caller so that
-/// this function remains pure and fully unit-testable.
+/// All inputs are injected by the caller so this function remains pure and
+/// fully unit-testable.
 pub fn resolve_container_name(
     cfg: &Config,
     agent_name: &str,
     cwd_basename: &str,
     port: u16,
+    explicit_name: Option<&str>,
+    token: Option<&str>,
 ) -> String {
+    // --name override always wins.
+    if let Some(name) = explicit_name {
+        return name.to_string();
+    }
+
+    // Headless path: unique ephemeral name with injected token.
+    if let Some(tok) = token {
+        return format!("cast-{}-{}-headless-{}", agent_name, cwd_basename, tok);
+    }
+
+    // Interactive default: deterministic name (stable, re-attachable).
     match &cfg.container_name {
         Some(name) => format!("{}-{}", name, port),
         None => format!("cast-{}-{}-{}", agent_name, cwd_basename, port),
@@ -31,7 +46,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            resolve_container_name(&cfg, "opencode", "irrelevant", 8080),
+            resolve_container_name(&cfg, "opencode", "irrelevant", 8080, None, None),
             "my-project-8080",
         );
     }
@@ -40,8 +55,48 @@ mod tests {
     fn test_default_uses_agent_basename_and_port() {
         let cfg = Config::default();
         assert_eq!(
-            resolve_container_name(&cfg, "opencode", "my-app", 8080),
+            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, None),
             "cast-opencode-my-app-8080",
+        );
+    }
+
+    #[test]
+    fn test_explicit_name_overrides_all() {
+        let cfg = Config {
+            container_name: Some("ignored".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_container_name(
+                &cfg,
+                "opencode",
+                "my-app",
+                8080,
+                Some("my-custom-name"),
+                Some("abc123"),
+            ),
+            "my-custom-name",
+        );
+    }
+
+    #[test]
+    fn test_headless_with_token() {
+        let cfg = Config::default();
+        assert_eq!(
+            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("abc123")),
+            "cast-opencode-my-app-headless-abc123",
+        );
+    }
+
+    #[test]
+    fn test_headless_token_overrides_config_name() {
+        let cfg = Config {
+            container_name: Some("custom".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("tok42")),
+            "cast-opencode-my-app-headless-tok42",
         );
     }
 }

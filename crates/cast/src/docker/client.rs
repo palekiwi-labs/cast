@@ -131,4 +131,39 @@ impl DockerClient {
 
         Ok(status)
     }
+
+    /// Run `docker <args>` without a pseudo-TTY (headless / non-interactive).
+    ///
+    /// Inherits stdio so output flows cleanly to pipes or logs. Applies the
+    /// same `SignalGuard` discipline as `interactive_command` to avoid orphaning
+    /// `--rm` containers when cast is killed before Docker cleans up.
+    ///
+    /// Returns the `ExitStatus` without bailing on non-zero exit codes, allowing
+    /// the caller to decide how to handle agent failures.
+    pub fn headless_command(&self, args: Vec<String>) -> Result<ExitStatus> {
+        use std::os::unix::process::CommandExt;
+
+        debug!(command = "docker", args = ?args, "starting headless command");
+        // Same signal discipline as interactive_command: ignore SIGINT/SIGQUIT
+        // in cast so Docker owns the lifecycle.
+        let _guard = SignalGuard::new();
+
+        let mut cmd = Command::new("docker");
+        cmd.args(&args);
+
+        // Reset signals to default in the child process so Docker handles them.
+        unsafe {
+            cmd.pre_exec(|| {
+                libc::signal(libc::SIGINT, libc::SIG_DFL);
+                libc::signal(libc::SIGQUIT, libc::SIG_DFL);
+                Ok(())
+            });
+        }
+
+        let status = cmd
+            .status()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+
+        Ok(status)
+    }
 }

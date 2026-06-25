@@ -1,13 +1,13 @@
 use std::process::ExitStatus;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
-use crate::dev::run::resolve_run_opts;
+use crate::dev::run::{SessionFlags, resolve_run_opts};
 use crate::dev::workspace::get_workspace;
 use crate::docker::client::DockerClient;
 use crate::user::get_user;
@@ -20,7 +20,8 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
     let port = resolve_port(config, agent.name())?;
 
     let cwd_basename = workspace.root_basename();
-    let container_name = resolve_container_name(config, agent.name(), cwd_basename, port);
+    let container_name =
+        resolve_container_name(config, agent.name(), cwd_basename, port, None, None);
 
     if !docker.is_container_running(&container_name)? {
         bail!(
@@ -35,7 +36,12 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
     let shell_cmd = if raw {
         vec!["/bin/bash".to_string()]
     } else {
-        let opts = resolve_run_opts(user, workspace, port);
+        let flags = SessionFlags {
+            headless: false,
+            name: None,
+            token: None,
+        };
+        let opts = resolve_run_opts(user, workspace, port, &flags);
         build_command(config, &opts, "/bin/bash", vec![])
     };
 

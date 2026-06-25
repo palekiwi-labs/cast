@@ -147,6 +147,8 @@ mod tests {
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
             project_flake_present: false,
+            tty_mode: crate::dev::run::TtyMode::Interactive,
+            publish: true,
         }
     }
 
@@ -214,6 +216,8 @@ mod tests {
             host_home_dir: Some(PathBuf::from("/home/alice")),
             user_flake_present: false,
             project_flake_present: false,
+            tty_mode: crate::dev::run::TtyMode::Interactive,
+            publish: true,
         };
         let env = HashMap::new();
 

@@ -1,18 +1,31 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{load_config, ApprovedConfig, Config};
+use crate::config::{ApprovedConfig, Config, load_config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
+use crate::dev::run::SessionFlags;
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
 use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use tracing::info_span;
+
+/// Flags that control the execution mode of `cast run`.
+#[derive(clap::Args, Clone, Debug)]
+pub struct RunFlags {
+    /// Run without a TTY (for CI, systemd, and piped output)
+    #[arg(long)]
+    pub headless: bool,
+
+    /// Override the container name (default: auto-generated)
+    #[arg(long)]
+    pub name: Option<String>,
+}
 
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
@@ -85,17 +98,23 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             nix_daemon::handle_nix_daemon(&approved, command)
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
-        Some(Commands::Run { agent }) => {
+        Some(Commands::Run { flags, agent }) => {
             let approved = verify_config(cfg)?;
-            let status = dev::run_agent(
-                agent.as_agent(),
-                &approved,
-                match &agent {
-                    RunAgent::Opencode { extra_args } => extra_args.clone(),
-                    RunAgent::Pi { extra_args } => extra_args.clone(),
-                    RunAgent::Claudecode { extra_args } => extra_args.clone(),
+            let session_flags = SessionFlags {
+                headless: flags.headless,
+                name: flags.name.clone(),
+                token: if flags.headless {
+                    Some(invocation_id.clone())
+                } else {
+                    None
                 },
-            )?;
+            };
+            let extra_args = match &agent {
+                RunAgent::Opencode { extra_args } => extra_args.clone(),
+                RunAgent::Pi { extra_args } => extra_args.clone(),
+                RunAgent::Claudecode { extra_args } => extra_args.clone(),
+            };
+            let status = dev::run_agent(agent.as_agent(), &approved, session_flags, extra_args)?;
             Ok(to_exit_code(status))
         }
         Some(Commands::Shell { agent, raw }) => {
@@ -235,6 +254,8 @@ pub enum Commands {
     },
     /// Run an agent
     Run {
+        #[command(flatten)]
+        flags: RunFlags,
         #[command(subcommand)]
         agent: RunAgent,
     },
