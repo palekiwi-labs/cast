@@ -39,6 +39,12 @@ ARG EXTRA_DIRS=""
 
 USER root
 
+# Allow git operations on bind-mounted workspaces owned by a different UID.
+# Required for `nix develop .` (libgit2) when the workspace UID does not match
+# the container process UID — triggered by Docker Desktop on macOS and by Linux
+# setups with userns-remap. Mirrors Dockerfile.nix-daemon.
+RUN git config --system safe.directory "*"
+
 # Create user and directories (idempotent - safe even if user/dirs exist)
 RUN set -e; \
     if getent group ${GID} >/dev/null 2>&1; then \

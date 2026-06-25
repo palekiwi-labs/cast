@@ -163,4 +163,14 @@ mod tests {
     fn test_dockerfile_has_correct_base_image() {
         assert!(Pi.dockerfile().contains("FROM debian:trixie-slim"));
     }
+
+    #[test]
+    fn test_dockerfile_configures_git_safe_directory() {
+        assert!(
+            Pi.dockerfile()
+                .contains(r#"git config --system safe.directory "*""#),
+            "Dockerfile must configure git safe.directory to allow nix develop . \
+             (libgit2) on bind-mounted workspaces"
+        );
+    }
 }
