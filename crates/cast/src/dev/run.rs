@@ -169,10 +169,13 @@ pub fn resolve_run_opts(
 /// Agent-specific arguments (env vars, program-specific mounts, etc.) are
 /// NOT included here — each agent appends them via `Agent::extra_run_args`.
 pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
-    // TTY flags: interactive gets "-it", headless gets "-i" only.
+    // TTY flags: interactive gets "-it", headless gets neither.
+    // Headless runs are fire-and-forget; the agent receives its input via
+    // extra_args, not stdin. Passing -i with an inherited terminal stdin
+    // causes docker to block indefinitely waiting for EOF.
     let tty_flags: Vec<String> = match opts.tty_mode {
         TtyMode::Interactive => vec!["-it".to_string()],
-        TtyMode::Headless => vec!["-i".to_string()],
+        TtyMode::Headless => vec![],
     };
 
     let mut run_args: Vec<String> = vec!["--rm".to_string()];
@@ -475,12 +478,15 @@ mod tests {
     // ── Phase 2: build_run_opts — headless mode ──────────────────────────────
 
     #[test]
-    fn test_build_run_opts_headless_has_i_not_it() {
+    fn test_build_run_opts_headless_no_tty_flags() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         let run_args = build_run_opts(&config, &opts);
 
-        assert!(run_args.contains(&"-i".to_string()), "Should contain -i");
+        assert!(
+            !run_args.contains(&"-i".to_string()),
+            "Should NOT contain -i in headless mode"
+        );
         assert!(
             !run_args.contains(&"-it".to_string()),
             "Should NOT contain -it in headless mode"

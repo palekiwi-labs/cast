@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use std::process::{Command, ExitStatus};
+use std::process::{Command, ExitStatus, Stdio};
 use tracing::debug;
 
 use crate::docker::args;
@@ -150,6 +150,9 @@ impl DockerClient {
 
         let mut cmd = Command::new("docker");
         cmd.args(&args);
+        // Explicitly close stdin so docker never blocks waiting for input,
+        // regardless of what cast's own stdin fd happens to be.
+        cmd.stdin(Stdio::null());
 
         // Reset signals to default in the child process so Docker handles them.
         unsafe {
