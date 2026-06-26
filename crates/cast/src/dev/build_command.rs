@@ -85,6 +85,8 @@ mod tests {
             host_home_dir: None,
             user_flake_present,
             project_flake_present,
+            tty_mode: crate::dev::run::TtyMode::Interactive,
+            publish: true,
         }
     }
 

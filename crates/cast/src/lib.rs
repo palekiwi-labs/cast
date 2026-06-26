@@ -6,5 +6,5 @@ pub mod logging;
 #[cfg(feature = "mcp")]
 pub mod mcp;
 pub mod nix_daemon;
-pub mod user;
 pub mod paths;
+pub mod user;

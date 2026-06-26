@@ -187,3 +187,60 @@ fn test_cast_shell_claudecode_help() {
         .assert()
         .success();
 }
+
+// ── Phase 6: --headless flag parsing ────────────────────────────────────────
+
+#[test]
+fn test_cast_run_headless_flag_in_help() {
+    cast()
+        .args(["run", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--headless"));
+}
+
+#[test]
+fn test_cast_run_headless_name_flag_in_help() {
+    cast()
+        .args(["run", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--name"));
+}
+
+/// `--headless` before the agent subcommand is consumed by RunFlags, not
+/// rejected as an unknown flag. Verified by confirming clap's only complaint
+/// is the missing subcommand, not an unrecognised argument.
+#[test]
+fn test_cast_run_headless_before_agent_is_consumed() {
+    cast()
+        .args(["run", "--headless"])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("subcommand is required")
+                .or(predicate::str::contains("requires a subcommand")),
+        )
+        .stderr(predicate::str::contains("unexpected argument").not());
+}
+
+/// `cast port opencode --headless` — extra flag is forwarded to port
+/// computation as extra_args; port output is unaffected.
+#[test]
+fn test_cast_port_unaffected_by_headless_extra_arg() {
+    let output1 = cast().args(["port", "opencode"]).assert().success();
+    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
+    let port1: u16 = stdout1.trim().parse().unwrap();
+
+    let output2 = cast()
+        .args(["port", "opencode", "--headless"])
+        .assert()
+        .success();
+    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
+    let port2: u16 = stdout2.trim().parse().unwrap();
+
+    assert_eq!(
+        port1, port2,
+        "port must be identical with or without --headless in extra_args"
+    );
+}
