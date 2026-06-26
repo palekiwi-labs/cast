@@ -7,7 +7,7 @@ use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
-use crate::dev::run::{PublishPort, RunMode, SessionFlags};
+use crate::dev::run::{RunMode, SessionFlags};
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -26,11 +26,10 @@ pub struct RunFlags {
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Publish the container's port to the host.
-    /// Without a value, uses the agent's deterministically calculated port.
-    /// With a value, uses that specific host port (e.g. --publish 8080).
-    #[arg(short = 'p', long, num_args = 0..=1, default_missing_value = "auto", value_name = "PORT")]
-    pub publish: Option<PublishPort>,
+    /// Publish the agent's port to the host (uses the calculated port).
+    /// To use a specific host port, set `port` in cast.json instead.
+    #[arg(short = 'p', long)]
+    pub publish: bool,
 }
 
 /// cast - coding agent sandbox tool
@@ -116,7 +115,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let session_flags = SessionFlags {
                 mode,
                 name: flags.name.clone(),
-                publish: flags.publish.clone(),
+                publish: flags.publish,
             };
             let extra_args = match &agent {
                 RunAgent::Opencode { extra_args } => extra_args.clone(),
@@ -148,7 +147,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let session_flags = SessionFlags {
                 mode,
                 name: flags.name.clone(),
-                publish: flags.publish.clone(),
+                publish: flags.publish,
             };
             let cmd = agent.cmd().to_vec();
             let status = dev::exec(
@@ -284,13 +283,13 @@ pub struct ExecFlags {
     #[arg(long)]
     pub name: Option<String>,
 
-    /// Publish the container's port to the host.
-    /// Without a value, uses the agent's deterministically calculated port.
-    /// With a value, uses that specific host port (e.g. --publish 8080).
-    #[arg(short = 'p', long, num_args = 0..=1, default_missing_value = "auto", value_name = "PORT")]
-    pub publish: Option<PublishPort>,
+    /// Publish the agent's port to the host (uses the calculated port).
+    /// To use a specific host port, set `port` in cast.json instead.
+    #[arg(short = 'p', long)]
+    pub publish: bool,
 
-    /// Skip Nix devshell wrapping; pass the command directly to docker run.
+    /// Skip Nix devshell wrapping; command wrapping is skipped but /nix is
+    /// still mounted and the Nix daemon is still started.
     #[arg(long)]
     pub raw: bool,
 }
@@ -491,15 +490,40 @@ mod tests {
     }
 
     #[test]
-    fn test_exec_publish_auto_parsed() {
-        // Use explicit `=auto` to avoid clap consuming the next positional
-        // (the agent subcommand name) as the port value.
-        let cli = Cli::try_parse_from(["cast", "exec", "--publish=auto", "opencode", "/bin/bash"])
+    fn test_exec_publish_flag_sets_true() {
+        // Bare --publish flag (no value) sets publish to true.
+        let cli = Cli::try_parse_from(["cast", "exec", "--publish", "opencode", "/bin/bash"])
             .expect("should parse");
         let Commands::Exec { flags, .. } = cli.command.unwrap() else {
             panic!("expected Exec command");
         };
-        assert!(matches!(flags.publish, Some(PublishPort::Auto)));
+        assert!(
+            flags.publish,
+            "--publish bare flag must set publish to true"
+        );
+    }
+
+    #[test]
+    fn test_run_publish_flag_sets_true() {
+        let cli =
+            Cli::try_parse_from(["cast", "run", "--publish", "opencode"]).expect("should parse");
+        let Commands::Run { flags, .. } = cli.command.unwrap() else {
+            panic!("expected Run command");
+        };
+        assert!(
+            flags.publish,
+            "--publish bare flag must set publish to true"
+        );
+    }
+
+    #[test]
+    fn test_publish_absent_is_false() {
+        let cli =
+            Cli::try_parse_from(["cast", "exec", "opencode", "/bin/bash"]).expect("should parse");
+        let Commands::Exec { flags, .. } = cli.command.unwrap() else {
+            panic!("expected Exec command");
+        };
+        assert!(!flags.publish, "publish absent should be false");
     }
 
     #[test]

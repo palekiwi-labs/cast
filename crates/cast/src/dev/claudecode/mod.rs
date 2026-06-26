@@ -162,7 +162,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: crate::dev::run::TtyMode::Interactive,
-            publish: None,
+            publish: false,
         }
     }
 

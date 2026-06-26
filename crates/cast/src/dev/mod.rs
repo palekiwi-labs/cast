@@ -20,5 +20,5 @@ pub mod workspace;
 
 pub use build::build_agent;
 pub use exec::exec;
-pub use run::{PublishPort, RunMode, SessionFlags, TtyMode, run_agent};
+pub use run::{RunMode, SessionFlags, TtyMode, run_agent};
 pub use shell::shell;

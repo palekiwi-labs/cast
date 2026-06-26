@@ -26,31 +26,6 @@ pub enum TtyMode {
     Headless,
 }
 
-/// Whether to publish the container's port to the host, and on which host port.
-#[derive(Debug, Clone, PartialEq)]
-pub enum PublishPort {
-    /// Publish on the agent's deterministically calculated port.
-    Auto,
-    /// Publish on a specific host port.
-    Fixed(u16),
-}
-
-impl std::str::FromStr for PublishPort {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        match s {
-            "auto" => Ok(PublishPort::Auto),
-            n => {
-                let port = n
-                    .parse::<u16>()
-                    .map_err(|_| anyhow::anyhow!("invalid port number: '{}'", n))?;
-                Ok(PublishPort::Fixed(port))
-            }
-        }
-    }
-}
-
 /// The execution mode for a `cast run` session.
 ///
 /// `Headless` carries the uniqueness token used for the ephemeral container
@@ -76,8 +51,8 @@ impl From<&RunMode> for TtyMode {
 pub struct SessionFlags {
     pub mode: RunMode,
     pub name: Option<String>,
-    /// Whether to publish the agent's port to the host. `None` means no publish.
-    pub publish: Option<PublishPort>,
+    /// Whether to publish the agent's port to the host. `false` means no publish.
+    pub publish: bool,
 }
 
 /// Generic options for building the Docker run command.
@@ -91,8 +66,8 @@ pub struct RunOpts {
     pub user_flake_present: bool,
     pub project_flake_present: bool,
     pub tty_mode: TtyMode,
-    /// Whether to publish the container's port to the host.
-    pub publish: Option<PublishPort>,
+    /// Whether to publish the container's port to the host. `false` means no publish.
+    pub publish: bool,
 }
 
 use std::process::ExitStatus;
@@ -212,7 +187,7 @@ pub fn resolve_run_opts(
         user_flake_present,
         project_flake_present,
         tty_mode: TtyMode::from(&flags.mode),
-        publish: flags.publish.clone(),
+        publish: flags.publish,
     }
 }
 
@@ -251,17 +226,11 @@ pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
     ]);
 
     // Port publishing: opt-in via --publish flag.
-    // Auto → publish the agent's calculated/config port; Fixed(n) → specific host port.
-    match &opts.publish {
-        Some(PublishPort::Auto) => {
-            run_args.push("-p".to_string());
-            run_args.push(format!("{}:80", opts.port));
-        }
-        Some(PublishPort::Fixed(host_port)) => {
-            run_args.push("-p".to_string());
-            run_args.push(format!("{}:80", host_port));
-        }
-        None => {}
+    // When true, publish the agent's calculated port to the host.
+    // Fixed host-port overrides are a cast.json concern (config.port).
+    if opts.publish {
+        run_args.push("-p".to_string());
+        run_args.push(format!("{}:80", opts.port));
     }
 
     // Env files.
@@ -376,7 +345,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: TtyMode::Interactive,
-            publish: None,
+            publish: false,
         }
     }
 
@@ -389,7 +358,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: TtyMode::Headless,
-            publish: None,
+            publish: false,
         }
     }
 
@@ -525,7 +494,7 @@ mod tests {
         let flags = SessionFlags {
             mode: RunMode::Interactive,
             name: None,
-            publish: None,
+            publish: false,
         };
         let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
 
@@ -558,14 +527,14 @@ mod tests {
 
     #[test]
     fn test_build_docker_run_flags_no_publish_flag_no_port() {
-        // With publish: None (the new default), no -p flag regardless of tty mode.
+        // publish: false (the default) → no -p flag regardless of tty mode.
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"-p".to_string()),
-            "Should NOT publish port when publish is None"
+            "Should NOT publish port when publish is false"
         );
     }
 
@@ -614,53 +583,34 @@ mod tests {
     }
 
     #[test]
-    fn test_build_docker_run_flags_publish_auto() {
-        // --publish (no value) → publish the calculated port.
+    fn test_build_docker_run_flags_publish_true_emits_port() {
+        // publish: true → -p <port>:80 with the calculated port.
         let config = Config::default();
         let opts = RunOpts {
-            publish: Some(PublishPort::Auto),
+            publish: true,
             ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
         };
         let run_args = build_docker_run_flags(&config, &opts);
 
         let p_pos = run_args.iter().position(|a| a == "-p");
-        assert!(p_pos.is_some(), "Should contain -p with PublishPort::Auto");
+        assert!(p_pos.is_some(), "Should contain -p when publish is true");
         assert_eq!(
             run_args[p_pos.unwrap() + 1],
             "32768:80",
-            "Auto should publish the calculated port"
-        );
-    }
-
-    #[test]
-    fn test_build_docker_run_flags_publish_fixed() {
-        // --publish 8080 → publish host:8080 → container:80.
-        let config = Config::default();
-        let opts = RunOpts {
-            publish: Some(PublishPort::Fixed(8080)),
-            ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
-        };
-        let run_args = build_docker_run_flags(&config, &opts);
-
-        let p_pos = run_args.iter().position(|a| a == "-p");
-        assert!(p_pos.is_some(), "Should contain -p with PublishPort::Fixed");
-        assert_eq!(
-            run_args[p_pos.unwrap() + 1],
-            "8080:80",
-            "Fixed should publish the specified host port"
+            "publish: true should emit the calculated port"
         );
     }
 
     #[test]
     fn test_build_docker_run_flags_no_publish_by_default() {
-        // publish: None → no -p regardless of tty mode.
+        // publish: false → no -p regardless of tty mode.
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
         let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"-p".to_string()),
-            "Should NOT publish port when publish is None (new default)"
+            "Should NOT publish port when publish is false (default)"
         );
     }
 }
