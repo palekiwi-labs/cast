@@ -12,12 +12,12 @@ use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -132,6 +132,15 @@ pub fn run_agent(
     // Build generic docker run flags, then append agent-specific ones.
     let mut opts = build_docker_run_flags(config, &run_opts);
     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
+
+    // Announce nix devshell layers before handing off to docker, so the
+    // user knows what environment is being loaded.  The global flake is
+    // the outermost layer and is announced here; the project flake
+    // announces itself via its own shellHook (echo ... >&2).
+    if run_opts.user_flake_present {
+        info!("loading global nix devshell");
+        eprintln!("Loading global nix devshell...");
+    }
 
     // Build the full command and exec into the container.
     let cmd = agent.build_command(config, &run_opts, extra_args);
@@ -393,9 +402,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -405,9 +412,7 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts);
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]

@@ -19,6 +19,23 @@ Set `use_flake` to `true` in your `cast.json`:
 layer of the shell wrapping. This is useful for tools you want available in
 every agent session, regardless of the specific project.
 
+### Keeping stdout clean
+
+`cast` prints its own status messages to stderr. For `cast run --headless
+--format json` to produce clean, pipeable JSON, any `shellHook` echoes in your
+flakes must also write to stderr. Use `>&2`:
+
+```bash
+# ~/.config/cast/nix/flake.nix — shellHook snippet
+shellHook = ''
+  echo "Global environment loaded." >&2
+'';
+```
+
+This applies to both the global flake and project-level flakes. Anything
+written to stdout inside a `shellHook` will appear in `cast`'s stdout and
+will corrupt a JSON pipeline.
+
 ## How it works
 
 If enabled, `cast` constructs a "Russian Doll" of shell wrappers:

@@ -3,9 +3,9 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
@@ -32,9 +32,12 @@ pub fn ensure_image(
 
     if !opts.force && docker.image_exists(&image_tag)? {
         info!(%image_tag, "image exists, skipping build");
-        println!("{} dev image already exists: {}", agent_name, image_tag);
+        // info! writes to the file log; eprintln! writes to the console.
+        // Status messages go to stderr so stdout remains clean for
+        // programmatic consumers (e.g. `cast run --headless --format json`).
+        eprintln!("{} dev image already exists: {}", agent_name, image_tag);
         if opts.no_cache {
-            println!(
+            eprintln!(
                 "Hint: You passed --no-cache. If you want to force a rebuild of the existing image, use --force."
             );
         }
@@ -42,7 +45,7 @@ pub fn ensure_image(
     }
 
     info!(%image_tag, "image not found or force rebuild, building");
-    println!("Building {} dev image: {}", agent_name, image_tag);
+    eprintln!("Building {} dev image: {}", agent_name, image_tag);
 
     let temp_dir = TempDir::new()?;
     let context_path = temp_dir.path();
