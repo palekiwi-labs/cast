@@ -73,8 +73,8 @@
             ];
 
             shellHook = ''
-              echo "Rust development environment ready!"
-              echo "Rust version: $(rustc --version)"
+              echo "Rust development environment ready!" >&2
+              echo "Rust version: $(rustc --version)" >&2
             '';
           };
       });
