@@ -1,6 +1,4 @@
-use std::collections::HashMap;
 use std::process::ExitStatus;
-use std::time::Instant;
 
 use anyhow::{bail, Result};
 use tracing::{debug, info, info_span};
@@ -10,9 +8,8 @@ use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
-use crate::dev::run::{build_docker_run_flags, resolve_run_opts, RunOpts, SessionFlags, TtyMode};
+use crate::dev::run::{resolve_run_opts, run_in_container, RunOpts, SessionFlags};
 use crate::dev::workspace::get_workspace;
-use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::nix_daemon;
@@ -55,7 +52,6 @@ pub fn exec(
         );
     }
 
-    let start_time = Instant::now();
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -98,32 +94,18 @@ pub fn exec(
 
     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
-    let env: HashMap<String, String> = std::env::vars().collect();
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
-
-    // Always prepare host-side state (exec may be the first command the user
-    // runs for this agent, so we cannot assume run_agent did it already).
-    agent.prepare_host(config, &run_opts)?;
-
-    let mut docker_flags = build_docker_run_flags(config, &run_opts);
-    docker_flags.extend(agent.extra_run_args(config, &run_opts, &env)?);
-
     let exec_cmd = build_exec_cmd(config, &run_opts, raw, &cmd);
-    let docker_args = build_run_args(&container_name, &image_tag, docker_flags, Some(exec_cmd));
 
-    let status = match run_opts.tty_mode {
-        TtyMode::Interactive => docker.interactive_command(docker_args)?,
-        TtyMode::Headless => docker.headless_command(docker_args, &container_name)?,
-    };
-
-    let duration = start_time.elapsed();
-    info!(
-        exit_code = status.code(),
-        duration_secs = duration.as_secs(),
-        "exec session ended"
-    );
-
-    Ok(status)
+    run_in_container(
+        &docker,
+        agent,
+        config,
+        &run_opts,
+        &container_name,
+        &image_tag,
+        exec_cmd,
+    )
 }
 
 #[cfg(test)]
