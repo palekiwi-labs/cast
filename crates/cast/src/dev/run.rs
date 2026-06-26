@@ -26,20 +26,31 @@ pub enum TtyMode {
     Headless,
 }
 
-/// Resolve the TTY mode from the `--headless` flag.
-pub fn resolve_tty_mode(headless: bool) -> TtyMode {
-    if headless {
-        TtyMode::Headless
-    } else {
-        TtyMode::Interactive
+/// The execution mode for a `cast run` session.
+///
+/// `Headless` carries the uniqueness token used for the ephemeral container
+/// name, making it impossible for callers to set `headless` without also
+/// providing the token.
+#[derive(Debug, Clone)]
+pub enum RunMode {
+    Interactive,
+    Headless { token: String },
+}
+
+impl From<&RunMode> for TtyMode {
+    fn from(mode: &RunMode) -> Self {
+        match mode {
+            RunMode::Interactive => TtyMode::Interactive,
+            RunMode::Headless { .. } => TtyMode::Headless,
+        }
     }
 }
 
 /// Flags controlling the session execution mode.
+#[derive(Debug)]
 pub struct SessionFlags {
-    pub headless: bool,
+    pub mode: RunMode,
     pub name: Option<String>,
-    pub token: Option<String>,
 }
 
 /// Generic options for building the Docker run command.
@@ -73,13 +84,17 @@ pub fn run_agent(
     // Resolve port and container name early for span.
     let port = dev::port::resolve_port(config, agent.name())?;
     let cwd_basename = workspace.root_basename();
+    let token = match &flags.mode {
+        RunMode::Headless { token } => Some(token.as_str()),
+        RunMode::Interactive => None,
+    };
     let container_name = resolve_container_name(
         config,
         agent.name(),
         cwd_basename,
         port,
         flags.name.as_deref(),
-        flags.token.as_deref(),
+        token,
     );
 
     let span = info_span!(
@@ -115,7 +130,7 @@ pub fn run_agent(
     agent.prepare_host(config, &run_opts)?;
 
     // Build generic docker run flags, then append agent-specific ones.
-    let mut opts = build_run_opts(config, &run_opts);
+    let mut opts = build_docker_run_flags(config, &run_opts);
     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
 
     // Build the full command and exec into the container.
@@ -124,7 +139,7 @@ pub fn run_agent(
 
     let status = match run_opts.tty_mode {
         TtyMode::Interactive => docker.interactive_command(docker_args)?,
-        TtyMode::Headless => docker.headless_command(docker_args)?,
+        TtyMode::Headless => docker.headless_command(docker_args, &container_name)?,
     };
 
     let duration = start_time.elapsed();
@@ -159,8 +174,8 @@ pub fn resolve_run_opts(
         host_home_dir,
         user_flake_present,
         project_flake_present,
-        tty_mode: resolve_tty_mode(flags.headless),
-        publish: !flags.headless,
+        tty_mode: TtyMode::from(&flags.mode),
+        publish: matches!(flags.mode, RunMode::Interactive),
     }
 }
 
@@ -168,7 +183,7 @@ pub fn resolve_run_opts(
 ///
 /// Agent-specific arguments (env vars, program-specific mounts, etc.) are
 /// NOT included here — each agent appends them via `Agent::extra_run_args`.
-pub fn build_run_opts(config: &Config, opts: &RunOpts) -> Vec<String> {
+pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
     // TTY flags: interactive gets "-it", headless gets neither.
     // Headless runs are fire-and-forget; the agent receives its input via
     // extra_args, not stdin. Passing -i with an inherited terminal stdin
@@ -286,16 +301,19 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    // ── Phase 1: resolve_tty_mode ────────────────────────────────────────────
+    // ── Phase 1: RunMode → TtyMode conversion ───────────────────────────────
 
     #[test]
-    fn test_resolve_tty_mode_false_is_interactive() {
-        assert_eq!(resolve_tty_mode(false), TtyMode::Interactive);
+    fn test_run_mode_interactive_maps_to_interactive_tty() {
+        assert_eq!(TtyMode::from(&RunMode::Interactive), TtyMode::Interactive);
     }
 
     #[test]
-    fn test_resolve_tty_mode_true_is_headless() {
-        assert_eq!(resolve_tty_mode(true), TtyMode::Headless);
+    fn test_run_mode_headless_maps_to_headless_tty() {
+        let mode = RunMode::Headless {
+            token: "tok".to_string(),
+        };
+        assert_eq!(TtyMode::from(&mode), TtyMode::Headless);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -345,14 +363,14 @@ mod tests {
         }
     }
 
-    // ── Phase 2: build_run_opts — interactive mode ───────────────────────────
+    // ── Phase 2: build_docker_run_flags — interactive mode ──────────────────
 
     #[test]
-    fn test_build_run_opts_basic() {
+    fn test_build_docker_run_flags_basic() {
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         // Generic flags present
         assert!(run_args.contains(&"--rm".to_string()));
@@ -381,26 +399,26 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_mcp_custom_port() {
+    fn test_build_docker_run_flags_mcp_custom_port() {
         let mut config = Config::default();
         config.mcp.port = 9000;
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
         assert!(
             run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
         );
     }
 
     #[test]
-    fn test_build_run_opts_add_host_enabled() {
+    fn test_build_docker_run_flags_add_host_enabled() {
         let config = Config {
             add_host_docker_internal: true,
             ..Config::default()
         };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         let add_host_pos = run_args.iter().position(|r| r == "--add-host");
         assert!(add_host_pos.is_some(), "Should contain --add-host");
@@ -411,14 +429,14 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_add_host_disabled() {
+    fn test_build_docker_run_flags_add_host_disabled() {
         let config = Config {
             add_host_docker_internal: false,
             ..Config::default()
         };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"--add-host".to_string()),
@@ -427,7 +445,7 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_shadow_mounts() {
+    fn test_build_docker_run_flags_shadow_mounts() {
         let config = Config {
             forbidden_paths: vec!["secrets".to_string()],
             ..Config::default()
@@ -443,7 +461,7 @@ mod tests {
         };
 
         let opts = make_interactive_opts(alice_user(), workspace, 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(run_args.contains(
             &"/home/alice/project/secrets:ro,noexec,nosuid,size=1k,mode=000".to_string()
@@ -464,9 +482,8 @@ mod tests {
         };
 
         let flags = SessionFlags {
-            headless: false,
+            mode: RunMode::Interactive,
             name: None,
-            token: None,
         };
         let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
 
@@ -475,13 +492,13 @@ mod tests {
         // but we verified the logic is correct.
     }
 
-    // ── Phase 2: build_run_opts — headless mode ──────────────────────────────
+    // ── Phase 2: build_docker_run_flags — headless mode ─────────────────────
 
     #[test]
-    fn test_build_run_opts_headless_no_tty_flags() {
+    fn test_build_docker_run_flags_headless_no_tty_flags() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"-i".to_string()),
@@ -498,13 +515,13 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_headless_no_port() {
+    fn test_build_docker_run_flags_headless_no_port() {
         let config = Config {
             publish_port: true,
             ..Config::default()
         };
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"-p".to_string()),
@@ -513,10 +530,10 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_headless_no_color_vars() {
+    fn test_build_docker_run_flags_headless_no_color_vars() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.iter().any(|a| a.contains("FORCE_COLOR")),
@@ -533,10 +550,10 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_headless_injects_no_color() {
+    fn test_build_docker_run_flags_headless_injects_no_color() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             run_args.contains(&"NO_COLOR=1".to_string()),
@@ -545,10 +562,10 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_headless_user_present() {
+    fn test_build_docker_run_flags_headless_user_present() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             run_args.contains(&"USER=alice".to_string()),
@@ -557,13 +574,13 @@ mod tests {
     }
 
     #[test]
-    fn test_build_run_opts_interactive_port_published() {
+    fn test_build_docker_run_flags_interactive_port_published() {
         let config = Config {
             publish_port: true,
             ..Config::default()
         };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_run_opts(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             run_args.contains(&"-p".to_string()),

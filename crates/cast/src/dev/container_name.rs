@@ -4,7 +4,10 @@ use crate::config::Config;
 ///
 /// Priority:
 /// 1. `explicit_name` set via `--name` → returned as-is
-/// 2. `token` present (headless) → `cast-{agent}-{basename}-headless-{token}`
+/// 2. `token` present (headless) → `cast-{agent}-{basename}-{port}-headless-{token}`
+///    The port is included so the name shares a greppable prefix with the
+///    interactive container (`cast-{agent}-{basename}-{port}`), allowing
+///    `docker ps --filter name=cast-{agent}-{basename}-{port}` to match both.
 /// 3. Otherwise (interactive default) → `cast-{agent}-{basename}-{port}`
 ///    (or `cfg.container_name`-based when config override is set)
 ///
@@ -24,8 +27,14 @@ pub fn resolve_container_name(
     }
 
     // Headless path: unique ephemeral name with injected token.
+    // Format: cast-{agent}-{basename}-{port}-headless-{token}
+    // This is a strict suffix-extension of the interactive default so that
+    // one docker ps filter can match all containers for a given project/agent.
     if let Some(tok) = token {
-        return format!("cast-{}-{}-headless-{}", agent_name, cwd_basename, tok);
+        return format!(
+            "cast-{}-{}-{}-headless-{}",
+            agent_name, cwd_basename, port, tok
+        );
     }
 
     // Interactive default: deterministic name (stable, re-attachable).
@@ -84,19 +93,21 @@ mod tests {
         let cfg = Config::default();
         assert_eq!(
             resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("abc123")),
-            "cast-opencode-my-app-headless-abc123",
+            "cast-opencode-my-app-8080-headless-abc123",
         );
     }
 
     #[test]
     fn test_headless_token_overrides_config_name() {
+        // Headless always uses the ephemeral auto-generated format regardless
+        // of cfg.container_name. Use --name for an explicit override.
         let cfg = Config {
             container_name: Some("custom".to_string()),
             ..Default::default()
         };
         assert_eq!(
             resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("tok42")),
-            "cast-opencode-my-app-headless-tok42",
+            "cast-opencode-my-app-8080-headless-tok42",
         );
     }
 }

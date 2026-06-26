@@ -7,7 +7,7 @@ use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
-use crate::dev::run::SessionFlags;
+use crate::dev::run::{RunMode, SessionFlags};
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -100,14 +100,16 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
         Some(Commands::Run { flags, agent }) => {
             let approved = verify_config(cfg)?;
+            let mode = if flags.headless {
+                RunMode::Headless {
+                    token: invocation_id.clone(),
+                }
+            } else {
+                RunMode::Interactive
+            };
             let session_flags = SessionFlags {
-                headless: flags.headless,
+                mode,
                 name: flags.name.clone(),
-                token: if flags.headless {
-                    Some(invocation_id.clone())
-                } else {
-                    None
-                },
             };
             let extra_args = match &agent {
                 RunAgent::Opencode { extra_args } => extra_args.clone(),

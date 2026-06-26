@@ -37,9 +37,8 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
         vec!["/bin/bash".to_string()]
     } else {
         let flags = SessionFlags {
-            headless: false,
+            mode: crate::dev::run::RunMode::Interactive,
             name: None,
-            token: None,
         };
         let opts = resolve_run_opts(user, workspace, port, &flags);
         build_command(config, &opts, "/bin/bash", vec![])
