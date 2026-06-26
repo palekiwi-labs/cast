@@ -9,7 +9,7 @@ pub fn generate_invocation_id() -> String {
     let s = RandomState::new();
     let hasher = s.build_hasher();
     let hash = hasher.finish();
-    format!("{:08x}", hash as u32)
+    format!("{:016x}", hash)
 }
 
 pub fn init_file_logger() -> Result<()> {

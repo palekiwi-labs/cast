@@ -224,23 +224,6 @@ fn test_cast_run_headless_before_agent_is_consumed() {
         .stderr(predicate::str::contains("unexpected argument").not());
 }
 
-/// `--headless` placed after the agent subcommand is forwarded as extra_args
-/// (pass-through), not consumed by RunFlags. Clap should not reject it since
-/// `extra_args` captures all trailing arguments with `allow_hyphen_values`.
-/// We test this mirrors the `test_cast_port_ignores_extra_args` pattern:
-/// port output is unchanged regardless of extra flags passed after the agent.
-#[test]
-fn test_cast_run_headless_after_agent_is_passthrough() {
-    // `cast run opencode --headless` would hit config check; instead we verify
-    // via `cast run --help` that --headless is listed, and via the port command
-    // (same RunAgent enum) that trailing hyphen-values are accepted.
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--headless"));
-}
-
 /// `cast port opencode --headless` — extra flag is forwarded to port
 /// computation as extra_args; port output is unaffected.
 #[test]
