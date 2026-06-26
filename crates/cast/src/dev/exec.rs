@@ -302,7 +302,7 @@ mod tests {
         );
     }
 
-    // ── empty cmd bail (S9) ──────────────────────────────────────────────────
+    // ── empty cmd handling ────────────────────────────────────────────────────
 
     #[test]
     fn test_build_exec_cmd_empty_returns_empty() {
@@ -314,5 +314,31 @@ mod tests {
         let empty: Vec<String> = vec![];
         assert_eq!(build_exec_cmd(&config, &opts, false, &empty), empty);
         assert_eq!(build_exec_cmd(&config, &opts, true, &empty), empty);
+    }
+
+    #[test]
+    fn test_exec_empty_cmd_returns_error() {
+        // The authoritative enforcement of "exec requires a command" is the
+        // bail! at the top of exec(). It must fire before any side effects
+        // (docker, user resolution, etc.) so we can call it with throwaway
+        // args and assert an error is returned.
+        use crate::config::ApprovedConfig;
+        use crate::dev::opencode::OpenCode;
+        use crate::dev::run::RunMode;
+
+        let config = ApprovedConfig::assume_approved_for_test(Config::default());
+        let flags = SessionFlags {
+            mode: RunMode::Interactive,
+            name: None,
+            publish: false,
+        };
+        let result = exec(&OpenCode, &config, flags, false, "tok".to_string(), vec![]);
+        assert!(result.is_err(), "exec with empty cmd must return an error");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(
+            msg.contains("requires a command"),
+            "error message should mention the missing command, got: {}",
+            msg
+        );
     }
 }
