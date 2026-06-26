@@ -3,8 +3,11 @@ use crate::config::Config;
 /// Resolve the Docker container name for an agent session.
 ///
 /// Priority:
-/// 1. `explicit_name` set via `--name` → returned as-is
-/// 2. `token` present → `cast-{agent}-{basename}-{port}-{token}`
+/// 1. `explicit_name` set via `--name` → returned as-is.
+///    Note: using `--name` opts out of the automatic collision-avoidance
+///    guarantee. If the given name is already in use by a running container,
+///    Docker will fail with an error — this is the expected behaviour.
+/// 2. `token` present → ephemeral name `cast-{agent}-{basename}-{port}-{token}`.
 ///    The port is included so the name shares a greppable prefix with the
 ///    interactive container (`cast-{agent}-{basename}-{port}`), allowing
 ///    `docker ps --filter name=cast-{agent}-{basename}-{port}` to match both.

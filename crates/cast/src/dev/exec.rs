@@ -207,18 +207,29 @@ mod tests {
     }
 
     #[test]
-    fn test_build_exec_cmd_non_raw_splits_cmd_args() {
-        // Ensure cmd[1..] is passed as extra_args to build_command.
-        let config = Config::default();
-        let opts = base_opts();
+    fn test_build_exec_cmd_non_raw_splits_cmd_args_with_flake() {
+        // Verify that with a project flake active, cmd[0] is used as the
+        // binary and cmd[1..] is forwarded as extra_args to build_command.
+        let config = Config {
+            use_flake: true,
+            use_flake_path: None,
+            ..Config::default()
+        };
+        let opts = RunOpts {
+            project_flake_present: true,
+            ..base_opts()
+        };
         let cmd = vec![
             "/bin/bash".to_string(),
             "-c".to_string(),
             "echo hello".to_string(),
         ];
         let result = build_exec_cmd(&config, &opts, false, &cmd);
-        // No flakes → bare pass-through; args preserved
-        assert_eq!(result, cmd);
+        // nix develop . -c /bin/bash -c "echo hello"
+        assert_eq!(
+            result,
+            vec!["nix", "develop", ".", "-c", "/bin/bash", "-c", "echo hello"]
+        );
     }
 
     // ── container name token invariants ──────────────────────────────────────
@@ -260,5 +271,48 @@ mod tests {
             "headless exec name should NOT contain 'exec-': {}",
             name
         );
+    }
+
+    // ── collision-avoidance invariant (S11) ──────────────────────────────────
+
+    #[test]
+    fn test_exec_auto_name_differs_from_interactive_run_name() {
+        // Auto-generated exec container names must never equal the stable
+        // interactive `cast run` name for the same CWD/agent/port triple,
+        // because exec always supplies a token and run (interactive) does not.
+        use crate::config::Config;
+        use crate::dev::container_name::resolve_container_name;
+
+        let cfg = Config::default();
+        // Interactive run: no token → stable name
+        let run_name = resolve_container_name(&cfg, "opencode", "my-app", 8080, None, None);
+        // Interactive exec: token = "exec-{id}"
+        let exec_name =
+            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("exec-abc123"));
+        assert_ne!(
+            run_name, exec_name,
+            "exec auto-name must differ from interactive run name"
+        );
+        // exec name extends the run name (preserves docker ps --filter prefix)
+        assert!(
+            exec_name.starts_with(&run_name),
+            "exec name '{}' should start with run name '{}'",
+            exec_name,
+            run_name
+        );
+    }
+
+    // ── empty cmd bail (S9) ──────────────────────────────────────────────────
+
+    #[test]
+    fn test_build_exec_cmd_empty_returns_empty() {
+        // build_exec_cmd with empty cmd returns empty regardless of raw flag.
+        // The caller (exec()) bails before build_exec_cmd is reached, but
+        // the function itself must not panic on empty input.
+        let config = Config::default();
+        let opts = base_opts();
+        let empty: Vec<String> = vec![];
+        assert_eq!(build_exec_cmd(&config, &opts, false, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, &opts, true, &empty), empty);
     }
 }

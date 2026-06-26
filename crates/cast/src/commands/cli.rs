@@ -301,22 +301,25 @@ pub enum ExecAgent {
     /// Execute a command in a fresh OpenCode container
     #[command(alias = "o", disable_help_flag = true)]
     Opencode {
-        /// Command and arguments to run inside the container
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
+        /// Command and arguments to run inside the container.
+        /// An empty command is rejected at dispatch time (not by clap).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
     /// Execute a command in a fresh Pi container
     #[command(alias = "p", disable_help_flag = true)]
     Pi {
-        /// Command and arguments to run inside the container
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
+        /// Command and arguments to run inside the container.
+        /// An empty command is rejected at dispatch time (not by clap).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
     /// Execute a command in a fresh ClaudeCode container
     #[command(alias = "c", disable_help_flag = true)]
     Claudecode {
-        /// Command and arguments to run inside the container
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
+        /// Command and arguments to run inside the container.
+        /// An empty command is rejected at dispatch time (not by clap).
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
 }
