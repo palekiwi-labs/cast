@@ -3,11 +3,11 @@ use std::process::ExitStatus;
 use tempfile::TempDir;
 
 use crate::config::ApprovedConfig;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon::{config as nix_config, image};
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use tracing::info;
 
 /// Ensure the nix daemon container is running
@@ -25,7 +25,9 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
 
     // Check if the image exists, build it if it doesn't
     if !docker.image_exists(&image_tag)? {
-        println!("Building nix daemon image: {}", image_tag);
+        // info! writes to the file log; eprintln! writes to the console.
+        // Status messages go to stderr so stdout stays clean for pipelines.
+        eprintln!("Building nix daemon image: {}", image_tag);
         build_image(docker, &image_tag, false)?;
     }
 
@@ -38,7 +40,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
         %image_tag,
         "starting nix daemon container"
     );
-    println!(
+    eprintln!(
         "Starting nix daemon container: {} ({})",
         container_name, image_tag
     );
@@ -57,7 +59,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
     docker.run_command(run_args)?;
 
     info!(%container_name, "nix daemon started successfully");
-    println!("Nix daemon started successfully");
+    eprintln!("Nix daemon started successfully");
     Ok(())
 }
 
@@ -83,11 +85,11 @@ pub fn build(docker: &DockerClient, opts: BuildOptions) -> Result<()> {
     let image_tag = image::get_image_tag();
 
     if !opts.force && docker.image_exists(&image_tag)? {
-        println!("Nix daemon image already exists: {}", image_tag);
+        eprintln!("Nix daemon image already exists: {}", image_tag);
         return Ok(());
     }
 
-    println!("Building nix daemon image: {}", image_tag);
+    eprintln!("Building nix daemon image: {}", image_tag);
     build_image(docker, &image_tag, opts.no_cache)
 }
 
@@ -97,14 +99,14 @@ pub fn stop(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
 
     // Check if it's actually running
     if !docker.is_container_running(container_name)? {
-        println!("Nix daemon is not running: {}", container_name);
+        eprintln!("Nix daemon is not running: {}", container_name);
         return Ok(());
     }
 
-    println!("Stopping nix daemon container: {}", container_name);
+    eprintln!("Stopping nix daemon container: {}", container_name);
     let stop_args = args::build_stop_args(container_name);
     docker.run_command(stop_args)?;
-    println!("Nix daemon stopped successfully");
+    eprintln!("Nix daemon stopped successfully");
 
     Ok(())
 }
