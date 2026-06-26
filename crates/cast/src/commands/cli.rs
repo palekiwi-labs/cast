@@ -1,13 +1,13 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
-use crate::dev::run::{RunMode, SessionFlags};
+use crate::dev::run::{PublishPort, RunMode, SessionFlags};
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -25,6 +25,12 @@ pub struct RunFlags {
     /// Override the container name (default: auto-generated)
     #[arg(long)]
     pub name: Option<String>,
+
+    /// Publish the container's port to the host.
+    /// Without a value, uses the agent's deterministically calculated port.
+    /// With a value, uses that specific host port (e.g. --publish 8080).
+    #[arg(short = 'p', long, num_args = 0..=1, default_missing_value = "auto", value_name = "PORT")]
+    pub publish: Option<PublishPort>,
 }
 
 /// cast - coding agent sandbox tool
@@ -110,6 +116,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let session_flags = SessionFlags {
                 mode,
                 name: flags.name.clone(),
+                publish: flags.publish.clone(),
             };
             let extra_args = match &agent {
                 RunAgent::Opencode { extra_args } => extra_args.clone(),

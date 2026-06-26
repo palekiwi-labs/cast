@@ -148,7 +148,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: crate::dev::run::TtyMode::Interactive,
-            publish: true,
+            publish: None,
         }
     }
 
@@ -217,7 +217,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: crate::dev::run::TtyMode::Interactive,
-            publish: true,
+            publish: None,
         };
         let env = HashMap::new();
 
