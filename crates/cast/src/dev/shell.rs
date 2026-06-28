@@ -1,13 +1,13 @@
 use std::process::ExitStatus;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 
 use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
-use crate::dev::run::{SessionFlags, resolve_run_opts};
+use crate::dev::run::{resolve_run_opts, SessionFlags};
 use crate::dev::workspace::get_workspace;
 use crate::docker::client::DockerClient;
 use crate::user::get_user;
@@ -39,6 +39,7 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
         let flags = SessionFlags {
             mode: crate::dev::run::RunMode::Interactive,
             name: None,
+            publish: false,
         };
         let opts = resolve_run_opts(user, workspace, port, &flags);
         build_command(config, &opts, "/bin/bash", vec![])

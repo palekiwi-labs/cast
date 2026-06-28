@@ -162,7 +162,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: crate::dev::run::TtyMode::Interactive,
-            publish: true,
+            publish: false,
         }
     }
 
@@ -258,11 +258,9 @@ mod tests {
 
     #[test]
     fn test_dockerfile_copies_node_from_official_image() {
-        assert!(
-            ClaudeCode
-                .dockerfile()
-                .contains("COPY --from=node:lts-trixie-slim /usr/local /usr/local")
-        );
+        assert!(ClaudeCode
+            .dockerfile()
+            .contains("COPY --from=node:lts-trixie-slim /usr/local /usr/local"));
     }
 
     #[test]

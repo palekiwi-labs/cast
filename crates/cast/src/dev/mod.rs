@@ -4,6 +4,7 @@ pub mod build_command;
 pub mod claudecode;
 pub mod container_name;
 pub mod env_file;
+pub mod exec;
 pub mod extra_dirs;
 pub mod image;
 pub mod opencode;
@@ -18,5 +19,6 @@ pub mod volumes;
 pub mod workspace;
 
 pub use build::build_agent;
+pub use exec::exec;
 pub use run::{RunMode, SessionFlags, TtyMode, run_agent};
 pub use shell::shell;

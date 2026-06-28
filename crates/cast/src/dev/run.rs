@@ -51,6 +51,8 @@ impl From<&RunMode> for TtyMode {
 pub struct SessionFlags {
     pub mode: RunMode,
     pub name: Option<String>,
+    /// Whether to publish the agent's port to the host. `false` means no publish.
+    pub publish: bool,
 }
 
 /// Generic options for building the Docker run command.
@@ -64,10 +66,50 @@ pub struct RunOpts {
     pub user_flake_present: bool,
     pub project_flake_present: bool,
     pub tty_mode: TtyMode,
+    /// Whether to publish the container's port to the host. `false` means no publish.
     pub publish: bool,
 }
 
 use std::process::ExitStatus;
+
+/// Shared container-run core used by both `run_agent` and `exec`.
+///
+/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
+/// command vector. Handles: prepare_host, docker flags, dispatch on tty_mode,
+/// and duration logging.
+pub fn run_in_container(
+    docker: &DockerClient,
+    agent: &dyn Agent,
+    config: &ApprovedConfig,
+    run_opts: &RunOpts,
+    container_name: &str,
+    image_tag: &str,
+    cmd: Vec<String>,
+) -> Result<ExitStatus> {
+    let start_time = Instant::now();
+    let env: HashMap<String, String> = std::env::vars().collect();
+
+    agent.prepare_host(config, run_opts)?;
+
+    let mut docker_flags = build_docker_run_flags(config, run_opts);
+    docker_flags.extend(agent.extra_run_args(config, run_opts, &env)?);
+
+    let docker_args = build_run_args(container_name, image_tag, docker_flags, Some(cmd));
+
+    let status = match run_opts.tty_mode {
+        TtyMode::Interactive => docker.interactive_command(docker_args)?,
+        TtyMode::Headless => docker.headless_command(docker_args, container_name)?,
+    };
+
+    let duration = start_time.elapsed();
+    info!(
+        exit_code = status.code(),
+        duration_secs = duration.as_secs(),
+        "session ended"
+    );
+
+    Ok(status)
+}
 
 /// Orchestrate and run an agent session inside the dev container.
 pub fn run_agent(
@@ -76,7 +118,6 @@ pub fn run_agent(
     flags: SessionFlags,
     extra_args: Vec<String>,
 ) -> Result<ExitStatus> {
-    let start_time = Instant::now();
     let docker = DockerClient;
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
@@ -123,15 +164,7 @@ pub fn run_agent(
 
     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
-    let env: HashMap<String, String> = std::env::vars().collect();
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
-
-    // Prepare host-side side effects before building arguments.
-    agent.prepare_host(config, &run_opts)?;
-
-    // Build generic docker run flags, then append agent-specific ones.
-    let mut opts = build_docker_run_flags(config, &run_opts);
-    opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
 
     // Announce nix devshell layers before handing off to docker, so the
     // user knows what environment is being loaded.  The global flake is
@@ -142,23 +175,16 @@ pub fn run_agent(
         eprintln!("Loading global nix devshell...");
     }
 
-    // Build the full command and exec into the container.
     let cmd = agent.build_command(config, &run_opts, extra_args);
-    let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
-
-    let status = match run_opts.tty_mode {
-        TtyMode::Interactive => docker.interactive_command(docker_args)?,
-        TtyMode::Headless => docker.headless_command(docker_args, &container_name)?,
-    };
-
-    let duration = start_time.elapsed();
-    info!(
-        exit_code = status.code(),
-        duration_secs = duration.as_secs(),
-        "agent session ended"
-    );
-
-    Ok(status)
+    run_in_container(
+        &docker,
+        agent,
+        config,
+        &run_opts,
+        &container_name,
+        &image_tag,
+        cmd,
+    )
 }
 
 /// Resolve the generic options for a session, detecting flake presence.
@@ -184,7 +210,7 @@ pub fn resolve_run_opts(
         user_flake_present,
         project_flake_present,
         tty_mode: TtyMode::from(&flags.mode),
-        publish: matches!(flags.mode, RunMode::Interactive),
+        publish: flags.publish,
     }
 }
 
@@ -222,8 +248,10 @@ pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
         config.network.clone(),
     ]);
 
-    // Port publishing: only when both config and opts enable it.
-    if config.publish_port && opts.publish {
+    // Port publishing: opt-in via --publish flag.
+    // When true, publish the agent's calculated port to the host.
+    // Fixed host-port overrides are a cast.json concern (config.port).
+    if opts.publish {
         run_args.push("-p".to_string());
         run_args.push(format!("{}:80", opts.port));
     }
@@ -340,7 +368,7 @@ mod tests {
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: TtyMode::Interactive,
-            publish: true,
+            publish: false,
         }
     }
 
@@ -489,6 +517,7 @@ mod tests {
         let flags = SessionFlags {
             mode: RunMode::Interactive,
             name: None,
+            publish: false,
         };
         let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
 
@@ -520,17 +549,15 @@ mod tests {
     }
 
     #[test]
-    fn test_build_docker_run_flags_headless_no_port() {
-        let config = Config {
-            publish_port: true,
-            ..Config::default()
-        };
+    fn test_build_docker_run_flags_no_publish_flag_no_port() {
+        // publish: false (the default) → no -p flag regardless of tty mode.
+        let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
             !run_args.contains(&"-p".to_string()),
-            "Should NOT publish port in headless mode even if config.publish_port is true"
+            "Should NOT publish port when publish is false"
         );
     }
 
@@ -579,17 +606,34 @@ mod tests {
     }
 
     #[test]
-    fn test_build_docker_run_flags_interactive_port_published() {
-        let config = Config {
-            publish_port: true,
-            ..Config::default()
+    fn test_build_docker_run_flags_publish_true_emits_port() {
+        // publish: true → -p <port>:80 with the calculated port.
+        let config = Config::default();
+        let opts = RunOpts {
+            publish: true,
+            ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
         };
+        let run_args = build_docker_run_flags(&config, &opts);
+
+        let p_pos = run_args.iter().position(|a| a == "-p");
+        assert!(p_pos.is_some(), "Should contain -p when publish is true");
+        assert_eq!(
+            run_args[p_pos.unwrap() + 1],
+            "32768:80",
+            "publish: true should emit the calculated port"
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_no_publish_by_default() {
+        // publish: false → no -p regardless of tty mode.
+        let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
         let run_args = build_docker_run_flags(&config, &opts);
 
         assert!(
-            run_args.contains(&"-p".to_string()),
-            "Should publish port in interactive mode when config.publish_port is true"
+            !run_args.contains(&"-p".to_string()),
+            "Should NOT publish port when publish is false (default)"
         );
     }
 }

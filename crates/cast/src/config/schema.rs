@@ -23,7 +23,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
 
-    pub publish_port: bool,
     pub add_host_docker_internal: bool,
 
     // Paths & Files
@@ -152,7 +151,6 @@ impl Default for Config {
             pids_limit: 512,
             network: "bridge".to_string(),
             port: None,
-            publish_port: true,
             add_host_docker_internal: true,
             use_flake: false,
             use_flake_path: None,
