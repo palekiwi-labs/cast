@@ -43,3 +43,19 @@ cargo fmt debt confirmed on master and left out of scope.
 - **Found:** cargo fmt --check shows pre-existing formatting debt on master across 8 files (import ordering, assertion wrapping) - unrelated to this feature, left out of scope
 - **Decided:** All design decisions from the Opus consultation held: libc::gethostname, always-on, soft-fail to 'unknown', CAST_HOST_NAME naming
 
+## [7f9e439] Task complete: link-containers-with-host
+
+Master task `link-containers-with-host.md` advanced to `status: complete` with
+`branch:` cleared. All five acceptance criteria evidence cells filled:
+1. CAST_HOST_NAME=pale confirmed live in-session + user attested
+2. Interactive + headless injection unit tests pass
+3. resolve_run_opts soft-fail non-empty invariant test passes
+4. 246 unit tests + integration tests pass, clippy clean, Nix-compatible design
+5. concepts.md "Host Identity" section added
+
+Consultant-opus review verdict: APPROVE WITH NITS (two non-blocking issues:
+--env-file comment precision, optional pure helper for byte-parsing test
+coverage). User directed to ship.
+
+- **Decided:** Ship the feature as-is; review nits are non-blocking and can be addressed post-merge
+
