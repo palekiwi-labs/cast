@@ -1,0 +1,494 @@
+diff --git a/crates/cast/src/commands/cli.rs b/crates/cast/src/commands/cli.rs
+index dcc4e12..e914790 100644
+--- a/crates/cast/src/commands/cli.rs
++++ b/crates/cast/src/commands/cli.rs
+@@ -7,7 +7,7 @@ use crate::dev::agent::Agent;
+ use crate::dev::claudecode::ClaudeCode;
+ use crate::dev::opencode::OpenCode;
+ use crate::dev::pi::Pi;
+-use crate::dev::run::{PublishPort, RunMode, SessionFlags};
++use crate::dev::run::{RunMode, SessionFlags};
+ use crate::dev::workspace::get_workspace;
+ use crate::logging::{generate_invocation_id, init_file_logger};
+ use crate::user::get_user;
+@@ -26,11 +26,10 @@ pub struct RunFlags {
+     #[arg(long)]
+     pub name: Option<String>,
+ 
+-    /// Publish the container's port to the host.
+-    /// Without a value, uses the agent's deterministically calculated port.
+-    /// With a value, uses that specific host port (e.g. --publish 8080).
+-    #[arg(short = 'p', long, num_args = 0..=1, default_missing_value = "auto", value_name = "PORT")]
+-    pub publish: Option<PublishPort>,
++    /// Publish the agent's port to the host (uses the calculated port).
++    /// To use a specific host port, set `port` in cast.json instead.
++    #[arg(short = 'p', long)]
++    pub publish: bool,
+ }
+ 
+ /// cast - coding agent sandbox tool
+@@ -116,7 +115,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
+             let session_flags = SessionFlags {
+                 mode,
+                 name: flags.name.clone(),
+-                publish: flags.publish.clone(),
++                publish: flags.publish,
+             };
+             let extra_args = match &agent {
+                 RunAgent::Opencode { extra_args } => extra_args.clone(),
+@@ -148,7 +147,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
+             let session_flags = SessionFlags {
+                 mode,
+                 name: flags.name.clone(),
+-                publish: flags.publish.clone(),
++                publish: flags.publish,
+             };
+             let cmd = agent.cmd().to_vec();
+             let status = dev::exec(
+@@ -284,13 +283,13 @@ pub struct ExecFlags {
+     #[arg(long)]
+     pub name: Option<String>,
+ 
+-    /// Publish the container's port to the host.
+-    /// Without a value, uses the agent's deterministically calculated port.
+-    /// With a value, uses that specific host port (e.g. --publish 8080).
+-    #[arg(short = 'p', long, num_args = 0..=1, default_missing_value = "auto", value_name = "PORT")]
+-    pub publish: Option<PublishPort>,
++    /// Publish the agent's port to the host (uses the calculated port).
++    /// To use a specific host port, set `port` in cast.json instead.
++    #[arg(short = 'p', long)]
++    pub publish: bool,
+ 
+-    /// Skip Nix devshell wrapping; pass the command directly to docker run.
++    /// Skip Nix devshell wrapping; command wrapping is skipped but /nix is
++    /// still mounted and the Nix daemon is still started.
+     #[arg(long)]
+     pub raw: bool,
+ }
+@@ -302,22 +301,25 @@ pub enum ExecAgent {
+     /// Execute a command in a fresh OpenCode container
+     #[command(alias = "o", disable_help_flag = true)]
+     Opencode {
+-        /// Command and arguments to run inside the container
+-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
++        /// Command and arguments to run inside the container.
++        /// An empty command is rejected at dispatch time (not by clap).
++        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+         cmd: Vec<String>,
+     },
+     /// Execute a command in a fresh Pi container
+     #[command(alias = "p", disable_help_flag = true)]
+     Pi {
+-        /// Command and arguments to run inside the container
+-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
++        /// Command and arguments to run inside the container.
++        /// An empty command is rejected at dispatch time (not by clap).
++        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+         cmd: Vec<String>,
+     },
+     /// Execute a command in a fresh ClaudeCode container
+     #[command(alias = "c", disable_help_flag = true)]
+     Claudecode {
+-        /// Command and arguments to run inside the container
+-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 1..)]
++        /// Command and arguments to run inside the container.
++        /// An empty command is rejected at dispatch time (not by clap).
++        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+         cmd: Vec<String>,
+     },
+ }
+@@ -491,15 +493,40 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn test_exec_publish_auto_parsed() {
+-        // Use explicit `=auto` to avoid clap consuming the next positional
+-        // (the agent subcommand name) as the port value.
+-        let cli = Cli::try_parse_from(["cast", "exec", "--publish=auto", "opencode", "/bin/bash"])
++    fn test_exec_publish_flag_sets_true() {
++        // Bare --publish flag (no value) sets publish to true.
++        let cli = Cli::try_parse_from(["cast", "exec", "--publish", "opencode", "/bin/bash"])
+             .expect("should parse");
+         let Commands::Exec { flags, .. } = cli.command.unwrap() else {
+             panic!("expected Exec command");
+         };
+-        assert!(matches!(flags.publish, Some(PublishPort::Auto)));
++        assert!(flags.publish, "--publish bare flag must set publish to true");
++    }
++
++    #[test]
++    fn test_run_publish_flag_sets_true() {
++        let cli =
++            Cli::try_parse_from(["cast", "run", "--publish", "opencode"]).expect("should parse");
++        let Commands::Run { flags, .. } = cli.command.unwrap() else {
++            panic!("expected Run command");
++        };
++        assert!(flags.publish, "--publish bare flag must set publish to true");
++    }
++
++    #[test]
++    fn test_publish_absent_is_false() {
++        let cli =
++            Cli::try_parse_from(["cast", "exec", "opencode", "/bin/bash"]).expect("should parse");
++        let Commands::Exec { flags, .. } = cli.command.unwrap() else {
++            panic!("expected Exec command");
++        };
++        assert!(!flags.publish, "publish absent should be false");
+     }
+ 
+     #[test]
+diff --git a/crates/cast/src/dev/build_command.rs b/crates/cast/src/dev/build_command.rs
+index 0d74d48..148d14d 100644
+--- a/crates/cast/src/dev/build_command.rs
++++ b/crates/cast/src/dev/build_command.rs
+@@ -86,7 +86,7 @@ mod tests {
+             user_flake_present,
+             project_flake_present,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         }
+     }
+ 
+diff --git a/crates/cast/src/dev/claudecode/mod.rs b/crates/cast/src/dev/claudecode/mod.rs
+index a77f956..a66aedd 100644
+--- a/crates/cast/src/dev/claudecode/mod.rs
++++ b/crates/cast/src/dev/claudecode/mod.rs
+@@ -162,7 +162,7 @@ mod tests {
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         }
+     }
+ 
+diff --git a/crates/cast/src/dev/container_name.rs b/crates/cast/src/dev/container_name.rs
+index 0669eaf..d5fff5c 100644
+--- a/crates/cast/src/dev/container_name.rs
++++ b/crates/cast/src/dev/container_name.rs
+@@ -3,8 +3,11 @@ use crate::config::Config;
+ /// Resolve the Docker container name for an agent session.
+ ///
+ /// Priority:
+-/// 1. `explicit_name` set via `--name` → returned as-is
+-/// 2. `token` present → `cast-{agent}-{basename}-{port}-{token}`
++/// 1. `explicit_name` set via `--name` → returned as-is.
++///    Note: using `--name` opts out of the automatic collision-avoidance
++///    guarantee. If the given name is already in use by a running container,
++///    Docker will fail with an error — this is the expected behaviour.
++/// 2. `token` present → ephemeral name `cast-{agent}-{basename}-{port}-{token}`.
+ ///    The port is included so the name shares a greppable prefix with the
+ ///    interactive container (`cast-{agent}-{basename}-{port}`), allowing
+ ///    `docker ps --filter name=cast-{agent}-{basename}-{port}` to match both.
+diff --git a/crates/cast/src/dev/exec.rs b/crates/cast/src/dev/exec.rs
+index 33cc7d9..d3cdb4e 100644
+--- a/crates/cast/src/dev/exec.rs
++++ b/crates/cast/src/dev/exec.rs
+@@ -1,6 +1,4 @@
+-use std::collections::HashMap;
+ use std::process::ExitStatus;
+-use std::time::Instant;
+ 
+ use anyhow::{bail, Result};
+ use tracing::{debug, info, info_span};
+@@ -10,9 +8,8 @@ use crate::dev;
+ use crate::dev::agent::Agent;
+ use crate::dev::build_command::build_command;
+ use crate::dev::container_name::resolve_container_name;
+-use crate::dev::run::{build_docker_run_flags, resolve_run_opts, RunOpts, SessionFlags, TtyMode};
++use crate::dev::run::{resolve_run_opts, run_in_container, RunOpts, SessionFlags};
+ use crate::dev::workspace::get_workspace;
+-use crate::docker::args::build_run_args;
+ use crate::docker::client::DockerClient;
+ use crate::docker::BuildOptions;
+ use crate::nix_daemon;
+@@ -55,7 +52,6 @@ pub fn exec(
+         );
+     }
+ 
+-    let start_time = Instant::now();
+     let docker = DockerClient;
+     let user = get_user()?;
+     let workspace = get_workspace(&user.username)?;
+@@ -98,32 +94,18 @@ pub fn exec(
+ 
+     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
+ 
+-    let env: HashMap<String, String> = std::env::vars().collect();
+     let run_opts = resolve_run_opts(user, workspace, port, &flags);
+-
+-    // Always prepare host-side state (exec may be the first command the user
+-    // runs for this agent, so we cannot assume run_agent did it already).
+-    agent.prepare_host(config, &run_opts)?;
+-
+-    let mut docker_flags = build_docker_run_flags(config, &run_opts);
+-    docker_flags.extend(agent.extra_run_args(config, &run_opts, &env)?);
+-
+     let exec_cmd = build_exec_cmd(config, &run_opts, raw, &cmd);
+-    let docker_args = build_run_args(&container_name, &image_tag, docker_flags, Some(exec_cmd));
+-
+-    let status = match run_opts.tty_mode {
+-        TtyMode::Interactive => docker.interactive_command(docker_args)?,
+-        TtyMode::Headless => docker.headless_command(docker_args, &container_name)?,
+-    };
+-
+-    let duration = start_time.elapsed();
+-    info!(
+-        exit_code = status.code(),
+-        duration_secs = duration.as_secs(),
+-        "exec session ended"
+-    );
+ 
+-    Ok(status)
++    run_in_container(
++        &docker,
++        agent,
++        config,
++        &run_opts,
++        &container_name,
++        &image_tag,
++        exec_cmd,
++    )
+ }
+ 
+ #[cfg(test)]
+@@ -154,7 +136,7 @@ mod tests {
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         }
+     }
+ 
+@@ -225,18 +207,29 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn test_build_exec_cmd_non_raw_splits_cmd_args() {
+-        // Ensure cmd[1..] is passed as extra_args to build_command.
+-        let config = Config::default();
+-        let opts = base_opts();
++    fn test_build_exec_cmd_non_raw_splits_cmd_args_with_flake() {
++        // Verify that with a project flake active, cmd[0] is used as the
++        // binary and cmd[1..] is forwarded as extra_args to build_command.
++        let config = Config {
++            use_flake: true,
++            use_flake_path: None,
++            ..Config::default()
++        };
++        let opts = RunOpts {
++            project_flake_present: true,
++            ..base_opts()
++        };
+         let cmd = vec![
+             "/bin/bash".to_string(),
+             "-c".to_string(),
+             "echo hello".to_string(),
+         ];
+         let result = build_exec_cmd(&config, &opts, false, &cmd);
+-        // No flakes → bare pass-through; args preserved
+-        assert_eq!(result, cmd);
++        // nix develop . -c /bin/bash -c "echo hello"
++        assert_eq!(
++            result,
++            vec!["nix", "develop", ".", "-c", "/bin/bash", "-c", "echo hello"]
++        );
+     }
+ 
+     // ── container name token invariants ──────────────────────────────────────
+@@ -279,4 +272,47 @@ mod tests {
+             name
+         );
+     }
++
++    // ── collision-avoidance invariant (S11) ──────────────────────────────────
++
++    #[test]
++    fn test_exec_auto_name_differs_from_interactive_run_name() {
++        use crate::config::Config;
++        use crate::dev::container_name::resolve_container_name;
++
++        let cfg = Config::default();
++        let run_name = resolve_container_name(&cfg, "opencode", "my-app", 8080, None, None);
++        let exec_name =
++            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("exec-abc123"));
++        assert_ne!(run_name, exec_name, "exec auto-name must differ from interactive run name");
++        assert!(
++            exec_name.starts_with(&run_name),
++            "exec name '{}' should start with run name '{}'",
++            exec_name,
++            run_name
++        );
++    }
++
++    // ── empty cmd bail (S9) ──────────────────────────────────────────────────
++
++    #[test]
++    fn test_build_exec_cmd_empty_returns_empty() {
++        let config = Config::default();
++        let opts = base_opts();
++        let empty: Vec<String> = vec![];
++        assert_eq!(build_exec_cmd(&config, &opts, false, &empty), empty);
++        assert_eq!(build_exec_cmd(&config, &opts, true, &empty), empty);
++    }
+ }
+diff --git a/crates/cast/src/dev/mod.rs b/crates/cast/src/dev/mod.rs
+index 26ba565..15b7879 100644
+--- a/crates/cast/src/dev/mod.rs
++++ b/crates/cast/src/dev/mod.rs
+@@ -20,5 +20,5 @@ pub mod workspace;
+ 
+ pub use build::build_agent;
+ pub use exec::exec;
+-pub use run::{PublishPort, RunMode, SessionFlags, TtyMode, run_agent};
++pub use run::{RunMode, SessionFlags, TtyMode, run_agent};
+ pub use shell::shell;
+diff --git a/crates/cast/src/dev/opencode/mod.rs b/crates/cast/src/dev/opencode/mod.rs
+index 41bab76..04da288 100644
+--- a/crates/cast/src/dev/opencode/mod.rs
++++ b/crates/cast/src/dev/opencode/mod.rs
+@@ -148,7 +148,7 @@ mod tests {
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         }
+     }
+ 
+@@ -217,7 +217,7 @@ mod tests {
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         };
+         let env = HashMap::new();
+ 
+diff --git a/crates/cast/src/dev/pi/mod.rs b/crates/cast/src/dev/pi/mod.rs
+index 99b8fef..8dfd3d2 100644
+--- a/crates/cast/src/dev/pi/mod.rs
++++ b/crates/cast/src/dev/pi/mod.rs
+@@ -139,7 +139,7 @@ mod tests {
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+-            publish: None,
++            publish: false,
+         };
+         let mut env = HashMap::new();
+         env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
+diff --git a/crates/cast/src/dev/run.rs b/crates/cast/src/dev/run.rs
+index d7fdfda..0654396 100644
+--- a/crates/cast/src/dev/run.rs
++++ b/crates/cast/src/dev/run.rs
+@@ -26,31 +26,6 @@ pub enum TtyMode {
+     Headless,
+ }
+ 
+-/// Whether to publish the container's port to the host, and on which host port.
+-#[derive(Debug, Clone, PartialEq)]
+-pub enum PublishPort {
+-    Auto,
+-    Fixed(u16),
+-}
+-
+-impl std::str::FromStr for PublishPort {
+-    type Err = anyhow::Error;
+-
+-    fn from_str(s: &str) -> Result<Self> {
+-        match s {
+-            "auto" => Ok(PublishPort::Auto),
+-            n => {
+-                let port = n
+-                    .parse::<u16>()
+-                    .map_err(|_| anyhow::anyhow!("invalid port number: '{}'", n))?;
+-                Ok(PublishPort::Fixed(port))
+-            }
+-        }
++    }
+ }
+ 
+ /// The execution mode for a `cast run` session.
+@@ -76,8 +51,8 @@ impl From<&RunMode> for TtyMode {
+ pub struct SessionFlags {
+     pub mode: RunMode,
+     pub name: Option<String>,
+-    /// Whether to publish the agent's port to the host. `None` means no publish.
+-    pub publish: Option<PublishPort>,
++    /// Whether to publish the agent's port to the host. `false` means no publish.
++    pub publish: bool,
+ }
+ 
+ pub struct RunOpts {
+@@ -91,8 +66,47 @@ pub struct RunOpts {
+     pub user_flake_present: bool,
+     pub project_flake_present: bool,
+     pub tty_mode: TtyMode,
+-    pub publish: Option<PublishPort>,
++    pub publish: bool,
+ }
+ 
++pub fn run_in_container(
++    docker: &DockerClient,
++    agent: &dyn Agent,
++    config: &ApprovedConfig,
++    run_opts: &RunOpts,
++    container_name: &str,
++    image_tag: &str,
++    cmd: Vec<String>,
++) -> Result<ExitStatus> {
++    let start_time = Instant::now();
++    let env: HashMap<String, String> = std::env::vars().collect();
++
++    agent.prepare_host(config, run_opts)?;
++
++    let mut docker_flags = build_docker_run_flags(config, run_opts);
++    docker_flags.extend(agent.extra_run_args(config, run_opts, &env)?);
++
++    let docker_args = build_run_args(container_name, image_tag, docker_flags, Some(cmd));
++
++    let status = match run_opts.tty_mode {
++        TtyMode::Interactive => docker.interactive_command(docker_args)?,
++        TtyMode::Headless => docker.headless_command(docker_args, container_name)?,
++    };
++
++    let duration = start_time.elapsed();
++    info!(
++        exit_code = status.code(),
++        duration_secs = duration.as_secs(),
++        "session ended"
++    );
++
++    Ok(status)
++}
++
+ pub fn run_agent(
+     agent: &dyn Agent,
+     config: &ApprovedConfig,
+@@ -118,7 +164,8 @@ pub fn run_agent(
+ ) -> Result<ExitStatus> {
+     let docker = DockerClient;
+     ...
+-    let env: HashMap<String, String> = std::env::vars().collect();
+     let run_opts = resolve_run_opts(user, workspace, port, &flags);
+     ...
+     let cmd = agent.build_command(config, &run_opts, extra_args);
+-    ...duration logging...
++    run_in_container(&docker, agent, config, &run_opts, &container_name, &image_tag, cmd)
+ }
+
+ pub fn build_docker_run_flags(...) {
+     ...
+-    match &opts.publish {
+-        Some(PublishPort::Auto) => { run_args.push("-p"); run_args.push(...) }
+-        Some(PublishPort::Fixed(host_port)) => { ... }
+-        None => {}
++    if opts.publish {
++        run_args.push("-p".to_string());
++        run_args.push(format!("{}:80", opts.port));
+     }
+     ...
+ }

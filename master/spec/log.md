@@ -29,3 +29,25 @@ Researched the optionality of the `source` field in `VolumeConfig` and its impli
 - **Decided:** Distilled Rust CLI research into a minimal, general-purpose skill draft.
 - **Decided:** Emphasized 'Pure Logic' and 'Thin Handlers' as core refactoring blueprints.
 
+## [2ce36c4] Research complete: Cast Run Options
+
+- **Found:** 'cast run' implementation is located in 'crates/cast/src/commands/cli.rs' and 'crates/cast/src/dev/run.rs'
+- **Found:** 'build_run_opts' currently hardcodes '-it' and '-p' flags, which needs to be made conditional for headless/JSON mode
+- **Found:** 'DockerClient' lacks a non-interactive execution method for clean stdout capture
+- **Found:** Agent trait and 'build_command' need to be updated to pass new flags to the inner agent process
+
+## [993e391] Research complete: offline mode for cast (nix network reduction)
+
+- **Found:** Nix surface is concentrated in ~6 files; dominant download source is `nix develop <flake> -c` wrapping in build_command.rs, which pulls flake inputs + full devshell closure through the nix daemon.
+- **Found:** The nix daemon container (cast-nix-daemon, image nixos/nix:2.34.6) is the central download engine; all agents mount its store read-only via NIX_REMOTE=daemon. Its substituters default to https://cache.nixos.org (generate_nix_conf).
+- **Found:** Resolved discrepancy: use_flake defaults to false, BUT the daemon starts unconditionally on every `cast run` AND the global/user flake (~/.config/cast/nix) wrapping is gated only by file presence, not by use_flake.
+- **Found:** cast NEVER issues `docker pull`; it relies on Docker pull-on-build. No --offline/--no-net/skip-build flag exists anywhere in the codebase.
+- **Found:** Version resolver (resolve) is the ONE offline-resilient subsystem today — it silently falls back to a stale cache on network failure.
+- **Found:** Feasibility rated MODERATE: 5 clean injection points (Cli global flag, build_command nix develop, generate_nix_conf substituters, ensure_image build gating, resolve). Changes are localized if-gating with no structural refactor.
+- **Found:** KEY design constraint surfaced: nix needs TWO complementary mechanisms for full offline — empty `substituters` in nix.conf (blocks .nar binary-cache downloads) AND `--offline` on `nix develop` (blocks flake-input fetches). Neither alone is sufficient; `--offline` is a global nix option that must precede the subcommand.
+- **Found:** Offline mode is fundamentally a warm-cache-only mode: it can suppress network but cannot manufacture missing closures/images; on a cold machine it must fail fast with clear errors rather than stall.
+- **Found:** Softer lower-risk alternatives exist at the same injection points: emit connect-timeout in nix.conf, or apply --offline only to nix develop.
+- **Open:** Whether empty `substituters =` in nix.conf also suppresses github/tarball flake fetchers or only .nar downloads depends on nix's own semantics (not cast) and was not conclusively determined from cast source.
+- **Open:** Docker's pull-on-build policy for present-but-stale images depends on Docker daemon settings, not cast.
+- **Open:** No explicit 'skip build, require image present' flag exists on BuildAgent today (only --force/--no-cache); offline mode effectively needs one.
+
