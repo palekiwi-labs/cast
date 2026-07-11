@@ -1,3 +1,4 @@
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -6,6 +7,11 @@ pub struct Config {
     // Container Identity & Version
     #[serde(default)]
     pub agent_versions: BTreeMap<String, String>,
+
+    /// Build and run against a single shared image containing every agent
+    /// pinned in `agent_versions`, instead of per-agent images.
+    #[serde(default)]
+    pub universal_container: bool,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
@@ -144,6 +150,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             agent_versions: BTreeMap::new(),
+            universal_container: false,
             container_name: None,
             version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
@@ -172,6 +179,19 @@ fn default_volume_mode() -> String {
 
 fn default_volume_type() -> String {
     "volume".to_string()
+}
+
+impl Config {
+    /// Validate cross-field invariants that cannot be expressed at deserialise time.
+    pub fn validate(&self) -> Result<()> {
+        if self.universal_container && self.agent_versions.is_empty() {
+            bail!(
+                "universal_container is enabled but agent_versions is empty; \
+                 pin at least one agent version to include it in the universal image"
+            );
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -285,5 +305,56 @@ mod tests {
         });
         let tool: McpToolConfig = serde_json::from_value(json).unwrap();
         assert_eq!(tool.timeout_secs, Some(30));
+    }
+
+    #[test]
+    fn test_universal_container_deserializes_true() {
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["universal_container"] = json!(true);
+        let config: Config = serde_json::from_value(json).unwrap();
+        assert!(config.universal_container);
+    }
+
+    #[test]
+    fn test_universal_container_defaults_false_when_absent() {
+        // Backward compatibility: a config authored before this field existed
+        // must still load, with universal_container defaulting to false.
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json.as_object_mut().unwrap().remove("universal_container");
+        let config: Config = serde_json::from_value(json).unwrap();
+        assert!(!config.universal_container);
+    }
+
+    #[test]
+    fn test_validate_rejects_universal_without_agent_versions() {
+        let config = Config {
+            universal_container: true,
+            ..Default::default()
+        };
+        let err = config.validate().unwrap_err();
+        assert!(
+            err.to_string().contains("universal_container"),
+            "error should mention universal_container, got: {err}"
+        );
+    }
+
+    #[test]
+    fn test_validate_accepts_universal_with_agent_versions() {
+        let mut config = Config {
+            universal_container: true,
+            ..Default::default()
+        };
+        config
+            .agent_versions
+            .insert("opencode".to_string(), "0.1.0".to_string());
+        config.validate().expect("should be valid");
+    }
+
+    #[test]
+    fn test_validate_accepts_default_config() {
+        // Default (non-universal) config must always validate.
+        Config::default()
+            .validate()
+            .expect("default should be valid");
     }
 }
