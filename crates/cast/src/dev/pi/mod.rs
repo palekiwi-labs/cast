@@ -37,6 +37,10 @@ impl Agent for Pi {
         include_str!("../../../assets/Dockerfile.dev.pi")
     }
 
+    fn dockerfile_snippet(&self) -> &'static str {
+        include_str!("../../../assets/Dockerfile.frag.pi")
+    }
+
     fn resolve_version(&self, config: &Config) -> Result<String> {
         resolve_version(config)
     }

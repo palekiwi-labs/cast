@@ -39,6 +39,10 @@ impl Agent for OpenCode {
         include_str!("../../../assets/Dockerfile.dev.opencode")
     }
 
+    fn dockerfile_snippet(&self) -> &'static str {
+        include_str!("../../../assets/Dockerfile.frag.opencode")
+    }
+
     fn resolve_version(&self, config: &Config) -> Result<String> {
         resolve_version(config)
     }

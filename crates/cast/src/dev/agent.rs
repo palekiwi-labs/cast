@@ -6,8 +6,8 @@ use crate::config::Config;
 use crate::dev::build_command;
 use crate::dev::image;
 use crate::dev::run::RunOpts;
-use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 
 /// An agent encapsulates everything that is specific to a particular program
@@ -22,6 +22,14 @@ pub trait Agent {
 
     /// Get the embedded Dockerfile content for this agent.
     fn dockerfile(&self) -> &'static str;
+
+    /// Return the agent-specific installation fragment for inclusion in the
+    /// universal Dockerfile (the `RUN curl …` / `COPY --from=node … && npm
+    /// install` block). Everything else (FROM, apt, Nix, user creation) is
+    /// supplied by the universal preamble/postamble. Default is empty.
+    fn dockerfile_snippet(&self) -> &'static str {
+        ""
+    }
 
     /// Resolve the concrete version based on config.
     fn resolve_version(&self, config: &Config) -> Result<String>;
