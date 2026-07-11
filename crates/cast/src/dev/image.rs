@@ -10,8 +10,8 @@ use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
 
-const IMAGE_BASE: &str = "localhost/cast";
-const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub(crate) const IMAGE_BASE: &str = "localhost/cast";
+pub(crate) const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Get the full image tag for an agent.
 pub fn image_tag(agent_name: &str, version: &str) -> String {
