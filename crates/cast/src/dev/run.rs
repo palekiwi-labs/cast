@@ -63,6 +63,10 @@ pub struct RunOpts {
     pub user: ResolvedUser,
     pub port: u16,
     pub host_home_dir: Option<PathBuf>,
+    /// The host machine's name, injected as `CAST_HOST_NAME` into the
+    /// container for diagnostics grouping. Always non-empty (falls back to
+    /// `"unknown"` when the hostname cannot be resolved).
+    pub host_name: String,
     pub user_flake_present: bool,
     pub project_flake_present: bool,
     pub tty_mode: TtyMode,
@@ -202,11 +206,20 @@ pub fn resolve_run_opts(
 
     let project_flake_present = workspace.root.join("flake.nix").exists();
 
+    // Soft-fail: the hostname is diagnostic metadata, not load-bearing for
+    // the sandbox. A failed lookup degrades to "unknown" + a warning rather
+    // than aborting a working session.
+    let host_name = crate::host::get_hostname().unwrap_or_else(|e| {
+        tracing::warn!(error = %e, "failed to resolve host name; using fallback");
+        "unknown".to_string()
+    });
+
     RunOpts {
         workspace,
         user,
         port,
         host_home_dir,
+        host_name,
         user_flake_present,
         project_flake_present,
         tty_mode: TtyMode::from(&flags.mode),
@@ -285,6 +298,14 @@ pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
     // MCP server URL injection.
     let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
     run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+
+    // Host identity: injected so diagnostics collected inside the container
+    // can be grouped by the launching host. Always present (falls back to
+    // "unknown" in resolve_run_opts when the hostname is unavailable).
+    run_args.extend([
+        "-e".to_string(),
+        format!("CAST_HOST_NAME={}", opts.host_name),
+    ]);
 
     // Nix store.
     run_args.extend([
@@ -365,6 +386,7 @@ mod tests {
             user,
             port,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            host_name: "test-host".to_string(),
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: TtyMode::Interactive,
@@ -378,6 +400,7 @@ mod tests {
             user,
             port,
             host_home_dir: Some(PathBuf::from("/home/alice")),
+            host_name: "test-host".to_string(),
             user_flake_present: false,
             project_flake_present: false,
             tty_mode: TtyMode::Headless,
@@ -526,6 +549,57 @@ mod tests {
         // but we verified the logic is correct.
     }
 
+    #[test]
+    fn test_resolve_run_opts_populates_host_name() {
+        // resolve_run_opts calls get_hostname() (real I/O). Assert only on
+        // the invariant our sentinel guarantees: non-empty. Never assert a
+        // specific hostname value.
+        let temp = tempfile::TempDir::new().unwrap();
+        let workspace = ResolvedWorkspace {
+            root: temp.path().to_path_buf(),
+            container_path: PathBuf::from("/work"),
+        };
+        let flags = SessionFlags {
+            mode: RunMode::Interactive,
+            name: None,
+            publish: false,
+        };
+        let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
+
+        assert!(
+            !opts.host_name.is_empty(),
+            "host_name must be non-empty (real hostname or 'unknown' sentinel)"
+        );
+    }
+
+    // ── CAST_HOST_NAME injection ──────────────────────────────────────────────
+
+    #[test]
+    fn test_build_docker_run_flags_injects_cast_host_name() {
+        let config = Config::default();
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+        let run_args = build_docker_run_flags(&config, &opts);
+
+        assert!(
+            run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
+            "Should inject CAST_HOST_NAME in interactive mode, got: {:?}",
+            run_args
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_headless_injects_cast_host_name() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        let run_args = build_docker_run_flags(&config, &opts);
+
+        assert!(
+            run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
+            "Should inject CAST_HOST_NAME in headless mode, got: {:?}",
+            run_args
+        );
+    }
+
     // ── Phase 2: build_docker_run_flags — headless mode ─────────────────────
 
     #[test]
@@ -611,6 +685,7 @@ mod tests {
         let config = Config::default();
         let opts = RunOpts {
             publish: true,
+            host_name: "test-host".to_string(),
             ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
         };
         let run_args = build_docker_run_flags(&config, &opts);

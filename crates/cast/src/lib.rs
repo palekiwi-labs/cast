@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 pub mod dev;
 pub mod docker;
+pub mod host;
 pub mod logging;
 #[cfg(feature = "mcp")]
 pub mod mcp;

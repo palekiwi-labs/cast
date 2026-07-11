@@ -39,10 +39,23 @@ access through `extra_data_volumes`. This allows you to share caches (like
 `~/.cargo` or `~/.npm`) between sessions or mount specific host directories
 into the sandbox.
 
+## Host Identity (`CAST_HOST_NAME`)
+
+Every sandbox container receives the `CAST_HOST_NAME` environment variable,
+set to the host machine's kernel hostname (or the literal string `unknown`
+if the hostname cannot be resolved). This lets diagnostics or telemetry
+collected inside the container be grouped by the host that launched it.
+
+The value is whatever `gethostname(2)` returns — typically the short
+hostname, but it may be an FQDN depending on host configuration. No DNS
+resolution is performed; the value is stable for a given host.
+
 For implementation details, refer to the source code:
 
 - Sandbox logic: [src/dev/][sandbox-src]
+- Host resolution: [src/host/][host-src]
 - MCP implementation: [src/mcp/][mcp-src]
 
 [sandbox-src]: ../src/dev/
+[host-src]: ../src/host/
 [mcp-src]: ../src/mcp/
