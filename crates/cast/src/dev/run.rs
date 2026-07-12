@@ -76,29 +76,27 @@ pub struct RunOpts {
 
 use std::process::ExitStatus;
 
-/// Shared container-run core used by both `run_agent` and `exec`.
+/// Dispatch the final `docker run` command, logging session duration.
 ///
-/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: prepare_host, docker flags, dispatch on tty_mode,
-/// and duration logging.
-pub fn run_in_container(
+/// Combines the generic `docker_flags` with agent-specific `extra_args`,
+/// builds the full argument vector, and dispatches on `tty_mode`. This is
+/// the shared tail used by both [`run_in_container`] (non-universal) and
+/// [`run_in_container_universal`].
+fn dispatch_run(
     docker: &DockerClient,
-    agent: &dyn Agent,
-    config: &ApprovedConfig,
     run_opts: &RunOpts,
     container_name: &str,
     image_tag: &str,
+    docker_flags: Vec<String>,
+    extra_args: Vec<String>,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
     let start_time = Instant::now();
-    let env: HashMap<String, String> = std::env::vars().collect();
 
-    agent.prepare_host(config, run_opts)?;
+    let mut all_flags = docker_flags;
+    all_flags.extend(extra_args);
 
-    let mut docker_flags = build_docker_run_flags(config, run_opts);
-    docker_flags.extend(agent.extra_run_args(config, run_opts, &env)?);
-
-    let docker_args = build_run_args(container_name, image_tag, docker_flags, Some(cmd));
+    let docker_args = build_run_args(container_name, image_tag, all_flags, Some(cmd));
 
     let status = match run_opts.tty_mode {
         TtyMode::Interactive => docker.interactive_command(docker_args)?,
@@ -113,6 +111,38 @@ pub fn run_in_container(
     );
 
     Ok(status)
+}
+
+/// Shared container-run core used by both `run_agent` and `exec`.
+///
+/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
+/// command vector. Handles: prepare_host, docker flags, dispatch on tty_mode,
+/// and duration logging.
+pub fn run_in_container(
+    docker: &DockerClient,
+    agent: &dyn Agent,
+    config: &ApprovedConfig,
+    run_opts: &RunOpts,
+    container_name: &str,
+    image_tag: &str,
+    cmd: Vec<String>,
+) -> Result<ExitStatus> {
+    let env: HashMap<String, String> = std::env::vars().collect();
+
+    agent.prepare_host(config, run_opts)?;
+
+    let docker_flags = build_docker_run_flags(config, run_opts);
+    let extra_args = agent.extra_run_args(config, run_opts, &env)?;
+
+    dispatch_run(
+        docker,
+        run_opts,
+        container_name,
+        image_tag,
+        docker_flags,
+        extra_args,
+        cmd,
+    )
 }
 
 /// Orchestrate and run an agent session inside the dev container.
