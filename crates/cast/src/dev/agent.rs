@@ -68,6 +68,15 @@ pub trait Agent {
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>>;
 
+    /// Return only the config-directory bind mounts for this agent.
+    ///
+    /// In non-universal mode this is called internally by each agent's
+    /// [`Agent::extra_run_args`]. In universal mode it is called for every
+    /// included agent to compose the union of all config mounts.
+    fn config_mount_args(&self, _config: &Config, _opts: &RunOpts) -> Result<Vec<String>> {
+        Ok(vec![])
+    }
+
     /// Perform host-side preparation (e.g. create directories) before the container
     /// runs. Default implementation is a no-op; agents override as needed.
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {

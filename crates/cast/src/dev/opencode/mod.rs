@@ -89,27 +89,35 @@ impl Agent for OpenCode {
         }
 
         // OpenCode config directory bind mount.
-        // Skip if the workspace root is the same as the config dir (workspace mount covers it).
-        let home = opts
-            .host_home_dir
-            .as_deref()
-            .context("Failed to resolve user home directory")?;
-        let opencode_config_dir = config_dir::get_config_dir(&home.join(".config"));
-        if opencode_config_dir != opts.workspace.root {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/opencode:rw",
-                    opencode_config_dir.display(),
-                    opts.user.username
-                ),
-            ]);
-        }
+        args.extend(self.config_mount_args(config, opts)?);
 
         // Persistent data volumes (~/.cache and ~/.local).
         args.extend(build_data_volume_args(config, &opts.user));
 
         Ok(args)
+    }
+
+    fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        let opencode_config_dir = config_dir::get_config_dir(&home.join(".config"));
+
+        // Skip if the workspace root is the same as the config dir (workspace
+        // mount covers it).
+        if opencode_config_dir == opts.workspace.root {
+            return Ok(vec![]);
+        }
+
+        Ok(vec![
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.config/opencode:rw",
+                opencode_config_dir.display(),
+                opts.user.username
+            ),
+        ])
     }
 }
 

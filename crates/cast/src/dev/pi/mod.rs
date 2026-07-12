@@ -68,20 +68,7 @@ impl Agent for Pi {
         let mut args = env::build_passthrough_env_args(env);
 
         // Pi config directory bind mount.
-        let home = opts
-            .host_home_dir
-            .as_deref()
-            .context("Failed to resolve user home directory")?;
-        let pi_config_host_dir = config_dir::get_config_dir(home);
-
-        args.extend([
-            "-v".to_string(),
-            format!(
-                "{}:/home/{}/.pi:rw",
-                pi_config_host_dir.display(),
-                opts.user.username
-            ),
-        ]);
+        args.extend(self.config_mount_args(config, opts)?);
 
         // User flake mount (~/.config/cast/nix).
         let user_flake_host_dir = opts
@@ -104,6 +91,23 @@ impl Agent for Pi {
         args.extend(build_data_volume_args(config, &opts.user));
 
         Ok(args)
+    }
+
+    fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+        let pi_config_host_dir = config_dir::get_config_dir(home);
+
+        Ok(vec![
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.pi:rw",
+                pi_config_host_dir.display(),
+                opts.user.username
+            ),
+        ])
     }
 }
 

@@ -70,31 +70,8 @@ impl Agent for ClaudeCode {
         // LLM API keys + Claude Code env vars present on the host.
         let mut args = env::build_passthrough_env_args(env);
 
-        // Claude Code config directory bind mount (~/.claude).
-        let home = opts
-            .host_home_dir
-            .as_deref()
-            .context("Failed to resolve user home directory")?;
-        let claude_config_dir = config_dir::get_config_dir(home);
-        args.extend([
-            "-v".to_string(),
-            format!(
-                "{}:/home/{}/.claude:rw",
-                claude_config_dir.display(),
-                opts.user.username
-            ),
-        ]);
-
-        // Claude Code global config file bind mount (~/.claude.json).
-        let claude_config_file = config_dir::get_config_file(home);
-        args.extend([
-            "-v".to_string(),
-            format!(
-                "{}:/home/{}/.claude.json:rw",
-                claude_config_file.display(),
-                opts.user.username
-            ),
-        ]);
+        // Claude Code config directory + global config file bind mounts.
+        args.extend(self.config_mount_args(config, opts)?);
 
         // User flake mount (~/.config/cast/nix).
         let user_flake_host_dir = opts
@@ -117,6 +94,33 @@ impl Agent for ClaudeCode {
         args.extend(build_data_volume_args(config, &opts.user));
 
         Ok(args)
+    }
+
+    fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
+        let home = opts
+            .host_home_dir
+            .as_deref()
+            .context("Failed to resolve user home directory")?;
+
+        let claude_config_dir = config_dir::get_config_dir(home);
+        let claude_config_file = config_dir::get_config_file(home);
+
+        Ok(vec![
+            // ~/.claude directory
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.claude:rw",
+                claude_config_dir.display(),
+                opts.user.username
+            ),
+            // ~/.claude.json global config file
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.claude.json:rw",
+                claude_config_file.display(),
+                opts.user.username
+            ),
+        ])
     }
 }
 
