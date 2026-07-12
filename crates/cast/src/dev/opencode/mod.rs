@@ -69,7 +69,7 @@ impl Agent for OpenCode {
         let mut args: Vec<String> = vec![];
 
         // LLM API keys + OPENCODE_* env vars present on the host.
-        args.extend(env::build_passthrough_env_args(env));
+        args.extend(self.env_passthrough_args(env));
 
         // User flake mount (~/.config/cast/nix).
         let user_flake_host_dir = opts
@@ -118,6 +118,10 @@ impl Agent for OpenCode {
                 opts.user.username
             ),
         ])
+    }
+
+    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
+        env::build_passthrough_env_args(env)
     }
 }
 

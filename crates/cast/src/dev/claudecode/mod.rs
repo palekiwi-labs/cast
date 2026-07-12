@@ -68,7 +68,7 @@ impl Agent for ClaudeCode {
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>> {
         // LLM API keys + Claude Code env vars present on the host.
-        let mut args = env::build_passthrough_env_args(env);
+        let mut args = self.env_passthrough_args(env);
 
         // Claude Code config directory + global config file bind mounts.
         args.extend(self.config_mount_args(config, opts)?);
@@ -121,6 +121,10 @@ impl Agent for ClaudeCode {
                 opts.user.username
             ),
         ])
+    }
+
+    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
+        env::build_passthrough_env_args(env)
     }
 }
 

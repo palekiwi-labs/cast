@@ -65,7 +65,7 @@ impl Agent for Pi {
         env: &HashMap<String, String>,
     ) -> Result<Vec<String>> {
         // LLM API keys + PI_* env vars present on the host.
-        let mut args = env::build_passthrough_env_args(env);
+        let mut args = self.env_passthrough_args(env);
 
         // Pi config directory bind mount.
         args.extend(self.config_mount_args(config, opts)?);
@@ -108,6 +108,10 @@ impl Agent for Pi {
                 opts.user.username
             ),
         ])
+    }
+
+    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
+        env::build_passthrough_env_args(env)
     }
 }
 

@@ -77,6 +77,15 @@ pub trait Agent {
         Ok(vec![])
     }
 
+    /// Return the agent's environment-variable passthrough args (`-e VAR` pairs).
+    ///
+    /// In non-universal mode this is called internally by each agent's
+    /// [`Agent::extra_run_args`]. In universal mode it is called for the
+    /// launched agent only (subprocess agents inherit the container env).
+    fn env_passthrough_args(&self, _env: &HashMap<String, String>) -> Vec<String> {
+        Vec::new()
+    }
+
     /// Perform host-side preparation (e.g. create directories) before the container
     /// runs. Default implementation is a no-op; agents override as needed.
     fn prepare_host(&self, _config: &Config, _opts: &RunOpts) -> Result<()> {
