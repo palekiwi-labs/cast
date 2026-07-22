@@ -1,0 +1,357 @@
+diff --git a/crates/cast/docs/concepts.md b/crates/cast/docs/concepts.md
+index b3d751e..8a853d9 100644
+--- a/crates/cast/docs/concepts.md
++++ b/crates/cast/docs/concepts.md
+@@ -39,10 +39,23 @@ access through `extra_data_volumes`. This allows you to share caches (like
+ `~/.cargo` or `~/.npm`) between sessions or mount specific host directories
+ into the sandbox.
+ 
++## Host Identity (`CAST_HOST_NAME`)
++
++Every sandbox container receives the `CAST_HOST_NAME` environment variable,
++set to the host machine's kernel hostname (or the literal string `unknown`
++if the hostname cannot be resolved). This lets diagnostics or telemetry
++collected inside the container be grouped by the host that launched it.
++
++The value is whatever `gethostname(2)` returns — typically the short
++hostname, but it may be an FQDN depending on host configuration. No DNS
++resolution is performed; the value is stable for a given host.
++
+ For implementation details, refer to the source code:
+ 
+ - Sandbox logic: [src/dev/][sandbox-src]
++- Host resolution: [src/host/][host-src]
+ - MCP implementation: [src/mcp/][mcp-src]
+ 
+ [sandbox-src]: ../src/dev/
++[host-src]: ../src/host/
+ [mcp-src]: ../src/mcp/
+diff --git a/crates/cast/src/dev/build_command.rs b/crates/cast/src/dev/build_command.rs
+index 148d14d..f6e7d7b 100644
+--- a/crates/cast/src/dev/build_command.rs
++++ b/crates/cast/src/dev/build_command.rs
+@@ -83,6 +83,7 @@ mod tests {
+             user: alice(),
+             port: 8080,
+             host_home_dir: None,
++            host_name: "test-host".to_string(),
+             user_flake_present,
+             project_flake_present,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+diff --git a/crates/cast/src/dev/claudecode/mod.rs b/crates/cast/src/dev/claudecode/mod.rs
+index a66aedd..0895778 100644
+--- a/crates/cast/src/dev/claudecode/mod.rs
++++ b/crates/cast/src/dev/claudecode/mod.rs
+@@ -159,6 +159,7 @@ mod tests {
+             user: testuser(),
+             port: 32768,
+             host_home_dir: Some(PathBuf::from("/home/testuser")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+diff --git a/crates/cast/src/dev/exec.rs b/crates/cast/src/dev/exec.rs
+index 754a2d1..9a3e86e 100644
+--- a/crates/cast/src/dev/exec.rs
++++ b/crates/cast/src/dev/exec.rs
+@@ -133,6 +133,7 @@ mod tests {
+             user: alice(),
+             port: 8080,
+             host_home_dir: Some(PathBuf::from("/home/alice")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: TtyMode::Interactive,
+diff --git a/crates/cast/src/dev/opencode/mod.rs b/crates/cast/src/dev/opencode/mod.rs
+index 04da288..bcf3ee3 100644
+--- a/crates/cast/src/dev/opencode/mod.rs
++++ b/crates/cast/src/dev/opencode/mod.rs
+@@ -145,6 +145,7 @@ mod tests {
+             user: alice(),
+             port: 32768,
+             host_home_dir: Some(PathBuf::from("/home/alice")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+@@ -214,6 +215,7 @@ mod tests {
+             user: alice(),
+             port: 32768,
+             host_home_dir: Some(PathBuf::from("/home/alice")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+diff --git a/crates/cast/src/dev/pi/mod.rs b/crates/cast/src/dev/pi/mod.rs
+index 8dfd3d2..c57a1fe 100644
+--- a/crates/cast/src/dev/pi/mod.rs
++++ b/crates/cast/src/dev/pi/mod.rs
+@@ -136,6 +136,7 @@ mod tests {
+             },
+             port: 8080,
+             host_home_dir: Some(std::path::PathBuf::from("/home/testuser")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: crate::dev::run::TtyMode::Interactive,
+diff --git a/crates/cast/src/dev/run.rs b/crates/cast/src/dev/run.rs
+index 0654396..4118b67 100644
+--- a/crates/cast/src/dev/run.rs
++++ b/crates/cast/src/dev/run.rs
+@@ -63,6 +63,10 @@ pub struct RunOpts {
+     pub user: ResolvedUser,
+     pub port: u16,
+     pub host_home_dir: Option<PathBuf>,
++    /// The host machine's name, injected as `CAST_HOST_NAME` into the
++    /// container for diagnostics grouping. Always non-empty (falls back to
++    /// `"unknown"` when the hostname cannot be resolved).
++    pub host_name: String,
+     pub user_flake_present: bool,
+     pub project_flake_present: bool,
+     pub tty_mode: TtyMode,
+@@ -202,11 +206,20 @@ pub fn resolve_run_opts(
+ 
+     let project_flake_present = workspace.root.join("flake.nix").exists();
+ 
++    // Soft-fail: the hostname is diagnostic metadata, not load-bearing for
++    // the sandbox. A failed lookup degrades to "unknown" + a warning rather
++    // than aborting a working session.
++    let host_name = crate::host::get_hostname().unwrap_or_else(|e| {
++        tracing::warn!(error = %e, "failed to resolve host name; using fallback");
++        "unknown".to_string()
++    });
++
+     RunOpts {
+         workspace,
+         user,
+         port,
+         host_home_dir,
++        host_name,
+         user_flake_present,
+         project_flake_present,
+         tty_mode: TtyMode::from(&flags.mode),
+@@ -286,6 +299,14 @@ pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
+     let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
+     run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+ 
++    // Host identity: injected so diagnostics collected inside the container
++    // can be grouped by the launching host. Always present (falls back to
++    // "unknown" in resolve_run_opts when the hostname is unavailable).
++    run_args.extend([
++        "-e".to_string(),
++        format!("CAST_HOST_NAME={}", opts.host_name),
++    ]);
++
+     // Nix store.
+     run_args.extend([
+         "-v".to_string(),
+@@ -365,6 +386,7 @@ mod tests {
+             user,
+             port,
+             host_home_dir: Some(PathBuf::from("/home/alice")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: TtyMode::Interactive,
+@@ -378,6 +400,7 @@ mod tests {
+             user,
+             port,
+             host_home_dir: Some(PathBuf::from("/home/alice")),
++            host_name: "test-host".to_string(),
+             user_flake_present: false,
+             project_flake_present: false,
+             tty_mode: TtyMode::Headless,
+@@ -526,6 +549,57 @@ mod tests {
+         // but we verified the logic is correct.
+     }
+ 
++    #[test]
++    fn test_resolve_run_opts_populates_host_name() {
++        // resolve_run_opts calls get_hostname() (real I/O). Assert only on
++        // the invariant our sentinel guarantees: non-empty. Never assert a
++        // specific hostname value.
++        let temp = tempfile::TempDir::new().unwrap();
++        let workspace = ResolvedWorkspace {
++            root: temp.path().to_path_buf(),
++            container_path: PathBuf::from("/work"),
++        };
++        let flags = SessionFlags {
++            mode: RunMode::Interactive,
++            name: None,
++            publish: false,
++        };
++        let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
++
++        assert!(
++            !opts.host_name.is_empty(),
++            "host_name must be non-empty (real hostname or 'unknown' sentinel)"
++        );
++    }
++
++    // ── CAST_HOST_NAME injection ──────────────────────────────────────────────
++
++    #[test]
++    fn test_build_docker_run_flags_injects_cast_host_name() {
++        let config = Config::default();
++        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
++        let run_args = build_docker_run_flags(&config, &opts);
++
++        assert!(
++            run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
++            "Should inject CAST_HOST_NAME in interactive mode, got: {:?}",
++            run_args
++        );
++    }
++
++    #[test]
++    fn test_build_docker_run_flags_headless_injects_cast_host_name() {
++        let config = Config::default();
++        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
++        let run_args = build_docker_run_flags(&config, &opts);
++
++        assert!(
++            run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
++            "Should inject CAST_HOST_NAME in headless mode, got: {:?}",
++            run_args
++        );
++    }
++
+     // ── Phase 2: build_docker_run_flags — headless mode ─────────────────────
+ 
+     #[test]
+@@ -611,6 +685,7 @@ mod tests {
+         let config = Config::default();
+         let opts = RunOpts {
+             publish: true,
++            host_name: "test-host".to_string(),
+             ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
+         };
+         let run_args = build_docker_run_flags(&config, &opts);
+diff --git a/crates/cast/src/host/mod.rs b/crates/cast/src/host/mod.rs
+new file mode 100644
+index 0000000..39a8492
+--- /dev/null
++++ b/crates/cast/src/host/mod.rs
+@@ -0,0 +1,110 @@
++//! Host-identity resolution.
++//!
++//! Mirrors the imperative-shell pattern of [`crate::user`]: reads a host
++//! fact (the kernel hostname) and returns it as data. The policy core
++//! [`normalize_hostname`] is pure and fully unit-testable; the syscall
++//! wrapper [`get_hostname`] is the thin imperative shell around it.
++
++use anyhow::{Context, Result};
++
++/// Normalize a raw hostname string into a stable grouping key.
++///
++/// - Empty or whitespace-only input becomes the sentinel `"unknown"`.
++/// - Otherwise the trimmed value is returned as-is.
++///
++/// We do NOT canonicalize short vs FQDN: `gethostname(2)` returns whatever
++/// the kernel has set, and grouping only needs stability, not a canonical
++/// form. Callers that need a specific form should resolve it downstream.
++pub fn normalize_hostname(raw: &str) -> String {
++    let trimmed = raw.trim();
++    if trimmed.is_empty() {
++        "unknown".to_string()
++    } else {
++        trimmed.to_string()
++    }
++}
++
++/// Read the host machine's kernel hostname and normalize it.
++///
++/// Returns `"unknown"` (via [`normalize_hostname`]) when the hostname is
++/// empty, and an `Err` only when the underlying syscall fails. The call
++/// site in `resolve_run_opts` soft-fails the `Err` case so a metadata
++/// lookup never aborts a working sandbox.
++pub fn get_hostname() -> Result<String> {
++    let raw = gethostname_impl().context("Failed to determine host name")?;
++    Ok(normalize_hostname(&raw))
++}
++
++/// Thin syscall wrapper around `gethostname(2)`.
++///
++/// Returns the raw hostname as owned bytes converted to UTF-8. POSIX does
++/// not guarantee NUL-termination when the name exactly fills the buffer, so
++/// the NUL search is capped at `buf.len()`. The 256-byte buffer is a safe
++/// over-allocation (`HOST_NAME_MAX` is 64 on Linux).
++fn gethostname_impl() -> Result<String> {
++    let mut buf = vec![0u8; 256];
++    // SAFETY: `buf` is valid for `buf.len()` bytes. `gethostname` writes at
++    // most `len` bytes and NUL-terminates when there is room.
++    let rc = unsafe { libc::gethostname(buf.as_mut_ptr() as *mut libc::c_char, buf.len()) };
++    if rc != 0 {
++        let err = std::io::Error::last_os_error();
++        anyhow::bail!("gethostname() failed: {err}");
++    }
++    // Truncate at the first NUL. If the name filled the buffer without a
++    // NUL, `unwrap_or` falls back to the full length.
++    let end = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
++    buf.truncate(end);
++    String::from_utf8(buf).context("Host name is not valid UTF-8")
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    // ── normalize_hostname: pure policy core ─────────────────────────────────
++
++    #[test]
++    fn test_normalize_empty_becomes_unknown() {
++        assert_eq!(normalize_hostname(""), "unknown");
++    }
++
++    #[test]
++    fn test_normalize_whitespace_only_becomes_unknown() {
++        assert_eq!(normalize_hostname("   \n\t"), "unknown");
++    }
++
++    #[test]
++    fn test_normalize_short_name_passthrough() {
++        assert_eq!(normalize_hostname("myhost"), "myhost");
++    }
++
++    #[test]
++    fn test_normalize_fqdn_passthrough() {
++        // FQDN is accepted as-is; no canonicalization to short name.
++        assert_eq!(
++            normalize_hostname("myhost.corp.example.com"),
++            "myhost.corp.example.com"
++        );
++    }
++
++    #[test]
++    fn test_normalize_trims_surrounding_whitespace() {
++        assert_eq!(normalize_hostname("  myhost  \n"), "myhost");
++    }
++
++    // ── get_hostname: syscall wrapper (lenient smoke test) ───────────────────
++    //
++    // Asserts only on the invariant our code guarantees (non-empty after
++    // normalization via the sentinel), NEVER on ambient system state like a
++    // specific hostname value. This keeps the test reproducible across
++    // machines and Nix build sandboxes.
++
++    #[test]
++    fn test_get_hostname_returns_non_empty() {
++        let h = get_hostname().unwrap();
++        assert!(
++            !h.is_empty(),
++            "get_hostname must be non-empty by construction of the sentinel"
++        );
++    }
++}
+diff --git a/crates/cast/src/lib.rs b/crates/cast/src/lib.rs
+index 86c4a84..e698111 100644
+--- a/crates/cast/src/lib.rs
++++ b/crates/cast/src/lib.rs
+@@ -2,6 +2,7 @@ pub mod commands;
+ pub mod config;
+ pub mod dev;
+ pub mod docker;
++pub mod host;
+ pub mod logging;
+ #[cfg(feature = "mcp")]
+ pub mod mcp;

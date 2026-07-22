@@ -1,6 +1,6 @@
 ---
 title: Implement cast exec command
-status: in-progress
+status: complete
 priority: high
 ---
 ## Summary

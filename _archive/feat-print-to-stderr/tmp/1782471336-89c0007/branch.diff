@@ -1,0 +1,191 @@
+diff --git a/crates/cast/src/dev/image.rs b/crates/cast/src/dev/image.rs
+index 56d92bb..84053c6 100644
+--- a/crates/cast/src/dev/image.rs
++++ b/crates/cast/src/dev/image.rs
+@@ -3,9 +3,9 @@ use tempfile::TempDir;
+ 
+ use crate::config::Config;
+ use crate::dev::extra_dirs::resolve_extra_dirs;
+-use crate::docker::BuildOptions;
+ use crate::docker::args;
+ use crate::docker::client::DockerClient;
++use crate::docker::BuildOptions;
+ use crate::user::ResolvedUser;
+ use anyhow::Result;
+ use tracing::info;
+@@ -32,9 +32,12 @@ pub fn ensure_image(
+ 
+     if !opts.force && docker.image_exists(&image_tag)? {
+         info!(%image_tag, "image exists, skipping build");
+-        println!("{} dev image already exists: {}", agent_name, image_tag);
++        // info! writes to the file log; eprintln! writes to the console.
++        // Status messages go to stderr so stdout remains clean for
++        // programmatic consumers (e.g. `cast run --headless --format json`).
++        eprintln!("{} dev image already exists: {}", agent_name, image_tag);
+         if opts.no_cache {
+-            println!(
++            eprintln!(
+                 "Hint: You passed --no-cache. If you want to force a rebuild of the existing image, use --force."
+             );
+         }
+@@ -42,7 +45,7 @@ pub fn ensure_image(
+     }
+ 
+     info!(%image_tag, "image not found or force rebuild, building");
+-    println!("Building {} dev image: {}", agent_name, image_tag);
++    eprintln!("Building {} dev image: {}", agent_name, image_tag);
+ 
+     let temp_dir = TempDir::new()?;
+     let context_path = temp_dir.path();
+diff --git a/crates/cast/src/dev/run.rs b/crates/cast/src/dev/run.rs
+index da62294..ed5046b 100644
+--- a/crates/cast/src/dev/run.rs
++++ b/crates/cast/src/dev/run.rs
+@@ -12,12 +12,12 @@ use crate::dev::container_name::resolve_container_name;
+ use crate::dev::env_file::build_env_file_args;
+ use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
+ use crate::dev::volumes::build_extra_volume_args;
+-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+-use crate::docker::BuildOptions;
++use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+ use crate::docker::args::build_run_args;
+ use crate::docker::client::DockerClient;
++use crate::docker::BuildOptions;
+ use crate::nix_daemon;
+-use crate::user::{ResolvedUser, get_user};
++use crate::user::{get_user, ResolvedUser};
+ 
+ /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
+ #[derive(Debug, Clone, PartialEq)]
+@@ -133,6 +133,15 @@ pub fn run_agent(
+     let mut opts = build_docker_run_flags(config, &run_opts);
+     opts.extend(agent.extra_run_args(config, &run_opts, &env)?);
+ 
++    // Announce nix devshell layers before handing off to docker, so the
++    // user knows what environment is being loaded.  The global flake is
++    // the outermost layer and is announced here; the project flake
++    // announces itself via its own shellHook (echo ... >&2).
++    if run_opts.user_flake_present {
++        info!("loading global nix devshell");
++        eprintln!("Loading global nix devshell...");
++    }
++
+     // Build the full command and exec into the container.
+     let cmd = agent.build_command(config, &run_opts, extra_args);
+     let docker_args = build_run_args(&container_name, &image_tag, opts, Some(cmd));
+@@ -393,9 +402,7 @@ mod tests {
+         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
+ 
+         // MCP URL injection
+-        assert!(
+-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+-        );
++        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+     }
+ 
+     #[test]
+@@ -405,9 +412,7 @@ mod tests {
+         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+ 
+         let run_args = build_docker_run_flags(&config, &opts);
+-        assert!(
+-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+-        );
++        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+     }
+ 
+     #[test]
+diff --git a/crates/cast/src/nix_daemon/daemon.rs b/crates/cast/src/nix_daemon/daemon.rs
+index b15afd9..ebaa401 100644
+--- a/crates/cast/src/nix_daemon/daemon.rs
++++ b/crates/cast/src/nix_daemon/daemon.rs
+@@ -3,11 +3,11 @@ use std::process::ExitStatus;
+ use tempfile::TempDir;
+ 
+ use crate::config::ApprovedConfig;
+-use crate::docker::BuildOptions;
+ use crate::docker::args;
+ use crate::docker::client::DockerClient;
++use crate::docker::BuildOptions;
+ use crate::nix_daemon::{config as nix_config, image};
+-use anyhow::{Result, bail};
++use anyhow::{bail, Result};
+ use tracing::info;
+ 
+ /// Ensure the nix daemon container is running
+@@ -25,7 +25,9 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
+ 
+     // Check if the image exists, build it if it doesn't
+     if !docker.image_exists(&image_tag)? {
+-        println!("Building nix daemon image: {}", image_tag);
++        // info! writes to the file log; eprintln! writes to the console.
++        // Status messages go to stderr so stdout stays clean for pipelines.
++        eprintln!("Building nix daemon image: {}", image_tag);
+         build_image(docker, &image_tag, false)?;
+     }
+ 
+@@ -38,7 +40,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
+         %image_tag,
+         "starting nix daemon container"
+     );
+-    println!(
++    eprintln!(
+         "Starting nix daemon container: {} ({})",
+         container_name, image_tag
+     );
+@@ -57,7 +59,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
+     docker.run_command(run_args)?;
+ 
+     info!(%container_name, "nix daemon started successfully");
+-    println!("Nix daemon started successfully");
++    eprintln!("Nix daemon started successfully");
+     Ok(())
+ }
+ 
+@@ -83,11 +85,11 @@ pub fn build(docker: &DockerClient, opts: BuildOptions) -> Result<()> {
+     let image_tag = image::get_image_tag();
+ 
+     if !opts.force && docker.image_exists(&image_tag)? {
+-        println!("Nix daemon image already exists: {}", image_tag);
++        eprintln!("Nix daemon image already exists: {}", image_tag);
+         return Ok(());
+     }
+ 
+-    println!("Building nix daemon image: {}", image_tag);
++    eprintln!("Building nix daemon image: {}", image_tag);
+     build_image(docker, &image_tag, opts.no_cache)
+ }
+ 
+@@ -97,14 +99,14 @@ pub fn stop(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
+ 
+     // Check if it's actually running
+     if !docker.is_container_running(container_name)? {
+-        println!("Nix daemon is not running: {}", container_name);
++        eprintln!("Nix daemon is not running: {}", container_name);
+         return Ok(());
+     }
+ 
+-    println!("Stopping nix daemon container: {}", container_name);
++    eprintln!("Stopping nix daemon container: {}", container_name);
+     let stop_args = args::build_stop_args(container_name);
+     docker.run_command(stop_args)?;
+-    println!("Nix daemon stopped successfully");
++    eprintln!("Nix daemon stopped successfully");
+ 
+     Ok(())
+ }
+diff --git a/flake.nix b/flake.nix
+index c346436..8578db9 100644
+--- a/flake.nix
++++ b/flake.nix
+@@ -73,8 +73,8 @@
+             ];
+ 
+             shellHook = ''
+-              echo "Rust development environment ready!"
+-              echo "Rust version: $(rustc --version)"
++              echo "Rust development environment ready!" >&2
++              echo "Rust version: $(rustc --version)" >&2
+             '';
+           };
+       });
