@@ -13,17 +13,12 @@ pub mod env;
 
 /// Resolve the concrete pi version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
-    let requested = config
-        .agent_versions
-        .get("pi")
-        .map(|s| s.as_str())
-        .unwrap_or("latest");
     let cache_path = version::cache::get_cache_path("pi");
     let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
     let fetcher = GithubReleaseFetcher {
         repo: "badlogic/pi-mono",
     };
-    resolver.resolve(requested, &fetcher)
+    resolver.resolve("latest", &fetcher)
 }
 
 pub struct Pi;

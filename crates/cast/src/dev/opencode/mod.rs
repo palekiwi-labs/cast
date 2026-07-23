@@ -14,17 +14,12 @@ use crate::user::ResolvedUser;
 
 /// Resolve the concrete opencode version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
-    let requested = config
-        .agent_versions
-        .get("opencode")
-        .map(|s| s.as_str())
-        .unwrap_or("latest");
     let cache_path = version::cache::get_cache_path("opencode");
     let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
     let fetcher = GithubReleaseFetcher {
         repo: "anomalyco/opencode",
     };
-    resolver.resolve(requested, &fetcher)
+    resolver.resolve("latest", &fetcher)
 }
 
 /// The OpenCode agent — runs the `opencode` program inside the dev container.

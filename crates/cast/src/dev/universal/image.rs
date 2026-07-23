@@ -69,7 +69,7 @@ pub fn ensure_universal_image(
     user: &ResolvedUser,
     opts: BuildOptions,
 ) -> Result<()> {
-    let image_tag = universal_image_tag(&config.agent_versions);
+    let image_tag = universal_image_tag(&BTreeMap::new());
 
     if !opts.force && docker.image_exists(&image_tag)? {
         info!(%image_tag, "universal image exists, skipping build");
@@ -97,7 +97,7 @@ pub fn ensure_universal_image(
     let extra_dirs = resolve_extra_dirs(config, &user.username);
     let uid_str = user.uid.to_string();
     let gid_str = user.gid.to_string();
-    let label = compose_label(&config.agent_versions);
+    let label = compose_label(&BTreeMap::new());
 
     // Assemble build-arg tuples: per-agent version args first, then the
     // standard user/dir args shared with the per-agent image path.

@@ -14,17 +14,12 @@ use crate::user::ResolvedUser;
 
 /// Resolve the concrete claudecode version based on config.
 pub fn resolve_version(config: &Config) -> Result<String> {
-    let requested = config
-        .agent_versions
-        .get("claudecode")
-        .map(|s| s.as_str())
-        .unwrap_or("latest");
     let cache_path = version::cache::get_cache_path("claudecode");
     let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
     let fetcher = NpmRegistryFetcher {
         package: "@anthropic-ai/claude-code",
     };
-    resolver.resolve(requested, &fetcher)
+    resolver.resolve("latest", &fetcher)
 }
 
 /// The ClaudeCode agent — runs the `claude` program inside the dev container.

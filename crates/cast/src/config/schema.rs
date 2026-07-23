@@ -1,20 +1,9 @@
-use anyhow::{Result, bail};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
-    // Container Identity & Version
-    /// Deprecated — silently ignored; harness versions are now pinned by the
-    /// global flake's flake.lock. Will be removed in a future clean-up pass.
-    #[serde(default)]
-    pub agent_versions: BTreeMap<String, String>,
-
-    /// Deprecated — silently ignored; universal mounts are now the
-    /// unconditional default. Will be removed in a future clean-up pass.
-    #[serde(default)]
-    pub universal_container: bool,
-
     /// Name of the global devShell to enter when running an agent.
     /// Defaults to the agent name when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -156,8 +145,6 @@ pub struct VolumeConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            agent_versions: BTreeMap::new(),
-            universal_container: false,
             global_shell: None,
             container_name: None,
             version_cache_ttl_hours: 24,
@@ -192,14 +179,6 @@ fn default_volume_type() -> String {
 impl Config {
     /// Validate cross-field invariants that cannot be expressed at deserialise time.
     pub fn validate(&self) -> Result<()> {
-        // Deprecated validation retained for backwards compatibility until
-        // agent_versions and universal_container are removed (Phase 2).
-        if self.universal_container && self.agent_versions.is_empty() {
-            bail!(
-                "universal_container is enabled but agent_versions is empty; \
-                 pin at least one agent version to include it in the universal image"
-            );
-        }
         Ok(())
     }
 }
@@ -319,8 +298,8 @@ mod tests {
 
     #[test]
     fn test_agent_versions_in_json_is_silently_ignored() {
-        // After removing agent_versions from Config, existing JSON containing
-        // the key must still load without error (no deny_unknown_fields).
+        // agent_versions was removed from Config; existing JSON with the key
+        // must still load without error (no deny_unknown_fields on Config).
         let mut json = serde_json::to_value(Config::default()).unwrap();
         json["agent_versions"] = serde_json::json!({"opencode": "0.1.0"});
         let result: Result<Config, _> = serde_json::from_value(json);
@@ -333,8 +312,8 @@ mod tests {
 
     #[test]
     fn test_universal_container_in_json_is_silently_ignored() {
-        // After removing universal_container from Config, existing JSON containing
-        // the key must still load without error (no deny_unknown_fields).
+        // universal_container was removed from Config; existing JSON with the
+        // key must still load without error (no deny_unknown_fields on Config).
         let mut json = serde_json::to_value(Config::default()).unwrap();
         json["universal_container"] = serde_json::json!(true);
         let result: Result<Config, _> = serde_json::from_value(json);
@@ -346,51 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn test_universal_container_deserializes_true() {
-        let mut json = serde_json::to_value(Config::default()).unwrap();
-        json["universal_container"] = json!(true);
-        let config: Config = serde_json::from_value(json).unwrap();
-        assert!(config.universal_container);
-    }
-
-    #[test]
-    fn test_universal_container_defaults_false_when_absent() {
-        // Backward compatibility: a config authored before this field existed
-        // must still load, with universal_container defaulting to false.
-        let mut json = serde_json::to_value(Config::default()).unwrap();
-        json.as_object_mut().unwrap().remove("universal_container");
-        let config: Config = serde_json::from_value(json).unwrap();
-        assert!(!config.universal_container);
-    }
-
-    #[test]
-    fn test_validate_rejects_universal_without_agent_versions() {
-        let config = Config {
-            universal_container: true,
-            ..Default::default()
-        };
-        let err = config.validate().unwrap_err();
-        assert!(
-            err.to_string().contains("universal_container"),
-            "error should mention universal_container, got: {err}"
-        );
-    }
-
-    #[test]
-    fn test_validate_accepts_universal_with_agent_versions() {
-        let mut config = Config {
-            universal_container: true,
-            ..Default::default()
-        };
-        config
-            .agent_versions
-            .insert("opencode".to_string(), "0.1.0".to_string());
-        config.validate().expect("should be valid");
-    }
-
-    #[test]
     fn test_validate_accepts_default_config() {
-        // Default (non-universal) config must always validate.
         Config::default()
             .validate()
             .expect("default should be valid");

@@ -11,8 +11,7 @@ use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
-use crate::dev::universal::image::{ensure_universal_image, universal_image_tag};
-use crate::dev::universal::registry::{resolve_included_agents, validate_agent_included};
+use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
 use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
@@ -188,57 +187,7 @@ pub fn run_agent(
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
 
-    // ── Universal mode: single shared image with all pinned agents ───────
-    if config.universal_container {
-        config.validate()?;
-        validate_agent_included(config, agent.name())?;
-
-        let included = resolve_included_agents(config);
-        let included_agents: Vec<&dyn Agent> = included.iter().map(|(a, _)| *a).collect();
-        let versions: Vec<(&dyn Agent, &str)> = included.iter().map(|(a, v)| (*a, *v)).collect();
-
-        let image_tag = universal_image_tag(&config.agent_versions);
-        info!(
-            %image_tag,
-            %container_name,
-            port,
-            "starting universal agent session"
-        );
-
-        ensure_universal_image(&versions, &docker, config, &user, BuildOptions::default())?;
-
-        let run_opts = resolve_run_opts(user, workspace, port, &flags);
-
-        if run_opts.user_flake_present {
-            info!("loading global nix devshell");
-            eprintln!("Loading global nix devshell...");
-        }
-
-        // Prepare host directories for ALL included agents, not just the
-        // launched one. Each agent may create config dirs, cache dirs, etc.
-        for (ag, _) in &included {
-            ag.prepare_host(config, &run_opts)?;
-        }
-
-        let cmd = agent.build_command(config, &run_opts, extra_args);
-
-        let env: HashMap<String, String> = std::env::vars().collect();
-        let docker_flags = build_docker_run_flags(config, &run_opts);
-        let universal_extra =
-            build_universal_run_args(&included_agents, agent, config, &run_opts, &env)?;
-
-        return dispatch_run(
-            &docker,
-            &run_opts,
-            &container_name,
-            &image_tag,
-            docker_flags,
-            universal_extra,
-            cmd,
-        );
-    }
-
-    // Resolve the version and image for this agent, and ensure it exists locally.
+    // Resolve per-agent image and ensure it exists locally.
     let version = agent.resolve_version(config)?;
     let image_tag = agent.image_tag(&version);
 
@@ -262,14 +211,24 @@ pub fn run_agent(
         eprintln!("Loading global nix devshell...");
     }
 
+    // Prepare host directories for ALL known agents so every config dir
+    // and cache dir exists before the container starts (universal mounts).
+    for ag in all_agents() {
+        ag.prepare_host(config, &run_opts)?;
+    }
+
     let cmd = agent.build_command(config, &run_opts, extra_args);
-    run_in_container(
+    let env: HashMap<String, String> = std::env::vars().collect();
+    let docker_flags = build_docker_run_flags(config, &run_opts);
+    let universal_extra = build_universal_run_args(all_agents(), agent, config, &run_opts, &env)?;
+
+    dispatch_run(
         &docker,
-        agent,
-        config,
         &run_opts,
         &container_name,
         &image_tag,
+        docker_flags,
+        universal_extra,
         cmd,
     )
 }
