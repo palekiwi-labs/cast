@@ -12,8 +12,8 @@ use crate::dev::agent::Agent;
 use crate::dev::extra_dirs::resolve_extra_dirs;
 use crate::dev::image::{CAST_VERSION, IMAGE_BASE};
 use crate::dev::universal::dockerfile;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::user::ResolvedUser;
 
 /// Number of hex characters taken from the SHA-256 digest for the image tag.

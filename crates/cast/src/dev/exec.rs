@@ -1,6 +1,6 @@
 use std::process::ExitStatus;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use tracing::{debug, info, info_span};
 
 use crate::config::{ApprovedConfig, Config};
@@ -8,10 +8,10 @@ use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
-use crate::dev::run::{resolve_run_opts, run_in_container, RunOpts, SessionFlags};
+use crate::dev::run::{RunOpts, SessionFlags, resolve_run_opts, run_in_container};
 use crate::dev::workspace::get_workspace;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
 
@@ -20,11 +20,17 @@ use crate::user::get_user;
 /// When `raw` is true the user-supplied `cmd` is returned as-is (no Nix
 /// devshell wrapping).  When `raw` is false, `build_command` wraps `cmd[0]`
 /// with the Nix devshell layers exactly as it does for `cast run`.
-pub fn build_exec_cmd(config: &Config, opts: &RunOpts, raw: bool, cmd: &[String]) -> Vec<String> {
+pub fn build_exec_cmd(
+    config: &Config,
+    opts: &RunOpts,
+    agent_name: &str,
+    raw: bool,
+    cmd: &[String],
+) -> Vec<String> {
     if raw || cmd.is_empty() {
         return cmd.to_vec();
     }
-    build_command(config, opts, &cmd[0], cmd[1..].to_vec())
+    build_command(config, opts, &cmd[0], agent_name, cmd[1..].to_vec())
 }
 
 /// Orchestrate and run a `cast exec` session inside a fresh agent container.
@@ -95,7 +101,7 @@ pub fn exec(
     agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
-    let exec_cmd = build_exec_cmd(config, &run_opts, raw, &cmd);
+    let exec_cmd = build_exec_cmd(config, &run_opts, agent.name(), raw, &cmd);
 
     run_in_container(
         &docker,
@@ -152,7 +158,7 @@ mod tests {
             "-c".to_string(),
             "echo hi".to_string(),
         ];
-        let result = build_exec_cmd(&config, &opts, true, &cmd);
+        let result = build_exec_cmd(&config, &opts, "test", true, &cmd);
         assert_eq!(result, cmd, "raw mode must not wrap the command");
     }
 
@@ -168,7 +174,7 @@ mod tests {
             ..base_opts()
         };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, &opts, true, &cmd);
+        let result = build_exec_cmd(&config, &opts, "test", true, &cmd);
         // raw=true must bypass Nix wrapping even when flakes are present
         assert_eq!(result, cmd);
         assert!(
@@ -184,7 +190,7 @@ mod tests {
         let config = Config::default(); // use_flake: false, no flake path
         let opts = base_opts(); // user_flake_present: false
         let cmd = vec!["/bin/bash".to_string(), "-c".to_string(), "x".to_string()];
-        let result = build_exec_cmd(&config, &opts, false, &cmd);
+        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
         // No flakes active → result is the bare command
         assert_eq!(result, cmd);
     }
@@ -202,7 +208,7 @@ mod tests {
             ..base_opts()
         };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, &opts, false, &cmd);
+        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
         // With project flake, command is wrapped: nix develop . -c /bin/bash
         assert_eq!(result, vec!["nix", "develop", ".", "-c", "/bin/bash"]);
     }
@@ -225,7 +231,7 @@ mod tests {
             "-c".to_string(),
             "echo hello".to_string(),
         ];
-        let result = build_exec_cmd(&config, &opts, false, &cmd);
+        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
         // nix develop . -c /bin/bash -c "echo hello"
         assert_eq!(
             result,
@@ -313,8 +319,8 @@ mod tests {
         let config = Config::default();
         let opts = base_opts();
         let empty: Vec<String> = vec![];
-        assert_eq!(build_exec_cmd(&config, &opts, false, &empty), empty);
-        assert_eq!(build_exec_cmd(&config, &opts, true, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, &opts, "test", false, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, &opts, "test", true, &empty), empty);
     }
 
     #[test]

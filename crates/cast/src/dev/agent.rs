@@ -6,8 +6,8 @@ use crate::config::Config;
 use crate::dev::build_command;
 use crate::dev::image;
 use crate::dev::run::RunOpts;
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::user::ResolvedUser;
 
 /// An agent encapsulates everything that is specific to a particular program
@@ -103,6 +103,6 @@ pub trait Agent {
         opts: &RunOpts,
         extra_args: Vec<String>,
     ) -> Vec<String> {
-        build_command::build_command(config, opts, self.base_command(), extra_args)
+        build_command::build_command(config, opts, self.base_command(), self.name(), extra_args)
     }
 }

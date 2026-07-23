@@ -15,12 +15,12 @@ use crate::dev::universal::image::{ensure_universal_image, universal_image_tag};
 use crate::dev::universal::registry::{resolve_included_agents, validate_agent_included};
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{get_user, ResolvedUser};
+use crate::user::{ResolvedUser, get_user};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -536,7 +536,9 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+        );
     }
 
     #[test]
@@ -546,7 +548,9 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts);
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+        );
     }
 
     #[test]

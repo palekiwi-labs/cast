@@ -4,8 +4,8 @@ use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
 use crate::dev::universal::image::{ensure_universal_image, universal_image_tag};
 use crate::dev::universal::registry::{resolve_included_agents, validate_agent_included};
-use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
+use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
 

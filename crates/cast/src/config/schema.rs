@@ -1,17 +1,24 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     // Container Identity & Version
+    /// Deprecated — silently ignored; harness versions are now pinned by the
+    /// global flake's flake.lock. Will be removed in a future clean-up pass.
     #[serde(default)]
     pub agent_versions: BTreeMap<String, String>,
 
-    /// Build and run against a single shared image containing every agent
-    /// pinned in `agent_versions`, instead of per-agent images.
+    /// Deprecated — silently ignored; universal mounts are now the
+    /// unconditional default. Will be removed in a future clean-up pass.
     #[serde(default)]
     pub universal_container: bool,
+
+    /// Name of the global devShell to enter when running an agent.
+    /// Defaults to the agent name when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_shell: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
@@ -151,6 +158,7 @@ impl Default for Config {
         Config {
             agent_versions: BTreeMap::new(),
             universal_container: false,
+            global_shell: None,
             container_name: None,
             version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
@@ -184,6 +192,8 @@ fn default_volume_type() -> String {
 impl Config {
     /// Validate cross-field invariants that cannot be expressed at deserialise time.
     pub fn validate(&self) -> Result<()> {
+        // Deprecated validation retained for backwards compatibility until
+        // agent_versions and universal_container are removed (Phase 2).
         if self.universal_container && self.agent_versions.is_empty() {
             bail!(
                 "universal_container is enabled but agent_versions is empty; \
@@ -305,6 +315,34 @@ mod tests {
         });
         let tool: McpToolConfig = serde_json::from_value(json).unwrap();
         assert_eq!(tool.timeout_secs, Some(30));
+    }
+
+    #[test]
+    fn test_agent_versions_in_json_is_silently_ignored() {
+        // After removing agent_versions from Config, existing JSON containing
+        // the key must still load without error (no deny_unknown_fields).
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["agent_versions"] = serde_json::json!({"opencode": "0.1.0"});
+        let result: Result<Config, _> = serde_json::from_value(json);
+        assert!(
+            result.is_ok(),
+            "agent_versions should be silently ignored: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_universal_container_in_json_is_silently_ignored() {
+        // After removing universal_container from Config, existing JSON containing
+        // the key must still load without error (no deny_unknown_fields).
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["universal_container"] = serde_json::json!(true);
+        let result: Result<Config, _> = serde_json::from_value(json);
+        assert!(
+            result.is_ok(),
+            "universal_container should be silently ignored: {:?}",
+            result.err()
+        );
     }
 
     #[test]
