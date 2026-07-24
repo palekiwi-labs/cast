@@ -12,8 +12,13 @@ schema, see [src/config/schema.rs][schema-src].
 
 ## Nix Settings
 
-- `use_flake`: Whether to wrap commands in `nix develop` (default: `false`).
-- `use_flake_path`: Specific flake reference to use.
+- `global_shell`: Name of the global devShell to enter when running an agent.
+  Defaults to the agent name (e.g. `opencode`). Set to `universal` to route
+  every agent through a shell that exposes all harnesses. See
+  [Flake Integration][flake-integration].
+- `use_flake`: Whether to also wrap commands in the project's `nix develop`
+  (default: `false`).
+- `use_flake_path`: Specific project flake reference to use.
 - `nix_volume_name`: Name of the Docker volume for the Nix store.
 
 ## Data Volumes
@@ -60,7 +65,10 @@ schema, see [src/config/schema.rs][schema-src].
 
 ## Agent Versions
 
-- `agent_versions`: Map of agent names to version strings.
+Harness versions are no longer configured in `cast.json`. They are pinned by
+the global flake's `flake.lock` (see [Flake Integration][flake-integration]).
+A legacy `agent_versions` key is silently ignored if present.
 
 [schema-src]: ../../src/config/schema.rs
 [mcp-config]: ../mcp/configuration.md
+[flake-integration]: ../nix/flake-integration.md

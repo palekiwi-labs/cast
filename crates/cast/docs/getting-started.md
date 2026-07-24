@@ -45,8 +45,12 @@ Run the `opencode` agent:
 cast run opencode
 ```
 
-The first time you run an agent, `cast` will build its Docker image.
-This process is automatic.
+The first time you run an agent, `cast` builds the single, shared dev image
+(`localhost/cast:{version}`) automatically. The agent harness is not baked into
+the image — it is provided by a global Nix devShell. If you have no global flake
+yet (`~/.config/cast/nix/flake.nix`), `cast` scaffolds one from a shipped
+template so the first run works with no manual setup. See
+[Flake Integration](nix/flake-integration.md) for details.
 
 ## Next Steps
 

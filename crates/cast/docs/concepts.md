@@ -13,17 +13,23 @@ isolated from your host system.
 
 An **Agent** is a specific coding tool (like OpenCode, ClaudeCode, or Pi).
 A **Harness** is the implementation of the `Agent` trait in `cast` that knows
-how to build the Docker image and run the agent binary with the correct flags
-and environment.
+how to run the agent binary with the correct flags and environment.
+
+Harnesses are provisioned by Nix, not baked into the image. A single,
+harness-free dev image is shared by every agent; the harness binary comes from
+a named devShell of the global cast flake, selected when the agent runs. See
+[Agents](agents.md) for the full model.
 
 ## Nix Integration
 
-`cast` leverages Nix in two ways:
+`cast` leverages Nix in three ways:
 
-1. **Flake Wrapping**: If `use_flake` is enabled, `cast` wraps the agent's
-   execution in a `nix develop` shell, providing the agent with the exact tools
-   defined in your project's `flake.nix`.
-2. **Nix Daemon**: `cast` can run a dedicated Nix daemon in a Docker container,
+1. **Harness provisioning**: The selected global devShell provides the agent
+   binary itself. `cast run <agent>` enters the devShell named after the agent
+   (overridable via `global_shell`), so no harness is installed in the image.
+2. **Flake Wrapping**: If `use_flake` is enabled, `cast` also wraps execution
+   in your project's `flake.nix` devshell, providing project-specific tools.
+3. **Nix Daemon**: `cast` can run a dedicated Nix daemon in a Docker container,
    allowing sandboxes to perform Nix operations safely via a shared volume.
 
 ## The Built-in MCP Server
