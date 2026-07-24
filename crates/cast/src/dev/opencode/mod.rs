@@ -8,24 +8,6 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::dev::version::fetcher::GithubReleaseFetcher;
-use crate::dev::version::{self, VersionResolver};
-use crate::user::ResolvedUser;
-
-/// Resolve the concrete opencode version based on config.
-pub fn resolve_version(config: &Config) -> Result<String> {
-    let requested = config
-        .agent_versions
-        .get("opencode")
-        .map(|s| s.as_str())
-        .unwrap_or("latest");
-    let cache_path = version::cache::get_cache_path("opencode");
-    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
-    let fetcher = GithubReleaseFetcher {
-        repo: "anomalyco/opencode",
-    };
-    resolver.resolve(requested, &fetcher)
-}
 
 /// The OpenCode agent — runs the `opencode` program inside the dev container.
 pub struct OpenCode;
@@ -33,14 +15,6 @@ pub struct OpenCode;
 impl Agent for OpenCode {
     fn name(&self) -> &'static str {
         "opencode"
-    }
-
-    fn dockerfile(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.dev.opencode")
-    }
-
-    fn resolve_version(&self, config: &Config) -> Result<String> {
-        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
@@ -56,69 +30,32 @@ impl Agent for OpenCode {
         "opencode"
     }
 
-    fn extra_run_args(
-        &self,
-        config: &Config,
-        opts: &RunOpts,
-        env: &HashMap<String, String>,
-    ) -> Result<Vec<String>> {
-        let mut args: Vec<String> = vec![];
-
-        // LLM API keys + OPENCODE_* env vars present on the host.
-        args.extend(env::build_passthrough_env_args(env));
-
-        // User flake mount (~/.config/cast/nix).
-        let user_flake_host_dir = opts
-            .host_home_dir
-            .as_ref()
-            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-            .map(|h| h.join(".config/cast/nix"));
-        if let Some(flake_dir) = &user_flake_host_dir {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/cast/nix:rw",
-                    flake_dir.display(),
-                    opts.user.username
-                ),
-            ]);
-        }
-
-        // OpenCode config directory bind mount.
-        // Skip if the workspace root is the same as the config dir (workspace mount covers it).
+    fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
         let home = opts
             .host_home_dir
             .as_deref()
             .context("Failed to resolve user home directory")?;
         let opencode_config_dir = config_dir::get_config_dir(&home.join(".config"));
-        if opencode_config_dir != opts.workspace.root {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/opencode:rw",
-                    opencode_config_dir.display(),
-                    opts.user.username
-                ),
-            ]);
+
+        // Skip if the workspace root is the same as the config dir (workspace
+        // mount covers it).
+        if opencode_config_dir == opts.workspace.root {
+            return Ok(vec![]);
         }
 
-        // Persistent data volumes (~/.cache and ~/.local).
-        args.extend(build_data_volume_args(config, &opts.user));
-
-        Ok(args)
+        Ok(vec![
+            "-v".to_string(),
+            format!(
+                "{}:/home/{}/.config/opencode:rw",
+                opencode_config_dir.display(),
+                opts.user.username
+            ),
+        ])
     }
-}
 
-/// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
-fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
-    let namespace = &cfg.volumes_namespace;
-    let username = &user.username;
-    vec![
-        "-v".to_string(),
-        format!("{}-opencode-cache:/home/{}/.cache:rw", namespace, username),
-        "-v".to_string(),
-        format!("{}-opencode-local:/home/{}/.local:rw", namespace, username),
-    ]
+    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
+        env::build_passthrough_env_args(env)
+    }
 }
 
 #[cfg(test)]
@@ -126,6 +63,7 @@ mod tests {
     use super::*;
     use crate::dev::run::RunOpts;
     use crate::dev::workspace::ResolvedWorkspace;
+    use crate::user::ResolvedUser;
     use std::path::PathBuf;
 
     fn alice() -> ResolvedUser {
@@ -168,41 +106,22 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_run_args_user_flake_absent() {
+    fn test_config_mount_args_includes_opencode_config_dir() {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = OpenCode.config_mount_args(&config, &opts).unwrap();
 
-        for arg in &args {
-            assert!(
-                !arg.contains("/.config/cast/nix"),
-                "unexpected flake mount: {}",
-                arg
-            );
-        }
+        assert!(
+            args.contains(
+                &"/home/alice/.config/opencode:/home/alice/.config/opencode:rw".to_string()
+            ),
+            "expected opencode config bind mount: {args:?}"
+        );
     }
 
     #[test]
-    fn test_extra_run_args_opencode_config_dir_env_unset() {
-        let config = Config::default();
-        let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
-
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        for arg in &args {
-            assert!(
-                !arg.contains("/opencode-config-dir"),
-                "unexpected env mount: {}",
-                arg
-            );
-        }
-    }
-
-    #[test]
-    fn test_extra_run_args_workspace_conflict_no_double_mount() {
+    fn test_config_mount_args_workspace_conflict_no_double_mount() {
         let config = Config::default();
         // workspace root == opencode config dir → no duplicate mount
         let workspace_root = PathBuf::from("/home/alice/.config/opencode");
@@ -221,9 +140,8 @@ mod tests {
             tty_mode: crate::dev::run::TtyMode::Interactive,
             publish: false,
         };
-        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = OpenCode.config_mount_args(&config, &opts).unwrap();
 
         // The opencode config dir mount must not appear (workspace covers it).
         let mount_count = args
@@ -231,44 +149,5 @@ mod tests {
             .filter(|a| a.contains("/.config/opencode:rw"))
             .count();
         assert_eq!(mount_count, 0);
-    }
-
-    #[test]
-    fn test_extra_run_args_includes_opencode_data_volumes() {
-        let config = Config::default(); // volumes_namespace = "cast"
-        let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
-
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
-        assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
-    }
-
-    #[test]
-    fn test_image_tag_format() {
-        assert_eq!(
-            OpenCode.image_tag("1.4.7"),
-            format!(
-                "localhost/cast:{}-opencode-1.4.7",
-                env!("CARGO_PKG_VERSION")
-            )
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_has_correct_base_image() {
-        assert!(OpenCode.dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_dockerfile_configures_git_safe_directory() {
-        assert!(
-            OpenCode
-                .dockerfile()
-                .contains(r#"git config --system safe.directory "*""#),
-            "Dockerfile must configure git safe.directory to allow nix develop . \
-             (libgit2) on bind-mounted workspaces"
-        );
     }
 }

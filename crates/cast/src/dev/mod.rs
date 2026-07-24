@@ -6,6 +6,7 @@ pub mod container_name;
 pub mod env_file;
 pub mod exec;
 pub mod extra_dirs;
+pub mod global_flake;
 pub mod image;
 pub mod opencode;
 pub mod pi;
@@ -13,8 +14,8 @@ pub mod port;
 pub mod run;
 pub mod shadow_mounts;
 pub mod shell;
+pub mod universal;
 pub mod utils;
-pub mod version;
 pub mod volumes;
 pub mod workspace;
 

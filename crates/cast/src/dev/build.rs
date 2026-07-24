@@ -2,14 +2,18 @@ use anyhow::Result;
 
 use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
+use crate::dev::image;
 use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
 
-/// Build an agent's Docker image and optionally the Nix daemon base image.
+/// Build the single shared dev image and optionally the Nix daemon base image.
+///
+/// The image is harness-free and agent-agnostic; `_agent` is retained so the
+/// per-agent `cast build <agent>` CLI surface can dispatch here unchanged.
 pub fn build_agent(
-    agent: &dyn Agent,
+    _agent: &dyn Agent,
     cfg: &ApprovedConfig,
     base: bool,
     force: bool,
@@ -23,8 +27,7 @@ pub fn build_agent(
         nix_daemon::build(&docker, opts)?;
     }
 
-    let version = agent.resolve_version(cfg)?;
-    agent.ensure_image(&docker, cfg, &user, &version, opts)?;
+    image::ensure_dev_image(&docker, cfg, &user, opts)?;
 
     Ok(())
 }

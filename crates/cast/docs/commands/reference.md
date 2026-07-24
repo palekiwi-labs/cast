@@ -10,7 +10,10 @@ Starts an agent session.
 
 ## `build <agent>`
 
-Builds the Docker image for an agent without running it.
+Builds the single, shared dev image without running it. All agents share the
+same harness-free image (`localhost/cast:{version}`); the `<agent>` argument is
+accepted for CLI symmetry but does not change what is built. Harnesses come from
+the global Nix devShell, not the image.
 
 - `--base`: Also build the Nix daemon base image.
 - `--force`, `-f`: Force rebuild even if image already exists.

@@ -3,42 +3,16 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::dev::version::fetcher::GithubReleaseFetcher;
-use crate::dev::version::{self, VersionResolver};
-use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
 pub mod config_dir;
 pub mod env;
-
-/// Resolve the concrete pi version based on config.
-pub fn resolve_version(config: &Config) -> Result<String> {
-    let requested = config
-        .agent_versions
-        .get("pi")
-        .map(|s| s.as_str())
-        .unwrap_or("latest");
-    let cache_path = version::cache::get_cache_path("pi");
-    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
-    let fetcher = GithubReleaseFetcher {
-        repo: "badlogic/pi-mono",
-    };
-    resolver.resolve(requested, &fetcher)
-}
 
 pub struct Pi;
 
 impl Agent for Pi {
     fn name(&self) -> &'static str {
         "pi"
-    }
-
-    fn dockerfile(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.dev.pi")
-    }
-
-    fn resolve_version(&self, config: &Config) -> Result<String> {
-        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
@@ -54,74 +28,36 @@ impl Agent for Pi {
         "pi"
     }
 
-    fn extra_run_args(
-        &self,
-        config: &Config,
-        opts: &RunOpts,
-        env: &HashMap<String, String>,
-    ) -> Result<Vec<String>> {
-        // LLM API keys + PI_* env vars present on the host.
-        let mut args = env::build_passthrough_env_args(env);
-
-        // Pi config directory bind mount.
+    fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
         let home = opts
             .host_home_dir
             .as_deref()
             .context("Failed to resolve user home directory")?;
         let pi_config_host_dir = config_dir::get_config_dir(home);
 
-        args.extend([
+        Ok(vec![
             "-v".to_string(),
             format!(
                 "{}:/home/{}/.pi:rw",
                 pi_config_host_dir.display(),
                 opts.user.username
             ),
-        ]);
-
-        // User flake mount (~/.config/cast/nix).
-        let user_flake_host_dir = opts
-            .host_home_dir
-            .as_ref()
-            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-            .map(|h| h.join(".config/cast/nix"));
-        if let Some(flake_dir) = &user_flake_host_dir {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/cast/nix:rw",
-                    flake_dir.display(),
-                    opts.user.username
-                ),
-            ]);
-        }
-
-        // Persistent data volumes (~/.cache and ~/.local).
-        args.extend(build_data_volume_args(config, &opts.user));
-
-        Ok(args)
+        ])
     }
-}
 
-/// Persistent data volumes for Pi: <namespace>-pi-cache and <namespace>-pi-local.
-fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
-    let namespace = &cfg.volumes_namespace;
-    let username = &user.username;
-    vec![
-        "-v".to_string(),
-        format!("{}-pi-cache:/home/{}/.cache:rw", namespace, username),
-        "-v".to_string(),
-        format!("{}-pi-local:/home/{}/.local:rw", namespace, username),
-    ]
+    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
+        env::build_passthrough_env_args(env)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Config;
+    use crate::user::ResolvedUser;
 
     #[test]
-    fn test_extra_run_args() {
+    fn test_config_mount_args_includes_pi_config_dir() {
         let config = Config::default();
         let user = ResolvedUser {
             uid: 1000,
@@ -129,7 +65,7 @@ mod tests {
             username: "testuser".to_string(),
         };
         let run_opts = RunOpts {
-            user: user.clone(),
+            user,
             workspace: crate::dev::workspace::ResolvedWorkspace {
                 root: std::path::PathBuf::from("/tmp/workspace"),
                 container_path: std::path::PathBuf::from("/workspace/tmp/workspace"),
@@ -142,38 +78,11 @@ mod tests {
             tty_mode: crate::dev::run::TtyMode::Interactive,
             publish: false,
         };
-        let mut env = HashMap::new();
-        env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
 
         let pi = Pi;
-        let args = pi.extra_run_args(&config, &run_opts, &env).unwrap();
+        let args = pi.config_mount_args(&config, &run_opts).unwrap();
 
         assert!(args.contains(&"-v".to_string()));
         assert!(args.contains(&"/home/testuser/.pi:/home/testuser/.pi:rw".to_string()));
-        assert!(args.contains(&"-e".to_string()));
-        assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
-    }
-
-    #[test]
-    fn test_image_tag_format() {
-        assert_eq!(
-            Pi.image_tag("0.71.0"),
-            format!("localhost/cast:{}-pi-0.71.0", env!("CARGO_PKG_VERSION"))
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_has_correct_base_image() {
-        assert!(Pi.dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_dockerfile_configures_git_safe_directory() {
-        assert!(
-            Pi.dockerfile()
-                .contains(r#"git config --system safe.directory "*""#),
-            "Dockerfile must configure git safe.directory to allow nix develop . \
-             (libgit2) on bind-mounted workspaces"
-        );
     }
 }

@@ -3,10 +3,14 @@ use crate::dev::run::RunOpts;
 
 /// Build the command vector that will be passed to `docker run` after all flags.
 /// Handles the nested Nix develop wrapping logic.
+///
+/// `agent_name` is the name of the agent being run (e.g. `"opencode"`). It is
+/// used as the default global devShell name when `config.global_shell` is `None`.
 pub fn build_command(
     config: &Config,
     opts: &RunOpts,
     base_command: &str,
+    agent_name: &str,
     extra_args: Vec<String>,
 ) -> Vec<String> {
     // Calculate estimated capacity to avoid reallocations.
@@ -21,9 +25,12 @@ pub fn build_command(
 
     let mut cmd = Vec::with_capacity(capacity);
 
-    // Global flake (outer layer - always applies if present)
+    // Global flake (outer layer - always applies if present).
+    // The shell fragment selects the devShell: config.global_shell if set,
+    // otherwise the agent name.
     if opts.user_flake_present {
-        let global_flake = format!("/home/{}/.config/cast/nix", opts.user.username);
+        let shell = config.global_shell.as_deref().unwrap_or(agent_name);
+        let global_flake = format!("/home/{}/.config/cast/nix#{shell}", opts.user.username);
         cmd.extend([
             "nix".to_string(),
             "develop".to_string(),
@@ -92,6 +99,50 @@ mod tests {
     }
 
     #[test]
+    fn test_global_shell_defaults_to_agent_name() {
+        // When global_shell is None in config, the agent name is used as the
+        // shell fragment appended to the global flake reference.
+        let config = Config {
+            use_flake: false,
+            ..Default::default()
+        };
+        let opts = run_opts(true, false);
+        let cmd = build_command(&config, &opts, "opencode", "opencode", vec![]);
+        assert_eq!(
+            cmd,
+            vec![
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix#opencode",
+                "-c",
+                "opencode",
+            ]
+        );
+    }
+
+    #[test]
+    fn test_global_shell_override_is_honoured() {
+        // When global_shell is set in config, it takes precedence over agent name.
+        let config = Config {
+            use_flake: false,
+            global_shell: Some("universal".to_string()),
+            ..Default::default()
+        };
+        let opts = run_opts(true, false);
+        let cmd = build_command(&config, &opts, "opencode", "opencode", vec![]);
+        assert_eq!(
+            cmd,
+            vec![
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix#universal",
+                "-c",
+                "opencode",
+            ]
+        );
+    }
+
+    #[test]
     fn test_build_command_use_flake_false_no_global() {
         let config = Config {
             use_flake: false,
@@ -101,7 +152,7 @@ mod tests {
 
         // Scenario 1: use_flake false, no global flake -> bare command
         let opts = run_opts(false, true);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["test", "arg1"]);
     }
 
@@ -113,15 +164,15 @@ mod tests {
             ..Default::default()
         };
 
-        // Scenario 2: use_flake false, global flake present -> wrapped ONLY in global flake
+        // Scenario 2: use_flake false, global flake present -> wrapped in global flake with shell
         let opts = run_opts(true, true);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(
             cmd,
             vec![
                 "nix",
                 "develop",
-                "/home/alice/.config/cast/nix",
+                "/home/alice/.config/cast/nix#test",
                 "-c",
                 "test",
                 "arg1"
@@ -139,7 +190,7 @@ mod tests {
 
         // Scenario 3: use_flake true, no global, no project flake -> bare command
         let opts = run_opts(false, false);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["test", "arg1"]);
     }
 
@@ -153,7 +204,7 @@ mod tests {
 
         // Scenario 4: use_flake true, no global, project flake present (auto-detect)
         let opts = run_opts(false, true);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["nix", "develop", ".", "-c", "test", "arg1"]);
     }
 
@@ -167,7 +218,7 @@ mod tests {
 
         // Scenario 5: use_flake true, no global, explicit project flake path
         let opts = run_opts(false, false); // project_flake_present false to prove path overrides it
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["nix", "develop", ".#shell", "-c", "test", "arg1"]);
     }
 
@@ -181,13 +232,13 @@ mod tests {
 
         // Scenario 6: use_flake true, global present, project auto-detected -> nested wrap
         let opts = run_opts(true, true);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(
             cmd,
             vec![
                 "nix",
                 "develop",
-                "/home/alice/.config/cast/nix",
+                "/home/alice/.config/cast/nix#test",
                 "-c",
                 "nix",
                 "develop",
@@ -209,13 +260,13 @@ mod tests {
 
         // Scenario 7: use_flake true, global present, explicit project path -> nested wrap
         let opts = run_opts(true, false);
-        let cmd = build_command(&config, &opts, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, &opts, "test", "test", vec!["arg1".to_string()]);
         assert_eq!(
             cmd,
             vec![
                 "nix",
                 "develop",
-                "/home/alice/.config/cast/nix",
+                "/home/alice/.config/cast/nix#test",
                 "-c",
                 "nix",
                 "develop",

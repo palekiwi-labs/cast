@@ -3,14 +3,13 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
-    // Container Identity & Version
-    #[serde(default)]
-    pub agent_versions: BTreeMap<String, String>,
+    /// Name of the global devShell to enter when running an agent.
+    /// Defaults to the agent name when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_shell: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
-
-    pub version_cache_ttl_hours: u32,
 
     // Resource Limits
     pub memory: String,
@@ -143,9 +142,8 @@ pub struct VolumeConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            agent_versions: BTreeMap::new(),
+            global_shell: None,
             container_name: None,
-            version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
             cpus: 1.0,
             pids_limit: 512,
@@ -285,5 +283,33 @@ mod tests {
         });
         let tool: McpToolConfig = serde_json::from_value(json).unwrap();
         assert_eq!(tool.timeout_secs, Some(30));
+    }
+
+    #[test]
+    fn test_agent_versions_in_json_is_silently_ignored() {
+        // agent_versions was removed from Config; existing JSON with the key
+        // must still load without error (no deny_unknown_fields on Config).
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["agent_versions"] = serde_json::json!({"opencode": "0.1.0"});
+        let result: Result<Config, _> = serde_json::from_value(json);
+        assert!(
+            result.is_ok(),
+            "agent_versions should be silently ignored: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_universal_container_in_json_is_silently_ignored() {
+        // universal_container was removed from Config; existing JSON with the
+        // key must still load without error (no deny_unknown_fields on Config).
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["universal_container"] = serde_json::json!(true);
+        let result: Result<Config, _> = serde_json::from_value(json);
+        assert!(
+            result.is_ok(),
+            "universal_container should be silently ignored: {:?}",
+            result.err()
+        );
     }
 }

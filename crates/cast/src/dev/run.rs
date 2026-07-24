@@ -11,13 +11,15 @@ use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::build_env_file_args;
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
+use crate::dev::universal::registry::all_agents;
+use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{get_user, ResolvedUser};
+use crate::user::{ResolvedUser, get_user};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -76,29 +78,27 @@ pub struct RunOpts {
 
 use std::process::ExitStatus;
 
-/// Shared container-run core used by both `run_agent` and `exec`.
+/// Dispatch the final `docker run` command, logging session duration.
 ///
-/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: prepare_host, docker flags, dispatch on tty_mode,
-/// and duration logging.
-pub fn run_in_container(
+/// Combines the generic `docker_flags` with agent-specific `extra_args`,
+/// builds the full argument vector, and dispatches on `tty_mode`. This is
+/// the shared tail used by [`run_in_container`], which serves both
+/// `cast run` (via [`run_agent`]) and `cast exec`.
+fn dispatch_run(
     docker: &DockerClient,
-    agent: &dyn Agent,
-    config: &ApprovedConfig,
     run_opts: &RunOpts,
     container_name: &str,
     image_tag: &str,
+    docker_flags: Vec<String>,
+    extra_args: Vec<String>,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
     let start_time = Instant::now();
-    let env: HashMap<String, String> = std::env::vars().collect();
 
-    agent.prepare_host(config, run_opts)?;
+    let mut all_flags = docker_flags;
+    all_flags.extend(extra_args);
 
-    let mut docker_flags = build_docker_run_flags(config, run_opts);
-    docker_flags.extend(agent.extra_run_args(config, run_opts, &env)?);
-
-    let docker_args = build_run_args(container_name, image_tag, docker_flags, Some(cmd));
+    let docker_args = build_run_args(container_name, image_tag, all_flags, Some(cmd));
 
     let status = match run_opts.tty_mode {
         TtyMode::Interactive => docker.interactive_command(docker_args)?,
@@ -113,6 +113,59 @@ pub fn run_in_container(
     );
 
     Ok(status)
+}
+
+/// Assemble the agent-specific `docker run` args for a session.
+///
+/// Both `cast run` and `cast exec` route through this so the two commands
+/// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
+/// data volumes and the union of every agent's config-directory mounts
+/// (universal mounts are the unconditional default). Environment passthrough
+/// comes from the launched agent only.
+fn build_session_run_args(
+    launched_agent: &dyn Agent,
+    config: &Config,
+    run_opts: &RunOpts,
+    env: &HashMap<String, String>,
+) -> Result<Vec<String>> {
+    build_universal_run_args(all_agents(), launched_agent, config, run_opts, env)
+}
+
+/// Shared container-run core used by both `run_agent` and `exec`.
+///
+/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
+/// command vector. Handles: prepare_host for every known agent (universal
+/// mounts), docker flags, the universal agent args, dispatch on tty_mode, and
+/// duration logging.
+pub fn run_in_container(
+    docker: &DockerClient,
+    agent: &dyn Agent,
+    config: &ApprovedConfig,
+    run_opts: &RunOpts,
+    container_name: &str,
+    image_tag: &str,
+    cmd: Vec<String>,
+) -> Result<ExitStatus> {
+    let env: HashMap<String, String> = std::env::vars().collect();
+
+    // Prepare host directories for ALL known agents so every config dir and
+    // cache dir exists before the container starts (universal mounts).
+    for ag in all_agents() {
+        ag.prepare_host(config, run_opts)?;
+    }
+
+    let docker_flags = build_docker_run_flags(config, run_opts);
+    let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
+
+    dispatch_run(
+        docker,
+        run_opts,
+        container_name,
+        image_tag,
+        docker_flags,
+        extra_args,
+        cmd,
+    )
 }
 
 /// Orchestrate and run an agent session inside the dev container.
@@ -155,9 +208,8 @@ pub fn run_agent(
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
 
-    // Resolve the version and image for this agent, and ensure it exists locally.
-    let version = agent.resolve_version(config)?;
-    let image_tag = agent.image_tag(&version);
+    // Resolve the single shared dev image and ensure it exists locally.
+    let image_tag = dev::image::image_tag();
 
     info!(
         %image_tag,
@@ -166,7 +218,11 @@ pub fn run_agent(
         "starting agent session"
     );
 
-    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
+    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
+
+    // Scaffold the global flake (if absent) before detecting its presence so
+    // the first run on a clean host works with no manual setup.
+    scaffold_global_flake();
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 
@@ -180,6 +236,7 @@ pub fn run_agent(
     }
 
     let cmd = agent.build_command(config, &run_opts, extra_args);
+
     run_in_container(
         &docker,
         agent,
@@ -191,7 +248,38 @@ pub fn run_agent(
     )
 }
 
+/// Auto-scaffold the global cast flake on a new host so the first
+/// `cast run`/`cast exec` works with no manual setup. A loud notice is emitted
+/// so the user knows a file was created on their behalf.
+///
+/// This is a side-effecting, host-mutating step and is deliberately kept OUT
+/// of [`resolve_run_opts`] (which is pure detection) so unit tests never write
+/// to the real `$HOME`. Callers must invoke this before `resolve_run_opts` so
+/// flake detection observes the scaffolded file on the first run.
+pub fn scaffold_global_flake() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    match crate::dev::global_flake::scaffold_if_missing(&home) {
+        Ok(true) => {
+            info!("scaffolded global nix flake");
+            eprintln!(
+                "Created global nix flake at {}",
+                home.join(".config/cast/nix/flake.nix").display()
+            );
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to scaffold global nix flake");
+        }
+    }
+}
+
 /// Resolve the generic options for a session, detecting flake presence.
+///
+/// Pure detection only: this reads the host home and workspace to determine
+/// flake presence and host identity. It performs no host mutation — global
+/// flake scaffolding is the caller's responsibility via [`scaffold_global_flake`].
 pub fn resolve_run_opts(
     user: ResolvedUser,
     workspace: ResolvedWorkspace,
@@ -199,6 +287,7 @@ pub fn resolve_run_opts(
     flags: &SessionFlags,
 ) -> RunOpts {
     let host_home_dir = dirs::home_dir();
+
     let user_flake_present = host_home_dir
         .as_ref()
         .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
@@ -453,7 +542,9 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+        );
     }
 
     #[test]
@@ -463,7 +554,9 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts);
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+        );
     }
 
     #[test]
@@ -550,6 +643,42 @@ mod tests {
     }
 
     #[test]
+    fn test_resolve_run_opts_does_not_scaffold_global_flake() {
+        // resolve_run_opts is pure detection: it must never write the global
+        // flake to the host home. Point HOME at a fresh temp dir and assert
+        // nothing is created there. Scaffolding is run_agent/exec's job.
+        let home = tempfile::TempDir::new().unwrap();
+        let workspace = ResolvedWorkspace {
+            root: tempfile::TempDir::new().unwrap().path().to_path_buf(),
+            container_path: PathBuf::from("/work"),
+        };
+        let flags = SessionFlags {
+            mode: RunMode::Interactive,
+            name: None,
+            publish: false,
+        };
+
+        // Save/restore HOME around the call. Single-threaded assertion on our
+        // own temp dir; we do not assert on any global state.
+        let prev_home = std::env::var_os("HOME");
+        unsafe {
+            std::env::set_var("HOME", home.path());
+        }
+        let _opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
+        unsafe {
+            match prev_home {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+
+        assert!(
+            !home.path().join(".config/cast/nix/flake.nix").exists(),
+            "resolve_run_opts must not scaffold the global flake"
+        );
+    }
+
+    #[test]
     fn test_resolve_run_opts_populates_host_name() {
         // resolve_run_opts calls get_hostname() (real I/O). Assert only on
         // the invariant our sentinel guarantees: non-empty. Never assert a
@@ -569,6 +698,47 @@ mod tests {
         assert!(
             !opts.host_name.is_empty(),
             "host_name must be non-empty (real hostname or 'unknown' sentinel)"
+        );
+    }
+
+    // ── Session run args: universal topology (run == exec) ──────────────────
+
+    #[test]
+    fn test_session_run_args_use_universal_topology() {
+        use crate::dev::opencode::OpenCode;
+
+        let config = Config::default();
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+        let env = HashMap::new();
+
+        let args = build_session_run_args(&OpenCode, &config, &opts, &env).unwrap();
+
+        // Shared cache/local volumes — NOT per-agent.
+        assert!(
+            args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()),
+            "expected shared cache volume, got: {args:?}"
+        );
+        assert!(
+            args.contains(&"cast-local:/home/alice/.local:rw".to_string()),
+            "expected shared local volume, got: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("cast-opencode-cache")),
+            "session must not use per-agent data volumes: {args:?}"
+        );
+
+        // Union of every agent's config mounts (opencode, claude, pi).
+        assert!(
+            args.iter().any(|a| a.contains("/.config/opencode:rw")),
+            "opencode config mount missing: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a.contains("/.claude:rw")),
+            "claude config mount missing: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a.contains("/.pi:rw")),
+            "pi config mount missing: {args:?}"
         );
     }
 

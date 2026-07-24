@@ -33,9 +33,10 @@ cast run opencode
 
 This will:
 
-1. Build the `opencode` sandbox image.
-2. Start a Docker container with the current directory mounted.
-3. Launch the `opencode` agent inside the sandbox.
+1. Build the shared, harness-free sandbox image (first run only).
+2. Scaffold a global Nix flake if none exists yet.
+3. Start a Docker container with the current directory mounted.
+4. Enter the `opencode` global devShell and launch the agent inside it.
 
 ## Next Steps
 

@@ -11,12 +11,23 @@
   };
 
   outputs = { self, nixpkgs, fenix, flake-utils, ... }:
+    {
+      # Global-flake template for `cast`'s harness devShells. Consumed via
+      # `nix flake init -t github:palekiwi-labs/cast#global`. The same content
+      # is embedded in the binary (crates/cast/assets/global-flake-template/flake.nix) and
+      # auto-scaffolded on first `cast run` when no global flake is present.
+      templates.global = {
+        path = ./crates/cast/assets/global-flake-template;
+        description = "cast global harness devShells (opencode, pi, claudecode, universal)";
+      };
+      templates.default = self.templates.global;
+    } //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
         rustToolchain = fenix.packages.${system}.stable.toolchain;
         common = {
-          version = "0.1.0";
+          version = "0.2.0";
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:

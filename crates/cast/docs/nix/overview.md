@@ -3,7 +3,16 @@
 `cast` provides deep integration with Nix to ensure your agent sandboxes have
 access to the same reproducible environment as your host.
 
-## Two Modes of Integration
+## Modes of Integration
+
+### 0. Harness Provisioning (global devShell)
+
+The agent binary itself comes from a named devShell of the global cast flake
+at `~/.config/cast/nix/flake.nix`. `cast run <agent>` enters the devShell named
+after the agent by default; the `global_shell` config field overrides this
+(for example, to select a `universal` shell providing every harness). The dev
+image ships with no harness baked in. See [Flake Integration](flake-integration.md)
+for shell selection, the shipped template, and auto-scaffolding.
 
 ### 1. Flake Wrapping
 

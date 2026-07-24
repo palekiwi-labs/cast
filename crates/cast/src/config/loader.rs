@@ -93,7 +93,6 @@ mod tests {
         // Test the defaults in isolation
         let config = Config::default();
 
-        assert!(config.agent_versions.is_empty());
         assert_eq!(config.memory, "1024m");
         assert_eq!(config.cpus, 1.0);
     }

@@ -1,13 +1,13 @@
 use std::process::ExitStatus;
 
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 
 use crate::config::ApprovedConfig;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::port::resolve_port;
-use crate::dev::run::{resolve_run_opts, SessionFlags};
+use crate::dev::run::{SessionFlags, resolve_run_opts};
 use crate::dev::workspace::get_workspace;
 use crate::docker::client::DockerClient;
 use crate::user::get_user;
@@ -25,7 +25,7 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
 
     if !docker.is_container_running(&container_name)? {
         bail!(
-            "Dev container is not running: {}. Run 'ocx run {}' to start it.",
+            "Dev container is not running: {}. Run 'cast run {}' to start it.",
             container_name,
             agent.name(),
         );
@@ -42,7 +42,7 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
             publish: false,
         };
         let opts = resolve_run_opts(user, workspace, port, &flags);
-        build_command(config, &opts, "/bin/bash", vec![])
+        build_command(config, &opts, "/bin/bash", agent.name(), vec![])
     };
 
     exec_args.extend(shell_cmd);
