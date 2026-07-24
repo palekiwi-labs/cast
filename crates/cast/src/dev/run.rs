@@ -240,6 +240,26 @@ pub fn resolve_run_opts(
     flags: &SessionFlags,
 ) -> RunOpts {
     let host_home_dir = dirs::home_dir();
+
+    // Auto-scaffold the global flake on a new host so the first
+    // `cast run <agent>` works with no manual setup. A loud notice is emitted
+    // so the user knows a file was created on their behalf.
+    if let Some(home) = host_home_dir.as_ref() {
+        match crate::dev::global_flake::scaffold_if_missing(home) {
+            Ok(true) => {
+                info!("scaffolded global nix flake");
+                eprintln!(
+                    "Created global nix flake at {}",
+                    home.join(".config/cast/nix/flake.nix").display()
+                );
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to scaffold global nix flake");
+            }
+        }
+    }
+
     let user_flake_present = host_home_dir
         .as_ref()
         .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
