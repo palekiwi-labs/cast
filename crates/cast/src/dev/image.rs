@@ -10,8 +10,8 @@ use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
 
-pub(crate) const IMAGE_BASE: &str = "localhost/cast";
-pub(crate) const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
+const IMAGE_BASE: &str = "localhost/cast";
+const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The single, harness-free dev image Dockerfile. Harnesses are provided by the
 /// global Nix devShell selected at run time, not baked into the image.

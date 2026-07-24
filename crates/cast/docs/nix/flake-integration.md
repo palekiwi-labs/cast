@@ -63,6 +63,11 @@ than built from source. `cast`'s dev image sets `accept-flake-config = true`
 in its system `/etc/nix/nix.conf`, so this substituter is honoured
 **non-interactively** — no flake-config prompt blocks an AI agent.
 
+> Security note: inside the dev container, `accept-flake-config = true`
+> auto-trusts any future flake's declared substituters and public keys
+> non-interactively. Signatures are still verified against those pinned keys,
+> so a fetched path must be signed by a key the flake declares.
+
 Harness versions are pinned by the global flake's `flake.lock`, not by
 `cast.json`.
 

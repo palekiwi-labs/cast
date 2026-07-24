@@ -1,4 +1,3 @@
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -173,13 +172,6 @@ fn default_volume_type() -> String {
     "volume".to_string()
 }
 
-impl Config {
-    /// Validate cross-field invariants that cannot be expressed at deserialise time.
-    pub fn validate(&self) -> Result<()> {
-        Ok(())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,12 +311,5 @@ mod tests {
             "universal_container should be silently ignored: {:?}",
             result.err()
         );
-    }
-
-    #[test]
-    fn test_validate_accepts_default_config() {
-        Config::default()
-            .validate()
-            .expect("default should be valid");
     }
 }

@@ -14,7 +14,7 @@
     {
       # Global-flake template for `cast`'s harness devShells. Consumed via
       # `nix flake init -t github:palekiwi-labs/cast#global`. The same content
-      # is embedded in the binary (crates/cast/assets/global-flake.nix) and
+      # is embedded in the binary (crates/cast/assets/global-flake-template/flake.nix) and
       # auto-scaffolded on first `cast run` when no global flake is present.
       templates.global = {
         path = ./crates/cast/assets/global-flake-template;
