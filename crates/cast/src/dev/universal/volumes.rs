@@ -7,20 +7,18 @@ use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
 use crate::user::ResolvedUser;
 
-/// Build the shared data volume arguments for the universal container.
+/// Build the shared data volume arguments for the dev container.
 ///
-/// Returns `-v` pairs for `{namespace}-universal-cache` and
-/// `{namespace}-universal-local`, replacing the per-agent data volumes used in
-/// non-universal mode. A single pair of named volumes is shared by every agent
-/// running inside the universal container.
+/// Returns `-v` pairs for `{namespace}-cache` and `{namespace}-local`. A single
+/// pair of named volumes is shared by every agent running inside the container.
 pub fn build_universal_data_volume_args(config: &Config, user: &ResolvedUser) -> Vec<String> {
     let namespace = &config.volumes_namespace;
     let username = &user.username;
     vec![
         "-v".to_string(),
-        format!("{namespace}-universal-cache:/home/{username}/.cache:rw"),
+        format!("{namespace}-cache:/home/{username}/.cache:rw"),
         "-v".to_string(),
-        format!("{namespace}-universal-local:/home/{username}/.local:rw"),
+        format!("{namespace}-local:/home/{username}/.local:rw"),
     ]
 }
 
@@ -28,7 +26,7 @@ pub fn build_universal_data_volume_args(config: &Config, user: &ResolvedUser) ->
 /// universal container.
 ///
 /// Composes four layers:
-/// 1. Shared universal data volumes (`-universal-cache` / `-universal-local`).
+/// 1. Shared data volumes (`-cache` / `-local`).
 /// 2. Union of config-directory bind mounts from **every** included agent.
 /// 3. Environment-variable passthrough from the **launched** agent only.
 /// 4. User flake mount (`~/.config/cast/nix`) if present on the host.
@@ -41,7 +39,7 @@ pub fn build_universal_run_args(
 ) -> Result<Vec<String>> {
     let mut args: Vec<String> = vec![];
 
-    // 1. Shared data volumes (universal cache/local — once).
+    // 1. Shared data volumes (cache/local — once).
     args.extend(build_universal_data_volume_args(config, &opts.user));
 
     // 2. Union of config mounts for every included agent.
@@ -118,12 +116,12 @@ mod tests {
         let args = build_universal_data_volume_args(&config, &user);
 
         assert!(
-            args.contains(&"cast-universal-cache:/home/alice/.cache:rw".to_string()),
-            "expected universal cache volume, got: {args:?}"
+            args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()),
+            "expected cache volume, got: {args:?}"
         );
         assert!(
-            args.contains(&"cast-universal-local:/home/alice/.local:rw".to_string()),
-            "expected universal local volume, got: {args:?}"
+            args.contains(&"cast-local:/home/alice/.local:rw".to_string()),
+            "expected local volume, got: {args:?}"
         );
     }
 
@@ -137,8 +135,8 @@ mod tests {
 
         let args = build_universal_data_volume_args(&config, &user);
 
-        assert!(args.contains(&"myteam-universal-cache:/home/alice/.cache:rw".to_string()));
-        assert!(args.contains(&"myteam-universal-local:/home/alice/.local:rw".to_string()));
+        assert!(args.contains(&"myteam-cache:/home/alice/.cache:rw".to_string()));
+        assert!(args.contains(&"myteam-local:/home/alice/.local:rw".to_string()));
     }
 
     // ── build_universal_run_args ───────────────────────────────────────────
@@ -259,11 +257,11 @@ mod tests {
         let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
 
         assert!(
-            args.iter().any(|a| a.contains("myteam-universal-cache")),
+            args.iter().any(|a| a.contains("myteam-cache")),
             "custom namespace missing on cache volume: {args:?}"
         );
         assert!(
-            args.iter().any(|a| a.contains("myteam-universal-local")),
+            args.iter().any(|a| a.contains("myteam-local")),
             "custom namespace missing on local volume: {args:?}"
         );
     }
