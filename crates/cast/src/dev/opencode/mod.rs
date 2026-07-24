@@ -8,7 +8,6 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::user::ResolvedUser;
 
 /// The OpenCode agent — runs the `opencode` program inside the dev container.
 pub struct OpenCode;
@@ -29,43 +28,6 @@ impl Agent for OpenCode {
 
     fn base_command(&self) -> &'static str {
         "opencode"
-    }
-
-    fn extra_run_args(
-        &self,
-        config: &Config,
-        opts: &RunOpts,
-        env: &HashMap<String, String>,
-    ) -> Result<Vec<String>> {
-        let mut args: Vec<String> = vec![];
-
-        // LLM API keys + OPENCODE_* env vars present on the host.
-        args.extend(self.env_passthrough_args(env));
-
-        // User flake mount (~/.config/cast/nix).
-        let user_flake_host_dir = opts
-            .host_home_dir
-            .as_ref()
-            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-            .map(|h| h.join(".config/cast/nix"));
-        if let Some(flake_dir) = &user_flake_host_dir {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/cast/nix:rw",
-                    flake_dir.display(),
-                    opts.user.username
-                ),
-            ]);
-        }
-
-        // OpenCode config directory bind mount.
-        args.extend(self.config_mount_args(config, opts)?);
-
-        // Persistent data volumes (~/.cache and ~/.local).
-        args.extend(build_data_volume_args(config, &opts.user));
-
-        Ok(args)
     }
 
     fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
@@ -96,23 +58,12 @@ impl Agent for OpenCode {
     }
 }
 
-/// Persistent data volumes for OpenCode: `<namespace>-opencode-cache` and `<namespace>-opencode-local`.
-fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
-    let namespace = &cfg.volumes_namespace;
-    let username = &user.username;
-    vec![
-        "-v".to_string(),
-        format!("{}-opencode-cache:/home/{}/.cache:rw", namespace, username),
-        "-v".to_string(),
-        format!("{}-opencode-local:/home/{}/.local:rw", namespace, username),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dev::run::RunOpts;
     use crate::dev::workspace::ResolvedWorkspace;
+    use crate::user::ResolvedUser;
     use std::path::PathBuf;
 
     fn alice() -> ResolvedUser {
@@ -155,41 +106,22 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_run_args_user_flake_absent() {
+    fn test_config_mount_args_includes_opencode_config_dir() {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = OpenCode.config_mount_args(&config, &opts).unwrap();
 
-        for arg in &args {
-            assert!(
-                !arg.contains("/.config/cast/nix"),
-                "unexpected flake mount: {}",
-                arg
-            );
-        }
+        assert!(
+            args.contains(
+                &"/home/alice/.config/opencode:/home/alice/.config/opencode:rw".to_string()
+            ),
+            "expected opencode config bind mount: {args:?}"
+        );
     }
 
     #[test]
-    fn test_extra_run_args_opencode_config_dir_env_unset() {
-        let config = Config::default();
-        let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
-
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        for arg in &args {
-            assert!(
-                !arg.contains("/opencode-config-dir"),
-                "unexpected env mount: {}",
-                arg
-            );
-        }
-    }
-
-    #[test]
-    fn test_extra_run_args_workspace_conflict_no_double_mount() {
+    fn test_config_mount_args_workspace_conflict_no_double_mount() {
         let config = Config::default();
         // workspace root == opencode config dir → no duplicate mount
         let workspace_root = PathBuf::from("/home/alice/.config/opencode");
@@ -208,9 +140,8 @@ mod tests {
             tty_mode: crate::dev::run::TtyMode::Interactive,
             publish: false,
         };
-        let env = HashMap::new();
 
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = OpenCode.config_mount_args(&config, &opts).unwrap();
 
         // The opencode config dir mount must not appear (workspace covers it).
         let mount_count = args
@@ -218,17 +149,5 @@ mod tests {
             .filter(|a| a.contains("/.config/opencode:rw"))
             .count();
         assert_eq!(mount_count, 0);
-    }
-
-    #[test]
-    fn test_extra_run_args_includes_opencode_data_volumes() {
-        let config = Config::default(); // volumes_namespace = "cast"
-        let opts = basic_opts(PathBuf::from("/home/alice/project"));
-        let env = HashMap::new();
-
-        let args = OpenCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
-        assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
     }
 }

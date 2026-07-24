@@ -82,8 +82,8 @@ use std::process::ExitStatus;
 ///
 /// Combines the generic `docker_flags` with agent-specific `extra_args`,
 /// builds the full argument vector, and dispatches on `tty_mode`. This is
-/// the shared tail used by both [`run_in_container`] (non-universal) and
-/// [`run_in_container_universal`].
+/// the shared tail used by [`run_in_container`], which serves both
+/// `cast run` (via [`run_agent`]) and `cast exec`.
 fn dispatch_run(
     docker: &DockerClient,
     run_opts: &RunOpts,
@@ -115,11 +115,28 @@ fn dispatch_run(
     Ok(status)
 }
 
+/// Assemble the agent-specific `docker run` args for a session.
+///
+/// Both `cast run` and `cast exec` route through this so the two commands
+/// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
+/// data volumes and the union of every agent's config-directory mounts
+/// (universal mounts are the unconditional default). Environment passthrough
+/// comes from the launched agent only.
+fn build_session_run_args(
+    launched_agent: &dyn Agent,
+    config: &Config,
+    run_opts: &RunOpts,
+    env: &HashMap<String, String>,
+) -> Result<Vec<String>> {
+    build_universal_run_args(all_agents(), launched_agent, config, run_opts, env)
+}
+
 /// Shared container-run core used by both `run_agent` and `exec`.
 ///
 /// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: prepare_host, docker flags, dispatch on tty_mode,
-/// and duration logging.
+/// command vector. Handles: prepare_host for every known agent (universal
+/// mounts), docker flags, the universal agent args, dispatch on tty_mode, and
+/// duration logging.
 pub fn run_in_container(
     docker: &DockerClient,
     agent: &dyn Agent,
@@ -131,10 +148,14 @@ pub fn run_in_container(
 ) -> Result<ExitStatus> {
     let env: HashMap<String, String> = std::env::vars().collect();
 
-    agent.prepare_host(config, run_opts)?;
+    // Prepare host directories for ALL known agents so every config dir and
+    // cache dir exists before the container starts (universal mounts).
+    for ag in all_agents() {
+        ag.prepare_host(config, run_opts)?;
+    }
 
     let docker_flags = build_docker_run_flags(config, run_opts);
-    let extra_args = agent.extra_run_args(config, run_opts, &env)?;
+    let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
 
     dispatch_run(
         docker,
@@ -210,24 +231,15 @@ pub fn run_agent(
         eprintln!("Loading global nix devshell...");
     }
 
-    // Prepare host directories for ALL known agents so every config dir
-    // and cache dir exists before the container starts (universal mounts).
-    for ag in all_agents() {
-        ag.prepare_host(config, &run_opts)?;
-    }
-
     let cmd = agent.build_command(config, &run_opts, extra_args);
-    let env: HashMap<String, String> = std::env::vars().collect();
-    let docker_flags = build_docker_run_flags(config, &run_opts);
-    let universal_extra = build_universal_run_args(all_agents(), agent, config, &run_opts, &env)?;
 
-    dispatch_run(
+    run_in_container(
         &docker,
+        agent,
+        config,
         &run_opts,
         &container_name,
         &image_tag,
-        docker_flags,
-        universal_extra,
         cmd,
     )
 }
@@ -634,6 +646,47 @@ mod tests {
         assert!(
             !opts.host_name.is_empty(),
             "host_name must be non-empty (real hostname or 'unknown' sentinel)"
+        );
+    }
+
+    // ── Session run args: universal topology (run == exec) ──────────────────
+
+    #[test]
+    fn test_session_run_args_use_universal_topology() {
+        use crate::dev::opencode::OpenCode;
+
+        let config = Config::default();
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+        let env = HashMap::new();
+
+        let args = build_session_run_args(&OpenCode, &config, &opts, &env).unwrap();
+
+        // Shared cache/local volumes — NOT per-agent.
+        assert!(
+            args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()),
+            "expected shared cache volume, got: {args:?}"
+        );
+        assert!(
+            args.contains(&"cast-local:/home/alice/.local:rw".to_string()),
+            "expected shared local volume, got: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("cast-opencode-cache")),
+            "session must not use per-agent data volumes: {args:?}"
+        );
+
+        // Union of every agent's config mounts (opencode, claude, pi).
+        assert!(
+            args.iter().any(|a| a.contains("/.config/opencode:rw")),
+            "opencode config mount missing: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a.contains("/.claude:rw")),
+            "claude config mount missing: {args:?}"
+        );
+        assert!(
+            args.iter().any(|a| a.contains("/.pi:rw")),
+            "pi config mount missing: {args:?}"
         );
     }
 

@@ -20,15 +20,6 @@ pub trait Agent {
     /// Short identifier used in container names and CLI subcommands (e.g. `"opencode"`).
     fn name(&self) -> &'static str;
 
-    /// Return agent-specific `docker run` arguments (env vars, mounts, etc.)
-    /// that are appended after the generic arguments.
-    fn extra_run_args(
-        &self,
-        config: &Config,
-        opts: &RunOpts,
-        env: &HashMap<String, String>,
-    ) -> Result<Vec<String>>;
-
     /// Return only the config-directory bind mounts for this agent.
     ///
     /// Called for every known agent to compose the union of all config mounts

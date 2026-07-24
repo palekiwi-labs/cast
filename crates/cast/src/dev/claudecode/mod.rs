@@ -8,7 +8,6 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::user::ResolvedUser;
 
 /// The ClaudeCode agent — runs the `claude` program inside the dev container.
 pub struct ClaudeCode;
@@ -30,41 +29,6 @@ impl Agent for ClaudeCode {
 
     fn base_command(&self) -> &'static str {
         "claude"
-    }
-
-    fn extra_run_args(
-        &self,
-        config: &Config,
-        opts: &RunOpts,
-        env: &HashMap<String, String>,
-    ) -> Result<Vec<String>> {
-        // LLM API keys + Claude Code env vars present on the host.
-        let mut args = self.env_passthrough_args(env);
-
-        // Claude Code config directory + global config file bind mounts.
-        args.extend(self.config_mount_args(config, opts)?);
-
-        // User flake mount (~/.config/cast/nix).
-        let user_flake_host_dir = opts
-            .host_home_dir
-            .as_ref()
-            .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-            .map(|h| h.join(".config/cast/nix"));
-        if let Some(flake_dir) = &user_flake_host_dir {
-            args.extend([
-                "-v".to_string(),
-                format!(
-                    "{}:/home/{}/.config/cast/nix:rw",
-                    flake_dir.display(),
-                    opts.user.username
-                ),
-            ]);
-        }
-
-        // Persistent data volumes (~/.cache and ~/.local).
-        args.extend(build_data_volume_args(config, &opts.user));
-
-        Ok(args)
     }
 
     fn config_mount_args(&self, _config: &Config, opts: &RunOpts) -> Result<Vec<String>> {
@@ -99,30 +63,13 @@ impl Agent for ClaudeCode {
     }
 }
 
-/// Persistent data volumes for ClaudeCode: `<ns>-claudecode-cache` and `<ns>-claudecode-local`.
-fn build_data_volume_args(cfg: &Config, user: &ResolvedUser) -> Vec<String> {
-    let namespace = &cfg.volumes_namespace;
-    let username = &user.username;
-    vec![
-        "-v".to_string(),
-        format!(
-            "{}-claudecode-cache:/home/{}/.cache:rw",
-            namespace, username
-        ),
-        "-v".to_string(),
-        format!(
-            "{}-claudecode-local:/home/{}/.local:rw",
-            namespace, username
-        ),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Config;
     use crate::dev::run::RunOpts;
     use crate::dev::workspace::ResolvedWorkspace;
+    use crate::user::ResolvedUser;
     use std::path::PathBuf;
 
     fn testuser() -> ResolvedUser {
@@ -151,12 +98,11 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_run_args_includes_claude_config_mount() {
+    fn test_config_mount_args_includes_claude_config_mount() {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/tmp/workspace"));
-        let env = HashMap::new();
 
-        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = ClaudeCode.config_mount_args(&config, &opts).unwrap();
 
         assert!(
             args.contains(&"/home/testuser/.claude:/home/testuser/.claude:rw".to_string()),
@@ -166,12 +112,11 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_run_args_includes_claude_json_mount() {
+    fn test_config_mount_args_includes_claude_json_mount() {
         let config = Config::default();
         let opts = basic_opts(PathBuf::from("/tmp/workspace"));
-        let env = HashMap::new();
 
-        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = ClaudeCode.config_mount_args(&config, &opts).unwrap();
 
         assert!(
             args.contains(
@@ -183,42 +128,11 @@ mod tests {
     }
 
     #[test]
-    fn test_extra_run_args_includes_data_volumes() {
-        let config = Config::default(); // volumes_namespace = "cast"
-        let opts = basic_opts(PathBuf::from("/tmp/workspace"));
-        let env = HashMap::new();
-
-        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        assert!(args.contains(&"cast-claudecode-cache:/home/testuser/.cache:rw".to_string()));
-        assert!(args.contains(&"cast-claudecode-local:/home/testuser/.local:rw".to_string()));
-    }
-
-    #[test]
-    fn test_extra_run_args_user_flake_absent() {
-        let config = Config::default();
-        let opts = basic_opts(PathBuf::from("/tmp/workspace"));
-        let env = HashMap::new();
-
-        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
-
-        for arg in &args {
-            assert!(
-                !arg.contains("/.config/cast/nix"),
-                "unexpected flake mount: {}",
-                arg
-            );
-        }
-    }
-
-    #[test]
-    fn test_extra_run_args_passthrough_env() {
-        let config = Config::default();
-        let opts = basic_opts(PathBuf::from("/tmp/workspace"));
+    fn test_env_passthrough_args_includes_anthropic_key() {
         let mut env = HashMap::new();
         env.insert("ANTHROPIC_API_KEY".to_string(), "sk-abc".to_string());
 
-        let args = ClaudeCode.extra_run_args(&config, &opts, &env).unwrap();
+        let args = ClaudeCode.env_passthrough_args(&env);
 
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
