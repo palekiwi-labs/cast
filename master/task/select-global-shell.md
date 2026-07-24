@@ -1,8 +1,13 @@
 ---
 priority: high
-status: open
+status: closed
 title: Select Global Shell
+superseded_by: .cue/master/task/nix-native-harnesses.md
 ---
+> Superseded by `nix-native-harnesses.md`, which merges global-shell selection
+> with the nix-native harness pivot. Global-shell selection is now the primary
+> harness-selection mechanism there.
+
 ## Context
 
 `cast` supports running an agent from inside a global nix devshell.

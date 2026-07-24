@@ -1,0 +1,9 @@
+󰲒 cargo run -p cast -- nix-daemon shell
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.12s
+     Running `target/debug/cast nix-daemon shell`
+sh-5.3# cat /etc/nix/nix.conf 
+build-users-group = nixbld
+sandbox = false
+trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=
+sh-5.3# ls -la /etc/nix/nix.conf
+lrwxrwxrwx 1 root root 72 Jan  1  1980 /etc/nix/nix.conf -> /nix/store/v5csjmvkij9252rsavdmqc778ff19fjk-base-system/etc/nix/nix.conf

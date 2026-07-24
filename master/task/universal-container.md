@@ -1,8 +1,13 @@
 ---
 priority: high
 title: universal container
-status: open
+status: closed
+superseded_by: .cue/master/task/nix-native-harnesses.md
 ---
+> Superseded by `nix-native-harnesses.md`. The original hybrid-Docker-image
+> approach is replaced by nix-native provisioning via global devShells; the
+> mount/volume foundation is retained there.
+
 ## Context
 
 `cast` has been designed to support multiple agents however our implementation
