@@ -12,8 +12,6 @@ pub struct Config {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
 
-    pub version_cache_ttl_hours: u32,
-
     // Resource Limits
     pub memory: String,
     pub cpus: f64,
@@ -147,7 +145,6 @@ impl Default for Config {
         Config {
             global_shell: None,
             container_name: None,
-            version_cache_ttl_hours: 24,
             memory: "1024m".to_string(),
             cpus: 1.0,
             pids_limit: 512,

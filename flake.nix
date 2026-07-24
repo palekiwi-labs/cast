@@ -27,7 +27,7 @@
         pkgs = nixpkgs.legacyPackages.${system};
         rustToolchain = fenix.packages.${system}.stable.toolchain;
         common = {
-          version = "0.1.0";
+          version = "0.2.0";
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
