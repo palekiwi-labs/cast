@@ -20,7 +20,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, llm-agents, ... }:
+  outputs = { nixpkgs, flake-utils, llm-agents, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
