@@ -25,7 +25,7 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
 
     if !docker.is_container_running(&container_name)? {
         bail!(
-            "Dev container is not running: {}. Run 'ocx run {}' to start it.",
+            "Dev container is not running: {}. Run 'cast run {}' to start it.",
             container_name,
             agent.name(),
         );
