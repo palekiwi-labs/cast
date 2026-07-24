@@ -8,19 +8,7 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::dev::version::fetcher::NpmRegistryFetcher;
-use crate::dev::version::{self, VersionResolver};
 use crate::user::ResolvedUser;
-
-/// Resolve the concrete claudecode version based on config.
-pub fn resolve_version(config: &Config) -> Result<String> {
-    let cache_path = version::cache::get_cache_path("claudecode");
-    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
-    let fetcher = NpmRegistryFetcher {
-        package: "@anthropic-ai/claude-code",
-    };
-    resolver.resolve("latest", &fetcher)
-}
 
 /// The ClaudeCode agent — runs the `claude` program inside the dev container.
 pub struct ClaudeCode;
@@ -28,18 +16,6 @@ pub struct ClaudeCode;
 impl Agent for ClaudeCode {
     fn name(&self) -> &'static str {
         "claudecode"
-    }
-
-    fn dockerfile(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.dev.claudecode")
-    }
-
-    fn dockerfile_snippet(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.frag.claudecode")
-    }
-
-    fn resolve_version(&self, config: &Config) -> Result<String> {
-        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
@@ -246,41 +222,5 @@ mod tests {
 
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
-    }
-
-    #[test]
-    fn test_image_tag_format() {
-        assert_eq!(
-            ClaudeCode.image_tag("1.2.3"),
-            format!(
-                "localhost/cast:{}-claudecode-1.2.3",
-                env!("CARGO_PKG_VERSION")
-            )
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_has_correct_base_image() {
-        assert!(ClaudeCode.dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_dockerfile_copies_node_from_official_image() {
-        assert!(
-            ClaudeCode
-                .dockerfile()
-                .contains("COPY --from=node:lts-trixie-slim /usr/local /usr/local")
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_configures_git_safe_directory() {
-        assert!(
-            ClaudeCode
-                .dockerfile()
-                .contains(r#"git config --system safe.directory "*""#),
-            "Dockerfile must configure git safe.directory to allow nix develop . \
-             (libgit2) on bind-mounted workspaces"
-        );
     }
 }

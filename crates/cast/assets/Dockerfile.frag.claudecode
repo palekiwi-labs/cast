@@ -1,4 +1,0 @@
-# --- claudecode ---
-COPY --from=node:lts-trixie-slim /usr/local /usr/local
-ARG CLAUDECODE_VERSION=latest
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDECODE_VERSION}

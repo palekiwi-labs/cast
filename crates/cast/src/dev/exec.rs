@@ -87,8 +87,7 @@ pub fn exec(
     // Always ensure the Nix daemon is running — even --raw mounts /nix.
     nix_daemon::ensure_running(&docker, config)?;
 
-    let version = agent.resolve_version(config)?;
-    let image_tag = agent.image_tag(&version);
+    let image_tag = dev::image::image_tag();
 
     info!(
         %image_tag,
@@ -98,7 +97,7 @@ pub fn exec(
         "starting exec session"
     );
 
-    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
+    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
     let exec_cmd = build_exec_cmd(config, &run_opts, agent.name(), raw, &cmd);

@@ -8,19 +8,7 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::dev::version::fetcher::GithubReleaseFetcher;
-use crate::dev::version::{self, VersionResolver};
 use crate::user::ResolvedUser;
-
-/// Resolve the concrete opencode version based on config.
-pub fn resolve_version(config: &Config) -> Result<String> {
-    let cache_path = version::cache::get_cache_path("opencode");
-    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
-    let fetcher = GithubReleaseFetcher {
-        repo: "anomalyco/opencode",
-    };
-    resolver.resolve("latest", &fetcher)
-}
 
 /// The OpenCode agent — runs the `opencode` program inside the dev container.
 pub struct OpenCode;
@@ -28,18 +16,6 @@ pub struct OpenCode;
 impl Agent for OpenCode {
     fn name(&self) -> &'static str {
         "opencode"
-    }
-
-    fn dockerfile(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.dev.opencode")
-    }
-
-    fn dockerfile_snippet(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.frag.opencode")
-    }
-
-    fn resolve_version(&self, config: &Config) -> Result<String> {
-        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
@@ -254,32 +230,5 @@ mod tests {
 
         assert!(args.contains(&"cast-opencode-cache:/home/alice/.cache:rw".to_string()));
         assert!(args.contains(&"cast-opencode-local:/home/alice/.local:rw".to_string()));
-    }
-
-    #[test]
-    fn test_image_tag_format() {
-        assert_eq!(
-            OpenCode.image_tag("1.4.7"),
-            format!(
-                "localhost/cast:{}-opencode-1.4.7",
-                env!("CARGO_PKG_VERSION")
-            )
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_has_correct_base_image() {
-        assert!(OpenCode.dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_dockerfile_configures_git_safe_directory() {
-        assert!(
-            OpenCode
-                .dockerfile()
-                .contains(r#"git config --system safe.directory "*""#),
-            "Dockerfile must configure git safe.directory to allow nix develop . \
-             (libgit2) on bind-mounted workspaces"
-        );
     }
 }

@@ -187,9 +187,8 @@ pub fn run_agent(
     // Ensure the Nix daemon is running.
     nix_daemon::ensure_running(&docker, config)?;
 
-    // Resolve per-agent image and ensure it exists locally.
-    let version = agent.resolve_version(config)?;
-    let image_tag = agent.image_tag(&version);
+    // Resolve the single shared dev image and ensure it exists locally.
+    let image_tag = dev::image::image_tag();
 
     info!(
         %image_tag,
@@ -198,7 +197,7 @@ pub fn run_agent(
         "starting agent session"
     );
 
-    agent.ensure_image(&docker, config, &user, &version, BuildOptions::default())?;
+    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 

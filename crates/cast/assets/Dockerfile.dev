@@ -1,9 +1,10 @@
 FROM debian:trixie-slim
 
-ARG AGENT_VERSION=latest
 ARG TARGETARCH
 
-# Install essential tools for development
+# Install essential tools for development (union of all agents' deps).
+# No harness binaries are baked in — harnesses are provided by the global
+# Nix devShell selected at run time.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
@@ -11,24 +12,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ssh \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install Pi (auto-detect arch)
-RUN set -eux; \
-    case "${TARGETARCH}" in \
-        amd64) BIN_ARCH="x64" ;; \
-        arm64) BIN_ARCH="arm64" ;; \
-        *) echo "Unsupported architecture: ${TARGETARCH}"; exit 1 ;; \
-    esac; \
-    curl -fsSL "https://github.com/badlogic/pi-mono/releases/download/v${AGENT_VERSION}/pi-linux-${BIN_ARCH}.tar.gz" \
-    | tar -xz -C /opt/; \
-    ln -s /opt/pi/pi /usr/local/bin/pi; \
-    chmod +x /usr/local/bin/pi;
-
-# Configure Nix system-wide to enable flakes
-# (Nix store will be mounted from nix-daemon volume)
+# Configure Nix system-wide: enable flakes and accept flake-declared
+# substituters/config non-interactively. `accept-flake-config = true` is a hard
+# prerequisite: without it, non-interactive harness fetches from
+# cache.numtide.com prompt and fail for AI agents.
+# (Nix store itself is mounted read-only from the nix-daemon volume.)
 RUN mkdir -p /etc/nix && \
-    echo "experimental-features = nix-command flakes" > /etc/nix/nix.conf
+    printf 'experimental-features = nix-command flakes\naccept-flake-config = true\n' \
+        > /etc/nix/nix.conf
 
-# Add Nix to PATH (will be available if /nix is mounted)
+# Add Nix to PATH (available once /nix is mounted)
 ENV PATH="/nix/var/nix/profiles/default/bin:${PATH}"
 
 # Limit GC marker threads for Nix commands running in the container
@@ -37,23 +30,24 @@ ENV GC_NPROCS=1
 # Ensure Nix client communicates via daemon socket (store is mounted read-only)
 ENV NIX_REMOTE=daemon
 
+USER root
+
+# Allow git operations on bind-mounted workspaces owned by a different UID.
+# Required for `nix develop .` (libgit2) when the workspace UID does not match
+# the container process UID. Mirrors Dockerfile.nix-daemon.
+RUN git config --system safe.directory "*"
+
+# Ensure /usr/local/bin is in PATH (defensive for custom base images)
+ENV PATH="/usr/local/bin:${PATH}"
+
 ARG USERNAME=user
 ARG UID=1000
 ARG GID=1000
 ARG EXTRA_DIRS=""
 
-USER root
-
-# Allow git operations on bind-mounted workspaces owned by a different UID.
-# Required for `nix develop .` (libgit2) when the workspace UID does not match
-# the container process UID — triggered by Docker Desktop on macOS and by Linux
-# setups with userns-remap. Mirrors Dockerfile.nix-daemon.
-RUN git config --system safe.directory "*"
-
-# Ensure /usr/local/bin is in PATH
-ENV PATH="/usr/local/bin:${PATH}"
-
-# Create user and directories
+# Create user and the union of all agent config directories (idempotent - safe
+# even if the user/dirs already exist). The union covers every supported
+# harness so a single image serves all of them.
 RUN set -e; \
     if getent group ${GID} >/dev/null 2>&1; then \
         GROUP_NAME=$(getent group ${GID} | cut -d: -f1); \
@@ -67,12 +61,16 @@ RUN set -e; \
     mkdir -p /home/${USERNAME} && \
     mkdir -p /workspace \
              /home/${USERNAME}/.cache \
+             /home/${USERNAME}/.claude \
              /home/${USERNAME}/.pi \
+             /home/${USERNAME}/.config \
              /home/${USERNAME}/.local \
              ${EXTRA_DIRS} && \
     chown -R ${UID}:${GID} /workspace \
                            /home/${USERNAME}/.cache \
+                           /home/${USERNAME}/.claude \
                            /home/${USERNAME}/.pi \
+                           /home/${USERNAME}/.config \
                            /home/${USERNAME}/.local \
                            /home/${USERNAME} \
                            ${EXTRA_DIRS} 2>/dev/null || true
@@ -80,4 +78,4 @@ RUN set -e; \
 USER ${USERNAME}
 WORKDIR /workspace
 
-CMD ["pi"]
+CMD ["bash"]

@@ -15,7 +15,6 @@ pub mod shadow_mounts;
 pub mod shell;
 pub mod universal;
 pub mod utils;
-pub mod version;
 pub mod volumes;
 pub mod workspace;
 

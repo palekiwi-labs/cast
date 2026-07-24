@@ -4,11 +4,7 @@ use anyhow::Result;
 
 use crate::config::Config;
 use crate::dev::build_command;
-use crate::dev::image;
 use crate::dev::run::RunOpts;
-use crate::docker::BuildOptions;
-use crate::docker::client::DockerClient;
-use crate::user::ResolvedUser;
 
 /// An agent encapsulates everything that is specific to a particular program
 /// run inside the dev container (e.g. OpenCode, ClaudeCode).
@@ -16,48 +12,13 @@ use crate::user::ResolvedUser;
 /// Generic docker run arguments (security, resource limits, workspace mount,
 /// shadow mounts, etc.) are assembled by the caller. The agent is responsible
 /// only for the program-specific layer on top.
+///
+/// The dev image itself is shared and harness-free (see [`crate::dev::image`]);
+/// agents no longer contribute a Dockerfile or a version — harnesses are
+/// provided by the selected global Nix devShell.
 pub trait Agent {
     /// Short identifier used in container names and CLI subcommands (e.g. `"opencode"`).
     fn name(&self) -> &'static str;
-
-    /// Get the embedded Dockerfile content for this agent.
-    fn dockerfile(&self) -> &'static str;
-
-    /// Return the agent-specific installation fragment for inclusion in the
-    /// universal Dockerfile (the `RUN curl …` / `COPY --from=node … && npm
-    /// install` block). Everything else (FROM, apt, Nix, user creation) is
-    /// supplied by the universal preamble/postamble. Default is empty.
-    fn dockerfile_snippet(&self) -> &'static str {
-        ""
-    }
-
-    /// Resolve the concrete version based on config.
-    fn resolve_version(&self, config: &Config) -> Result<String>;
-
-    /// Resolve the Docker image tag that should be used for this agent given a version.
-    fn image_tag(&self, version: &str) -> String {
-        image::image_tag(self.name(), version)
-    }
-
-    /// Ensure the agent image exists locally, building it if necessary.
-    fn ensure_image(
-        &self,
-        docker: &DockerClient,
-        config: &Config,
-        user: &ResolvedUser,
-        version: &str,
-        opts: BuildOptions,
-    ) -> Result<()> {
-        image::ensure_image(
-            self.name(),
-            self.dockerfile(),
-            docker,
-            config,
-            user,
-            version,
-            opts,
-        )
-    }
 
     /// Return agent-specific `docker run` arguments (env vars, mounts, etc.)
     /// that are appended after the generic arguments.
@@ -70,18 +31,16 @@ pub trait Agent {
 
     /// Return only the config-directory bind mounts for this agent.
     ///
-    /// In non-universal mode this is called internally by each agent's
-    /// [`Agent::extra_run_args`]. In universal mode it is called for every
-    /// included agent to compose the union of all config mounts.
+    /// Called for every known agent to compose the union of all config mounts
+    /// (universal mounts are the unconditional default).
     fn config_mount_args(&self, _config: &Config, _opts: &RunOpts) -> Result<Vec<String>> {
         Ok(vec![])
     }
 
     /// Return the agent's environment-variable passthrough args (`-e VAR` pairs).
     ///
-    /// In non-universal mode this is called internally by each agent's
-    /// [`Agent::extra_run_args`]. In universal mode it is called for the
-    /// launched agent only (subprocess agents inherit the container env).
+    /// Called for the launched agent only (subprocess agents inherit the
+    /// container env).
     fn env_passthrough_args(&self, _env: &HashMap<String, String>) -> Vec<String> {
         Vec::new()
     }

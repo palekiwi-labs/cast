@@ -3,41 +3,17 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use crate::dev::version::fetcher::GithubReleaseFetcher;
-use crate::dev::version::{self, VersionResolver};
 use crate::user::ResolvedUser;
 use std::collections::HashMap;
 
 pub mod config_dir;
 pub mod env;
 
-/// Resolve the concrete pi version based on config.
-pub fn resolve_version(config: &Config) -> Result<String> {
-    let cache_path = version::cache::get_cache_path("pi");
-    let resolver = VersionResolver::new(cache_path, config.version_cache_ttl_hours);
-    let fetcher = GithubReleaseFetcher {
-        repo: "badlogic/pi-mono",
-    };
-    resolver.resolve("latest", &fetcher)
-}
-
 pub struct Pi;
 
 impl Agent for Pi {
     fn name(&self) -> &'static str {
         "pi"
-    }
-
-    fn dockerfile(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.dev.pi")
-    }
-
-    fn dockerfile_snippet(&self) -> &'static str {
-        include_str!("../../../assets/Dockerfile.frag.pi")
-    }
-
-    fn resolve_version(&self, config: &Config) -> Result<String> {
-        resolve_version(config)
     }
 
     fn prepare_host(&self, _config: &Config, opts: &RunOpts) -> Result<()> {
@@ -159,28 +135,5 @@ mod tests {
         assert!(args.contains(&"/home/testuser/.pi:/home/testuser/.pi:rw".to_string()));
         assert!(args.contains(&"-e".to_string()));
         assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
-    }
-
-    #[test]
-    fn test_image_tag_format() {
-        assert_eq!(
-            Pi.image_tag("0.71.0"),
-            format!("localhost/cast:{}-pi-0.71.0", env!("CARGO_PKG_VERSION"))
-        );
-    }
-
-    #[test]
-    fn test_dockerfile_has_correct_base_image() {
-        assert!(Pi.dockerfile().contains("FROM debian:trixie-slim"));
-    }
-
-    #[test]
-    fn test_dockerfile_configures_git_safe_directory() {
-        assert!(
-            Pi.dockerfile()
-                .contains(r#"git config --system safe.directory "*""#),
-            "Dockerfile must configure git safe.directory to allow nix develop . \
-             (libgit2) on bind-mounted workspaces"
-        );
     }
 }
