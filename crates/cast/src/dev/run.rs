@@ -58,8 +58,8 @@ pub struct SessionFlags {
 }
 
 /// Generic options for building the Docker run command.
-/// Contains only agent-agnostic data; each agent resolves its own
-/// additional context inside `Agent::extra_run_args`.
+/// Contains only agent-agnostic data; each agent contributes its own
+/// context via `Agent::config_mount_args` and `Agent::env_passthrough_args`.
 pub struct RunOpts {
     pub workspace: ResolvedWorkspace,
     pub user: ResolvedUser,
