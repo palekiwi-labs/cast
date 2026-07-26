@@ -11,8 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Breaking:** `cast build <agent>` is replaced by a single `cast build`. The
   three per-agent build subcommands built the identical shared dev image, so
-  the agent argument was removed. `--base`, `--force`, and `--no-cache` are
-  unchanged.
+  the agent argument was removed. `--force` and `--no-cache` are unchanged.
+- **Breaking:** `cast build`'s `--base` flag is renamed to `--nix-daemon`,
+  matching the `cast nix-daemon` command it triggers. The dev image is not
+  built from the nix-daemon image, so "base" was a misnomer.
 
 ### Removed
 

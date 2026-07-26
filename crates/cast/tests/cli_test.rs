@@ -118,7 +118,7 @@ fn test_cast_build_help() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage: cast build"))
-        .stdout(predicate::str::contains("--base"))
+        .stdout(predicate::str::contains("--nix-daemon"))
         .stdout(predicate::str::contains("--force"))
         .stdout(predicate::str::contains("--no-cache"));
 }

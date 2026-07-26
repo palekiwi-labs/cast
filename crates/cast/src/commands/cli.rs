@@ -62,12 +62,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
 
     match cli.command {
         Some(Commands::Build {
-            base,
+            nix_daemon,
             force,
             no_cache,
         }) => {
             let approved = verify_config(cfg)?;
-            dev::build_agent(&approved, base, force, no_cache)?;
+            dev::build_agent(&approved, nix_daemon, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
@@ -278,9 +278,9 @@ impl ExecAgent {
 pub enum Commands {
     /// Build the shared dev image
     Build {
-        /// Also build the Nix daemon base image
+        /// Also build the Nix daemon image
         #[arg(long)]
-        base: bool,
+        nix_daemon: bool,
         /// Force rebuild even if image already exists
         #[arg(short, long)]
         force: bool,
