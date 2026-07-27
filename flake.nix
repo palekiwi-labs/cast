@@ -69,6 +69,21 @@
             };
           });
 
+          cast-agent = pkgs.rustPlatform.buildRustPackage (common // {
+            pname = "cast-agent";
+            cargoBuildFlags = [ "-p" "cast-agent" ];
+            cargoTestFlags = [ "-p" "cast-agent" ];
+            # The supervisor/interrupt tests shell out to a scripted fake
+            # harness (`sh`) and inspect process groups (`ps`).
+            nativeCheckInputs = [ pkgs.bash pkgs.coreutils pkgs.procps ];
+            meta = with pkgs.lib; {
+              description =
+                "Process-isolated, supervised headless agent-harness launcher for cast";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+            };
+          });
+
           default = self.packages.${system}.cast;
         };
 
