@@ -1,0 +1,6 @@
+{"type":"step_start","timestamp":1785166057700,"sessionID":"ses_abc"}
+{"type":"tool_use","timestamp":1785166057710,"sessionID":"ses_abc","part":{"type":"tool","tool":"read","state":{"status":"completed"}}}
+{"type":"step_finish","timestamp":1785166057720,"sessionID":"ses_abc","reason":"tool-calls"}
+{"type":"step_start","timestamp":1785166057730,"sessionID":"ses_abc"}
+{"type":"text","timestamp":1785166057780,"sessionID":"ses_abc","part":{"type":"text","text":"Files in the directory.\n**Total: 12 entries**"}}
+{"type":"step_finish","timestamp":1785166057785,"sessionID":"ses_abc","reason":"stop"}
