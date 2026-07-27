@@ -3,4 +3,5 @@ resolver = "2"
 members = [
     "crates/cast",
     "crates/cast-mcp-client",
+    "crates/cast-agent",
 ]
