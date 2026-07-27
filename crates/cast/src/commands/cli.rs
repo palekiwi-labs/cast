@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
@@ -67,7 +67,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             no_cache,
         }) => {
             let approved = verify_config(cfg)?;
-            dev::build_agent(&approved, nix_daemon, force, no_cache)?;
+            dev::build_dev_image(&approved, nix_daemon, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
