@@ -1,5 +1,11 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
+use std::time::Duration;
+
+use cast_agent::harness::{Harness, OpenCode};
+use cast_agent::prompt::resolve_prompt;
+use cast_agent::run::{limits_from_timeout, orchestrate};
+use cast_agent::rundir::{create_run_dir, resolve_base_from_env};
 
 /// Process-isolated, supervised headless launcher for agent harnesses.
 #[derive(Debug, Parser)]
@@ -46,9 +52,74 @@ enum HarnessKind {
     Opencode,
 }
 
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-    match cli.command {
-        CommandKind::Run(_args) => todo!("orchestrator wired in Slice 1c"),
+impl HarnessKind {
+    fn adapter(self) -> Box<dyn Harness> {
+        match self {
+            HarnessKind::Opencode => Box::new(OpenCode),
+        }
     }
+}
+
+/// Exit code for a usage error (bad args / unreadable prompt) — emitted before
+/// any run begins, so it lives here rather than in the outcome table.
+const EXIT_USAGE: i32 = 2;
+
+#[cfg(unix)]
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+    let code = match cli.command {
+        CommandKind::Run(args) => run(args).await,
+    };
+    std::process::exit(code);
+}
+
+#[cfg(unix)]
+async fn run(args: RunArgs) -> i32 {
+    let harness = args.harness.adapter();
+
+    // Resolve the prompt first: a usage error here must not create a run dir.
+    let prompt = match resolve_prompt(args.file.as_deref(), args.prompt) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("cast-agent: {e}");
+            return EXIT_USAGE;
+        }
+    };
+
+    let base = resolve_base_from_env(args.run_dir);
+    let run_dir = match create_run_dir(&base, harness.name()) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("cast-agent: could not create run directory: {e}");
+            return EXIT_USAGE;
+        }
+    };
+    // The run-dir is the addressable control+recovery handle — announce it
+    // (and our PID) on stderr before any child output so an operator can tail.
+    eprintln!("cast-agent: run-dir {}", run_dir.display());
+    eprintln!("cast-agent: pid {}", std::process::id());
+
+    let limits = limits_from_timeout(Duration::from_secs(args.timeout));
+    let exe = harness.base_command().to_string();
+    let cmd_args = harness.headless_args();
+
+    match orchestrate(harness.as_ref(), &exe, &cmd_args, &prompt, &run_dir, limits).await {
+        Ok(report) => {
+            if let Some(msg) = report.final_message {
+                println!("{msg}");
+            }
+            report.exit_code
+        }
+        Err(e) => {
+            eprintln!("cast-agent: run failed: {e}");
+            EXIT_USAGE
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("cast-agent is only supported on unix platforms");
+    std::process::exit(2);
 }
