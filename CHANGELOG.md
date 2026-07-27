@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Breaking:** `cast build <agent>` is replaced by a single `cast build`. The
+  three per-agent build subcommands built the identical shared dev image, so
+  the agent argument was removed. `--force` and `--no-cache` are unchanged.
+- **Breaking:** `cast build`'s `--base` flag is renamed to `--nix-daemon`,
+  matching the `cast nix-daemon` command it triggers. The dev image is not
+  built from the nix-daemon image, so "base" was a misnomer.
+
+### Removed
+
+- Orphaned `ureq` dependency, left over after the nix-native pivot deleted the
+  harness version fetcher.
+
 ## [0.2.0] - 2026-07-24
 
 ### Changed

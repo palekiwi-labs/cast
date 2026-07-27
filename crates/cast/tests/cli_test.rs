@@ -112,21 +112,13 @@ fn test_cast_run_help() {
 
 #[test]
 fn test_cast_build_help() {
+    // `cast build` takes no agent subcommand: there is one shared dev image.
     cast()
         .args(["build", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage: cast build"))
-        .stdout(predicate::str::contains("opencode"));
-}
-
-#[test]
-fn test_cast_build_opencode_help() {
-    cast()
-        .args(["build", "opencode", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--base"))
+        .stdout(predicate::str::contains("--nix-daemon"))
         .stdout(predicate::str::contains("--force"))
         .stdout(predicate::str::contains("--no-cache"));
 }
@@ -167,17 +159,6 @@ fn test_cast_shell_opencode_help() {
         .args(["shell", "opencode", "--help"])
         .assert()
         .success();
-}
-
-#[test]
-fn test_cast_build_claudecode_help() {
-    cast()
-        .args(["build", "claudecode", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--base"))
-        .stdout(predicate::str::contains("--force"))
-        .stdout(predicate::str::contains("--no-cache"));
 }
 
 #[test]

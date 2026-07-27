@@ -20,7 +20,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
         return Ok(());
     }
 
-    // Get the dynamic image tag based on assets hash
+    // Get the image tag (derived from the cast version)
     let image_tag = image::get_image_tag();
 
     // Check if the image exists, build it if it doesn't

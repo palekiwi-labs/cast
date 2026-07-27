@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
@@ -62,39 +62,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
 
     match cli.command {
         Some(Commands::Build {
-            agent:
-                BuildAgent::Opencode {
-                    base,
-                    force,
-                    no_cache,
-                },
+            nix_daemon,
+            force,
+            no_cache,
         }) => {
             let approved = verify_config(cfg)?;
-            dev::build_agent(&OpenCode, &approved, base, force, no_cache)?;
-            Ok(ExitCode::SUCCESS)
-        }
-        Some(Commands::Build {
-            agent:
-                BuildAgent::Pi {
-                    base,
-                    force,
-                    no_cache,
-                },
-        }) => {
-            let approved = verify_config(cfg)?;
-            dev::build_agent(&Pi, &approved, base, force, no_cache)?;
-            Ok(ExitCode::SUCCESS)
-        }
-        Some(Commands::Build {
-            agent:
-                BuildAgent::Claudecode {
-                    base,
-                    force,
-                    no_cache,
-                },
-        }) => {
-            let approved = verify_config(cfg)?;
-            dev::build_agent(&ClaudeCode, &approved, base, force, no_cache)?;
+            dev::build_dev_image(&approved, nix_daemon, force, no_cache)?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Config { command }) => config::handle_config(&cfg, command),
@@ -177,47 +150,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         None => unreachable!("Clap should handle required subcommands"),
     }
-}
-
-#[derive(Subcommand)]
-#[command(subcommand_required = true)]
-pub enum BuildAgent {
-    /// Build the agent's Docker image
-    Opencode {
-        /// Also build the Nix daemon base image
-        #[arg(long)]
-        base: bool,
-        /// Force rebuild even if image already exists
-        #[arg(short, long)]
-        force: bool,
-        /// Do not use Docker cache
-        #[arg(long)]
-        no_cache: bool,
-    },
-    /// Build the Pi agent's Docker image
-    Pi {
-        /// Also build the Nix daemon base image
-        #[arg(long)]
-        base: bool,
-        /// Force rebuild even if image already exists
-        #[arg(short, long)]
-        force: bool,
-        /// Do not use Docker cache
-        #[arg(long)]
-        no_cache: bool,
-    },
-    /// Build the ClaudeCode agent's Docker image
-    Claudecode {
-        /// Also build the Nix daemon base image
-        #[arg(long)]
-        base: bool,
-        /// Force rebuild even if image already exists
-        #[arg(short, long)]
-        force: bool,
-        /// Do not use Docker cache
-        #[arg(long)]
-        no_cache: bool,
-    },
 }
 
 #[derive(Subcommand)]
@@ -344,10 +276,17 @@ impl ExecAgent {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Build an agent's image
+    /// Build the shared dev image
     Build {
-        #[command(subcommand)]
-        agent: BuildAgent,
+        /// Also build the Nix daemon image
+        #[arg(long)]
+        nix_daemon: bool,
+        /// Force rebuild even if image already exists
+        #[arg(short, long)]
+        force: bool,
+        /// Do not use Docker cache
+        #[arg(long)]
+        no_cache: bool,
     },
     /// Manage cast configuration
     Config {

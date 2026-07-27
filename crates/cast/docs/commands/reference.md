@@ -8,14 +8,13 @@ Starts an agent session.
 
 - `[extra_args]`: Extra arguments to pass directly to the agent binary.
 
-## `build <agent>`
+## `build`
 
 Builds the single, shared dev image without running it. All agents share the
-same harness-free image (`localhost/cast:{version}`); the `<agent>` argument is
-accepted for CLI symmetry but does not change what is built. Harnesses come from
-the global Nix devShell, not the image.
+same harness-free image (`localhost/cast:{version}`); harnesses come from the
+global Nix devShell, not the image, so the command takes no agent argument.
 
-- `--base`: Also build the Nix daemon base image.
+- `--nix-daemon`: Also build the Nix daemon image.
 - `--force`, `-f`: Force rebuild even if image already exists.
 - `--no-cache`: Do not use Docker cache.
 
