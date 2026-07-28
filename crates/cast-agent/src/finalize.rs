@@ -76,7 +76,7 @@ pub struct Verdict {
     pub log_path: String,
     pub prompt_path: String,
     pub event_count: usize,
-    pub duration_ms: u128,
+    pub duration_ms: u64,
     /// A short human-readable failure reason when one is available (spawn /
     /// supervision failure). Omitted from `result.json` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -195,7 +195,7 @@ pub fn build_verdict(
         log_path: log_path.to_string_lossy().into_owned(),
         prompt_path: prompt_path.to_string_lossy().into_owned(),
         event_count: events.len(),
-        duration_ms: duration.as_millis(),
+        duration_ms: duration.as_millis() as u64,
         error_detail,
         interrupt_signal,
     }

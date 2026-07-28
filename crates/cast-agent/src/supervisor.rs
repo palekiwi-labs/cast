@@ -21,9 +21,6 @@ use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
-#[cfg(unix)]
-use std::os::unix::process::ExitStatusExt;
-
 /// How the supervised run ended, before harness-specific classification.
 #[derive(Debug)]
 pub enum EndReason {
@@ -142,10 +139,13 @@ fn spawn_line_writer(
         while let Ok(line) = rx.recv() {
             // Each `line` is written verbatim with a trailing newline, then
             // flushed so a concurrent tailer / a post-SIGKILL reader sees it.
-            if w.write_all(line.as_bytes()).is_err() {
-                break;
-            }
-            if w.write_all(b"\n").is_err() {
+            // A mid-run write error is logged (not silently swallowed) before
+            // bailing, so a truncated stream.jsonl is diagnosable.
+            if let Err(e) = w
+                .write_all(line.as_bytes())
+                .and_then(|()| w.write_all(b"\n"))
+            {
+                eprintln!("cast-agent: writing run-log line: {e}");
                 break;
             }
             let _ = w.flush();
@@ -220,13 +220,21 @@ pub async fn supervise(
     let mut stdin = child.stdin.take().expect("stdin piped");
     let prompt_owned = prompt.to_vec();
     tokio::spawn(async move {
-        let _ = stdin.write_all(&prompt_owned).await;
+        // Best-effort: log an EPIPE / failed delivery rather than swallowing it
+        // (a child that died before draining stdin is diagnosable this way).
+        if let Err(e) = stdin.write_all(&prompt_owned).await {
+            eprintln!("cast-agent: writing prompt to child stdin: {e}");
+        }
         // Drop closes the fd -> EOF. Load-bearing: opencode blocks on stdin
         // EOF before starting.
         drop(stdin);
     });
 
     // stdout reader: live-flush each line + collect parsed events.
+    // INVARIANT: the reader task bodies must remain panic-free. The control
+    // plane joins them (bounded) after teardown; a panic here would surface as
+    // an empty/disk-fallback event set rather than a crash, but could still
+    // truncate the trace — keep them infallible (no unwraps on parsed data).
     let stdout = child.stdout.take().expect("stdout piped");
     let (stdout_tx, stdout_writer) = spawn_line_writer(&paths.stream_jsonl)?;
     let stdout_task = tokio::spawn(async move {
@@ -364,12 +372,4 @@ async fn graceful_teardown(
         _ = sigterm.recv() => {}
     }
     guard.kill_now();
-}
-
-impl EndReason {
-    /// The signal number the child was terminated by, if it died by signal.
-    #[cfg(unix)]
-    pub fn child_signal(status: &ExitStatus) -> Option<i32> {
-        status.signal()
-    }
 }

@@ -208,6 +208,10 @@ fn child_trapping_sigterm_is_sigkilled_after_grace() {
     let pgid_file = dir.path().join("child.pgid");
 
     // The child ignores SIGTERM; only SIGKILL after the 3s grace can stop it.
+    // `trap '' TERM` sets SIGTERM to the ignored disposition, which is INHERITED
+    // across fork/execve — so this reliably models a real harness (or any
+    // grandchild) that survives the graceful phase and forces the SIGKILL
+    // escalation path.
     let script = format!(
         "trap '' TERM; printf '%d' $$ > {p}; \
          printf '{{\"type\":\"text\",\"part\":{{\"text\":\"stubborn\"}}}}\\n'; \

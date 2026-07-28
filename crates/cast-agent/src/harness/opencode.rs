@@ -39,13 +39,16 @@ impl Harness for OpenCode {
     }
 
     fn extract_result(&self, events: &[serde_json::Value]) -> Option<String> {
-        // Filter to `text`-typed events and take the last one. The stream's
-        // terminal line is always a `step_finish`, so the last `text` event
-        // holds the substantive answer (verified: opencode-self-exit trace).
+        // Filter to `text`-typed events and take the last one whose text is
+        // actually extractable. The stream's terminal line is always a
+        // `step_finish`, so the last usable `text` event holds the substantive
+        // answer (verified: opencode-self-exit trace). Using `filter_map`
+        // rather than `find().and_then()` means a malformed trailing `text`
+        // event falls back to an earlier valid one instead of yielding None.
         events
             .iter()
             .rev()
-            .find(|e| e.get("type").and_then(|t| t.as_str()) == Some("text"))
-            .and_then(text_of_event)
+            .filter(|e| e.get("type").and_then(|t| t.as_str()) == Some("text"))
+            .find_map(text_of_event)
     }
 }
