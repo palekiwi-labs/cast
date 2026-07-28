@@ -201,6 +201,35 @@ async fn live_flush_writes_before_supervise_returns() {
 }
 
 #[tokio::test]
+async fn escaped_grandchild_does_not_hang_supervise() {
+    // A grandchild `setsid`s out of the process group while holding the stdout
+    // pipe write-end open, then the direct child exits 0. The group SIGKILL
+    // cannot reach the escaped grandchild, so the stdout reader never hits EOF.
+    // supervise() must still return promptly (bounded reader join + on-disk
+    // fallback) rather than hang forever on the writer-thread join.
+    let dir = tempfile::tempdir().unwrap();
+    // The grandchild `setsid`s into its own session (escaping the process
+    // group) and holds fd 1 (the stdout pipe write-end) for the whole sleep;
+    // its two-statement body avoids the shell's single-command exec-optimize.
+    // The direct child sleeps briefly before exiting so the grandchild's
+    // setsid() completes and firmly escapes BEFORE the group SIGKILL fires —
+    // otherwise our own kill races and reaps it, masking the bug.
+    let (exe, args) =
+        sh(r#"printf '{"n":1}\n'; setsid sh -c 'sleep 30; echo x' & sleep 0.3; exit 0"#);
+    let p = paths(dir.path());
+    let fut = supervise(&exe, &args, b"", &p, limits(10000));
+    let out = tokio::time::timeout(Duration::from_secs(8), fut)
+        .await
+        .expect("supervise must not hang on an escaped grandchild")
+        .unwrap();
+    assert!(matches!(out.end, EndReason::Exited(s) if s.success()));
+    // The single event is recovered via the on-disk stream.jsonl fallback
+    // (the in-memory reader task was abandoned because it never EOF'd).
+    assert_eq!(out.events.len(), 1);
+    assert_eq!(out.events[0]["n"], 1);
+}
+
+#[tokio::test]
 async fn nonzero_exit_is_reported() {
     let dir = tempfile::tempdir().unwrap();
     let (exe, args) = sh("exit 7");

@@ -265,21 +265,43 @@ pub async fn supervise(
         }
     };
 
-    // C1: bound BOTH reader joins; a grandchild holding a pipe write-end means
-    // the reader never EOFs. Fall back to the on-disk trace.
-    let events = match tokio::time::timeout(READER_JOIN_TIMEOUT, stdout_task).await {
-        Ok(Ok(events)) => events,
-        _ => events_from_disk(&paths.stream_jsonl),
+    // C1 + B1: bound BOTH reader joins. A grandchild that holds a pipe
+    // write-end open (e.g. a `setsid` daemon escaping the group SIGKILL) means
+    // the reader never hits EOF. On timeout we must ABORT the reader task, not
+    // merely drop its JoinHandle: dropping DETACHES the task, leaving it
+    // running and still owning its line-writer `Sender`, which keeps the writer
+    // thread's blocking `recv()` — and thus the writer join below — hung
+    // forever. Aborting drops the abandoned task's `Sender`, releasing the
+    // writer. Fall back to the on-disk trace for the events.
+    let mut stdout_task = stdout_task;
+    let events = tokio::select! {
+        joined = &mut stdout_task => joined.unwrap_or_default(),
+        _ = tokio::time::sleep(READER_JOIN_TIMEOUT) => {
+            stdout_task.abort();
+            let _ = stdout_task.await; // await the cancellation -> drop Sender
+            events_from_disk(&paths.stream_jsonl)
+        }
     };
-    let _ = tokio::time::timeout(READER_JOIN_TIMEOUT, stderr_task).await;
 
-    // Writer threads finish once their senders drop; joining them is a
-    // formality (the reader tasks already dropped the senders on EOF). Do not
-    // block indefinitely if a reader was abandoned above.
-    let _ = tokio::task::spawn_blocking(move || {
-        let _ = stdout_writer.join();
-        let _ = stderr_writer.join();
-    })
+    let mut stderr_task = stderr_task;
+    tokio::select! {
+        _ = &mut stderr_task => {}
+        _ = tokio::time::sleep(READER_JOIN_TIMEOUT) => {
+            stderr_task.abort();
+            let _ = stderr_task.await;
+        }
+    }
+
+    // Writer threads exit once their `Sender`s drop (the readers EOF'd or were
+    // aborted above). Bound the join defensively so a wedged writer can never
+    // hang supervise() — durability already comes from the per-line flush.
+    let _ = tokio::time::timeout(
+        READER_JOIN_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            let _ = stdout_writer.join();
+            let _ = stderr_writer.join();
+        }),
+    )
     .await;
 
     Ok(SuperviseOutput { events, end, pgid })

@@ -74,8 +74,10 @@
             cargoBuildFlags = [ "-p" "cast-agent" ];
             cargoTestFlags = [ "-p" "cast-agent" ];
             # The supervisor/interrupt tests shell out to a scripted fake
-            # harness (`sh`) and inspect process groups (`ps`).
-            nativeCheckInputs = [ pkgs.bash pkgs.coreutils pkgs.procps ];
+            # harness (`sh`) and inspect process groups (`ps`). The
+            # escaped-grandchild regression test needs `setsid` (util-linux).
+            nativeCheckInputs =
+              [ pkgs.bash pkgs.coreutils pkgs.procps pkgs.util-linux ];
             meta = with pkgs.lib; {
               description =
                 "Process-isolated, supervised headless agent-harness launcher for cast";
