@@ -98,7 +98,7 @@ async fn timeout_kills_entire_process_group() {
     let out = supervise(&exe, &args, b"", &paths(dir.path()), limits(400))
         .await
         .unwrap();
-    assert!(matches!(out.end, EndReason::TimedOut));
+    assert!(matches!(out.end, EndReason::TimedOut { .. }));
     let pgid = out.pgid.expect("pgid captured");
     // The whole group must be torn down. A backgrounded grandchild is
     // reparented to init after we reap the leader and may linger as a zombie
@@ -118,7 +118,7 @@ async fn silent_child_times_out_at_deadline() {
     let out = supervise(&exe, &args, b"", &paths(dir.path()), limits(400))
         .await
         .unwrap();
-    assert!(matches!(out.end, EndReason::TimedOut));
+    assert!(matches!(out.end, EndReason::TimedOut { .. }));
     assert!(
         start.elapsed() < Duration::from_secs(3),
         "timeout must fire"
@@ -132,7 +132,7 @@ async fn partial_log_survives_timeout() {
     let out = supervise(&exe, &args, b"", &paths(dir.path()), limits(500))
         .await
         .unwrap();
-    assert!(matches!(out.end, EndReason::TimedOut));
+    assert!(matches!(out.end, EndReason::TimedOut { .. }));
     assert_eq!(out.events.len(), 3, "3 lines emitted before the hang");
     let disk = std::fs::read_to_string(dir.path().join("stream.jsonl")).unwrap();
     assert_eq!(disk.lines().count(), 3);

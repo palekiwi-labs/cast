@@ -134,7 +134,11 @@ fn hang_script(pgid_file: &Path) -> String {
     )
 }
 
-fn assert_interrupted(base: &Path, pgid_file: &Path, signal: i32) {
+/// `trigger` is the signal cast-agent received; `child_death` is how the child
+/// actually died (SIGTERM if it honored the graceful stop, SIGKILL if it had to
+/// be force-killed after the grace). `exit.signal` reflects `child_death`;
+/// `interrupt_signal` reflects `trigger`.
+fn assert_interrupted(base: &Path, pgid_file: &Path, trigger: i32, child_death: i32) {
     let pgid: i32 = std::fs::read_to_string(pgid_file)
         .unwrap()
         .trim()
@@ -147,7 +151,8 @@ fn assert_interrupted(base: &Path, pgid_file: &Path, signal: i32) {
     );
     let v = read_result(base);
     assert_eq!(v["outcome"], "interrupted");
-    assert_eq!(v["exit"]["signal"], signal);
+    assert_eq!(v["exit"]["signal"], child_death);
+    assert_eq!(v["interrupt_signal"], trigger);
 }
 
 #[test]
@@ -168,7 +173,8 @@ fn sigint_interrupts_and_tears_down_group() {
     kill(agent.id(), libc::SIGINT);
     let status = agent.wait().unwrap();
     assert_eq!(status.code(), Some(4), "interrupted exit code");
-    assert_interrupted(&base, &pgid_file, libc::SIGINT);
+    // Trigger SIGINT; the child (plain `sleep`) honors the graceful SIGTERM.
+    assert_interrupted(&base, &pgid_file, libc::SIGINT, libc::SIGTERM);
 }
 
 #[test]
@@ -189,7 +195,8 @@ fn sigterm_interrupts_and_tears_down_group() {
     kill(agent.id(), libc::SIGTERM);
     let status = agent.wait().unwrap();
     assert_eq!(status.code(), Some(4), "interrupted exit code");
-    assert_interrupted(&base, &pgid_file, libc::SIGTERM);
+    // Trigger SIGTERM; the child (plain `sleep`) dies by the graceful SIGTERM.
+    assert_interrupted(&base, &pgid_file, libc::SIGTERM, libc::SIGTERM);
 }
 
 #[test]
@@ -224,5 +231,7 @@ fn child_trapping_sigterm_is_sigkilled_after_grace() {
         "should wait the grace window before SIGKILL"
     );
     assert_eq!(status.code(), Some(4));
-    assert_interrupted(&base, &pgid_file, libc::SIGINT);
+    // Trigger SIGINT; the child traps/ignores SIGTERM so it is force-killed by
+    // SIGKILL after the grace window.
+    assert_interrupted(&base, &pgid_file, libc::SIGINT, libc::SIGKILL);
 }

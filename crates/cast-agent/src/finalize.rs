@@ -81,6 +81,41 @@ pub struct Verdict {
     /// supervision failure). Omitted from `result.json` when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error_detail: Option<String>,
+    /// The signal cast-agent itself received that triggered an interruption
+    /// (distinct from `exit.signal`, which is how the child actually died).
+    /// Present only for `interrupted` outcomes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interrupt_signal: Option<i32>,
+}
+
+/// Derive `ExitInfo` from a reaped child status: a normal `code`, else the
+/// terminating `signal`. When the status is unavailable (could not reap), fall
+/// back to `fallback_signal` (the signal cast-agent last sent the group).
+#[cfg(unix)]
+fn exit_info_from_status(
+    status: &Option<std::process::ExitStatus>,
+    fallback_signal: i32,
+) -> ExitInfo {
+    use std::os::unix::process::ExitStatusExt;
+    match status {
+        Some(s) => {
+            if let Some(code) = s.code() {
+                ExitInfo {
+                    code: Some(code),
+                    signal: None,
+                }
+            } else {
+                ExitInfo {
+                    code: None,
+                    signal: s.signal().or(Some(fallback_signal)),
+                }
+            }
+        }
+        None => ExitInfo {
+            code: None,
+            signal: Some(fallback_signal),
+        },
+    }
 }
 
 /// Classify a supervisor `EndReason` into an `Outcome` + child `ExitInfo`.
@@ -113,19 +148,13 @@ pub fn classify(end: &EndReason) -> (Outcome, ExitInfo) {
                 )
             }
         }
-        EndReason::TimedOut => (
+        EndReason::TimedOut { child_status } => (
             Outcome::TimedOut,
-            ExitInfo {
-                code: None,
-                signal: Some(libc::SIGKILL),
-            },
+            exit_info_from_status(child_status, libc::SIGKILL),
         ),
-        EndReason::Interrupted { signal } => (
+        EndReason::Interrupted { child_status, .. } => (
             Outcome::Interrupted,
-            ExitInfo {
-                code: None,
-                signal: Some(*signal),
-            },
+            exit_info_from_status(child_status, libc::SIGKILL),
         ),
         EndReason::SpawnFailed(_) | EndReason::SuperviseFailed(_) => (
             Outcome::Crashed,
@@ -154,6 +183,10 @@ pub fn build_verdict(
         EndReason::SpawnFailed(m) | EndReason::SuperviseFailed(m) => Some(m.clone()),
         _ => None,
     };
+    let interrupt_signal = match end {
+        EndReason::Interrupted { trigger, .. } => Some(*trigger),
+        _ => None,
+    };
     Verdict {
         outcome: outcome.as_str(),
         final_message,
@@ -164,6 +197,7 @@ pub fn build_verdict(
         event_count: events.len(),
         duration_ms: duration.as_millis(),
         error_detail,
+        interrupt_signal,
     }
 }
 
@@ -217,22 +251,49 @@ mod tests {
     }
 
     #[test]
-    fn timed_out_maps_to_sigkill() {
-        let (outcome, exit) = classify(&EndReason::TimedOut);
+    fn timed_out_reflects_child_death_signal() {
+        // The child was SIGKILLed by the timeout path; exit mirrors that.
+        let end = EndReason::TimedOut {
+            child_status: Some(ExitStatus::from_raw(libc::SIGKILL)),
+        };
+        let (outcome, exit) = classify(&end);
         assert_eq!(outcome, Outcome::TimedOut);
         assert_eq!(outcome.exit_code(), 3);
         assert_eq!(exit.signal, Some(libc::SIGKILL));
     }
 
     #[test]
-    fn interrupted_carries_received_signal() {
+    fn timed_out_without_status_falls_back_to_sigkill() {
+        let (outcome, exit) = classify(&EndReason::TimedOut { child_status: None });
+        assert_eq!(outcome, Outcome::TimedOut);
+        assert_eq!(exit.signal, Some(libc::SIGKILL));
+    }
+
+    #[test]
+    fn interrupted_exit_reflects_child_disposition_not_trigger() {
+        // Trigger was SIGINT, but the child honored the graceful stop and died
+        // by SIGTERM. exit.signal must be the child's death (SIGTERM), while
+        // interrupt_signal (built in the verdict) carries the trigger.
         let end = EndReason::Interrupted {
-            signal: libc::SIGTERM,
+            trigger: libc::SIGINT,
+            child_status: Some(ExitStatus::from_raw(libc::SIGTERM)),
         };
         let (outcome, exit) = classify(&end);
         assert_eq!(outcome, Outcome::Interrupted);
         assert_eq!(outcome.exit_code(), 4);
         assert_eq!(exit.signal, Some(libc::SIGTERM));
+
+        let verdict = build_verdict(
+            "opencode",
+            &end,
+            &[],
+            None,
+            Path::new("s"),
+            Path::new("p"),
+            Duration::from_millis(1),
+        );
+        assert_eq!(verdict.interrupt_signal, Some(libc::SIGINT));
+        assert_eq!(verdict.exit.signal, Some(libc::SIGTERM));
     }
 
     #[test]

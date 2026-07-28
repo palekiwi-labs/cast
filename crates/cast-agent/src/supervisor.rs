@@ -30,10 +30,18 @@ pub enum EndReason {
     /// The child exited on its own (possibly non-zero, possibly by its own
     /// crash signal — inspect the status).
     Exited(ExitStatus),
-    /// The wall-clock deadline fired; the group was killed.
-    TimedOut,
-    /// cast-agent received SIGINT/SIGTERM; the group was torn down.
-    Interrupted { signal: i32 },
+    /// The wall-clock deadline fired; the group was killed. `child_status` is
+    /// the child's reaped disposition (how it actually died — normally our
+    /// SIGKILL), or `None` if it could not be reaped.
+    TimedOut { child_status: Option<ExitStatus> },
+    /// cast-agent received SIGINT/SIGTERM (`trigger`); the group was torn down.
+    /// `child_status` is how the CHILD actually died (SIGTERM if it honored the
+    /// graceful stop, SIGKILL if it had to be force-killed after the grace),
+    /// distinct from the `trigger` cast-agent received.
+    Interrupted {
+        trigger: i32,
+        child_status: Option<ExitStatus>,
+    },
     /// The harness child could not be spawned (e.g. missing binary). This is a
     /// runtime failure, not a usage error: it still yields a `Crashed` verdict.
     SpawnFailed(String),
@@ -254,17 +262,17 @@ pub async fn supervise(
             res = child.wait() => EndReason::Exited(res?),
             _ = &mut sleep => {
                 guard.kill_now();
-                EndReason::TimedOut
+                EndReason::TimedOut { child_status: None }
             }
             _ = sigint.recv() => {
                 graceful_teardown(&mut guard, &mut child, &mut sigint,
                     &mut sigterm, limits.grace).await;
-                EndReason::Interrupted { signal: libc::SIGINT }
+                EndReason::Interrupted { trigger: libc::SIGINT, child_status: None }
             }
             _ = sigterm.recv() => {
                 graceful_teardown(&mut guard, &mut child, &mut sigint,
                     &mut sigterm, limits.grace).await;
-                EndReason::Interrupted { signal: libc::SIGTERM }
+                EndReason::Interrupted { trigger: libc::SIGTERM, child_status: None }
             }
         }
     };
@@ -273,13 +281,24 @@ pub async fn supervise(
     // Interrupted classification does not leave the status unclassifiable.
     guard.kill_now();
     let end = match end {
-        EndReason::Exited(_) => end,
-        other => {
-            // Re-wait to reap; the exit is by our SIGKILL but reaping avoids a
-            // zombie and lets kill_on_drop stay a pure backstop.
-            let _ = child.wait().await;
-            other
+        EndReason::TimedOut { .. } => {
+            // Re-wait to reap AND to record how the child actually died (our
+            // SIGKILL), rather than discarding the status.
+            let child_status = child.wait().await.ok();
+            EndReason::TimedOut { child_status }
         }
+        EndReason::Interrupted { trigger, .. } => {
+            // The reaped status reflects the CHILD's real death cause (SIGTERM
+            // if it honored the grace, SIGKILL otherwise) — distinct from the
+            // `trigger` signal cast-agent received.
+            let child_status = child.wait().await.ok();
+            EndReason::Interrupted {
+                trigger,
+                child_status,
+            }
+        }
+        // Exited / SpawnFailed / SuperviseFailed need no reap here.
+        other => other,
     };
 
     // C1 + B1: bound BOTH reader joins. A grandchild that holds a pipe
