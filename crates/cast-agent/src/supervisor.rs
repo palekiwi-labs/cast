@@ -34,6 +34,11 @@ pub enum EndReason {
     TimedOut,
     /// cast-agent received SIGINT/SIGTERM; the group was torn down.
     Interrupted { signal: i32 },
+    /// The harness child could not be spawned (e.g. missing binary). This is a
+    /// runtime failure, not a usage error: it still yields a `Crashed` verdict.
+    SpawnFailed(String),
+    /// Supervision failed after spawn (e.g. an I/O error awaiting the child).
+    SuperviseFailed(String),
 }
 
 /// The raw product of a supervised run. Harness-agnostic; the orchestrator
@@ -177,7 +182,19 @@ pub async fn supervise(
     // C5: inherit the parent env (do NOT env_clear) — the container is the
     // sandbox; clearing would drop HOME / API keys and fail auth.
 
-    let mut child = cmd.spawn()?;
+    // A spawn failure (missing/unexecutable harness binary) is a runtime
+    // failure, not a fatal error: yield a Crashed verdict so the recovery
+    // contract's "every run yields a receipt" guarantee holds.
+    let mut child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(SuperviseOutput {
+                events: Vec::new(),
+                end: EndReason::SpawnFailed(format!("spawn {exe}: {e}")),
+                pgid: None,
+            });
+        }
+    };
 
     // Capture the PGID ONCE, immediately post-spawn, as a plain i32 (never
     // re-read child.id() — it returns None after reap: PID-reuse hazard).

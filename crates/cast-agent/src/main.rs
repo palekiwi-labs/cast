@@ -116,7 +116,11 @@ async fn run(args: RunArgs) -> i32 {
             report.exit_code
         }
         Err(e) => {
-            eprintln!("cast-agent: run failed: {e}");
+            // orchestrate now maps runtime/supervision failures to a Crashed
+            // verdict internally; a returned Err is a pre-run setup failure
+            // (e.g. persisting prompt.txt / cast-agent.pid failed), which is a
+            // usage-class error with no run to report.
+            eprintln!("cast-agent: setup failed: {e}");
             EXIT_USAGE
         }
     }

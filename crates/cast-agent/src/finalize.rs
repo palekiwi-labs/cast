@@ -77,6 +77,10 @@ pub struct Verdict {
     pub prompt_path: String,
     pub event_count: usize,
     pub duration_ms: u128,
+    /// A short human-readable failure reason when one is available (spawn /
+    /// supervision failure). Omitted from `result.json` when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_detail: Option<String>,
 }
 
 /// Classify a supervisor `EndReason` into an `Outcome` + child `ExitInfo`.
@@ -123,6 +127,13 @@ pub fn classify(end: &EndReason) -> (Outcome, ExitInfo) {
                 signal: Some(*signal),
             },
         ),
+        EndReason::SpawnFailed(_) | EndReason::SuperviseFailed(_) => (
+            Outcome::Crashed,
+            ExitInfo {
+                code: None,
+                signal: None,
+            },
+        ),
     }
 }
 
@@ -139,6 +150,10 @@ pub fn build_verdict(
     duration: Duration,
 ) -> Verdict {
     let (outcome, exit) = classify(end);
+    let error_detail = match end {
+        EndReason::SpawnFailed(m) | EndReason::SuperviseFailed(m) => Some(m.clone()),
+        _ => None,
+    };
     Verdict {
         outcome: outcome.as_str(),
         final_message,
@@ -148,6 +163,7 @@ pub fn build_verdict(
         prompt_path: prompt_path.to_string_lossy().into_owned(),
         event_count: events.len(),
         duration_ms: duration.as_millis(),
+        error_detail,
     }
 }
 

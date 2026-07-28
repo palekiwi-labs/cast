@@ -71,21 +71,30 @@ pub async fn orchestrate(
     };
 
     let start = Instant::now();
-    let out = supervise(exe, args, prompt.as_bytes(), &paths, limits).await?;
+    // A supervision failure AFTER persist-before-spawn is still a run: map it
+    // to a Crashed verdict and write result.json rather than propagating Err
+    // (which the CLI would misreport as a usage error with no receipt).
+    let (end, events) = match supervise(exe, args, prompt.as_bytes(), &paths, limits).await {
+        Ok(out) => (out.end, out.events),
+        Err(e) => (
+            crate::supervisor::EndReason::SuperviseFailed(e.to_string()),
+            Vec::new(),
+        ),
+    };
     let duration = start.elapsed();
 
-    let (outcome, _exit) = classify(&out.end);
+    let (outcome, _exit) = classify(&end);
     // The final message is only meaningful/wanted on the happy path.
     let final_message = if outcome == Outcome::Completed {
-        harness.extract_result(&out.events)
+        harness.extract_result(&events)
     } else {
         None
     };
 
     let verdict = build_verdict(
         harness.name(),
-        &out.end,
-        &out.events,
+        &end,
+        &events,
         final_message.clone(),
         &layout.stream_jsonl,
         &layout.prompt_txt,

@@ -90,6 +90,38 @@ async fn failed_run_reports_nonzero_and_no_final_message() {
 }
 
 #[tokio::test]
+async fn missing_harness_yields_crashed_verdict() {
+    // A spawn failure (missing harness binary) is a runtime failure, NOT a
+    // usage error: the recovery contract requires EVERY run to yield a verdict.
+    // orchestrate must return Ok, classify Crashed (exit 5), and still write
+    // result.json rather than propagating Err (which the CLI maps to exit 2
+    // with no receipt).
+    let dir = tempfile::tempdir().unwrap();
+    let exe = "no-such-cast-agent-harness-binary-xyz".to_string();
+    let report = orchestrate(
+        &OpenCode,
+        &exe,
+        &[],
+        "p",
+        dir.path(),
+        limits_from_timeout(Duration::from_secs(5)),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(report.exit_code, 5);
+    let v = read_json(&dir.path().join("result.json"));
+    assert_eq!(v["outcome"], "crashed");
+    assert_eq!(v["event_count"], 0);
+    assert!(
+        v["error_detail"]
+            .as_str()
+            .unwrap()
+            .contains("no-such-cast-agent-harness-binary-xyz")
+    );
+}
+
+#[tokio::test]
 async fn timed_out_run_reports_timeout_and_partial_trace() {
     let dir = tempfile::tempdir().unwrap();
     let (exe, args) = sh(r#"printf '{"type":"text","part":{"text":"hi"}}\n'; sleep 100"#);
