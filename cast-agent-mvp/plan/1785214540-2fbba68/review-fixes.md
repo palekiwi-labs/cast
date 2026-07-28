@@ -1,9 +1,5 @@
 ---
-status: open
-refs: undefined
----
----
-status: in-progress
+status: complete
 refs:
 - .cue/cast-agent-mvp/spec/index.md
 - .cue/cast-agent-mvp/plan/1785127643-8ca9cdd/phase-1-mvp.md
@@ -48,33 +44,21 @@ commits per the `git-commit` skill; cue-log after each commit.
 
 ## Slice R1 — Fix C1 writer-join hang + escaped-grandchild regression test
 
-- [ ] Add `pkgs.util-linux` to `cast-agent` `nativeCheckInputs` in `flake.nix`
-      (`setsid` lives in util-linux, not coreutils; needed for the regression
-      test to run under `nix build`).
-- [ ] RED: `tests/supervisor_test.rs::escaped_grandchild_does_not_hang_supervise`
-      — a child that emits one line then spawns `setsid sh -c 'sleep 30' &`
-      holding stdout and exits 0. Assert `supervise()` returns within ~8s
-      (currently hangs forever), `EndReason::Exited(0)`, and the single event
-      is recovered via `events_from_disk` (events.len()==1).
-- [ ] GREEN: in `supervisor.rs`, replace the unbounded writer join with: abort
-      any reader task that did not complete within `READER_JOIN_TIMEOUT`
-      (`JoinHandle::abort(&self)` — this drops the abandoned reader's
-      line-writer `Sender`, unblocking the writer thread), then bound the
-      writer-thread join itself with `READER_JOIN_TIMEOUT` as a defensive
-      backstop. Use `tokio::select!` with `&mut <task>` so the `JoinHandle`
-      remains owned and callable for `.abort()` on the timeout arm. Fix the
-      false code comment at `supervisor.rs:276-278`.
-- [ ] Verify `cargo test -p cast-agent` green; `cargo clippy -D warnings`; fmt.
-- [ ] Commit.
+- [x] Add `pkgs.util-linux` to `cast-agent` `nativeCheckInputs` in `flake.nix`.
+- [x] RED: `tests/supervisor_test.rs::escaped_grandchild_does_not_hang_supervise`.
+      Repro needed a two-statement grandchild body (avoid exec-optimize) + a
+      `sleep 0.3` in the direct child so setsid() escapes before our group
+      SIGKILL races and reaps it. Confirmed RED (8s watchdog hit).
+- [x] GREEN: `supervisor.rs` aborts the reader task on join timeout (releases
+      its Sender, unblocking the writer thread) + bounds the writer join with
+      `timeout(READER_JOIN_TIMEOUT)`. False comment fixed.
+- [x] Verify `cargo test -p cast-agent` green; `cargo clippy -D warnings`; fmt.
+- [x] Commit (fix: bound writer join so escaped grandchild cannot hang supervise).
 
 ## Slice R2 — Error-path verdict (every run yields result.json)
 
-- [ ] RED: `tests/orchestrate_test.rs::missing_harness_yields_crashed_verdict`
-      — call `orchestrate` with `exe = "no-such-binary-..."`; assert it returns
-      `Ok`, `exit_code == 5` (Crashed, NOT 2), `result.json.outcome == "crashed"`,
-      `event_count == 0`, and `error_detail` mentions the binary. (Currently
-      `orchestrate` returns `Err` and the test's `.unwrap()` panics = RED.)
-- [ ] GREEN:
+- [x] RED: `tests/orchestrate_test.rs::missing_harness_yields_crashed_verdict`.
+- [x] GREEN:
       - Add `EndReason::SpawnFailed(String)` + `EndReason::SuperviseFailed(String)`.
       - In `supervise`: convert `cmd.spawn()?` to return
         `Ok(SuperviseOutput { end: SpawnFailed(e), events: vec![], pgid: None })`.
@@ -89,8 +73,8 @@ commits per the `git-commit` skill; cue-log after each commit.
         messages in `build_verdict`.
       - `main.rs`: the `Err` arm is now pre-run-setup-only; relabel the message
         to "cast-agent: setup failed: {e}" (exit 2 stays for that arm).
-- [ ] Verify all tests green; clippy; fmt.
-- [ ] Commit.
+- [x] Verify all tests green; clippy; fmt.
+- [x] Commit (fix: yield a crashed verdict on spawn/supervise failure).
 
 ## Slice R3 — `exit` field reflects child disposition (Interrupted/TimedOut)
 
@@ -115,31 +99,23 @@ commits per the `git-commit` skill; cue-log after each commit.
         `None`.
       - In `build_verdict`: set `interrupt_signal` from `Interrupted.trigger`.
       - Update `supervisor_test.rs` match patterns to `EndReason::TimedOut { .. }`.
-- [ ] Verify all tests green; clippy; fmt.
-- [ ] Commit.
+- [x] Verify all tests green; clippy; fmt.
+- [x] Commit (fix: report child death signal, not trigger, for interruptions).
 
 ## Slice R4 — Cleanup + observability nits
 
-- [ ] Remove dead code `EndReason::child_signal` (supervisor.rs:311-317).
-- [ ] Remove unused `tracing` + `tracing-subscriber` deps from `Cargo.toml`
-      (no `tracing::` macros; main never installs a subscriber — all
-      diagnostics go via `eprintln!`).
-- [ ] Log prompt-writer task errors (supervisor.rs:197-202): replace `let _ =`
-      with a best-effort `eprintln!` on `Err` so EPIPE / failed stdin delivery
-      is diagnosable.
-- [ ] Log `spawn_line_writer` write errors (supervisor.rs:132-137): `eprintln!`
-      before `break` so a mid-run disk error doesn't truncate `stream.jsonl`
-      silently.
-- [ ] `Verdict.duration_ms`: `u128` -> `u64` (max consumer compatibility).
-- [ ] `opencode::extract_result`: make robust to a malformed trailing text
-      event — `iter().rev().filter(type==text).filter_map(text_of_event).next()`
-      instead of `find().and_then()` so an earlier valid text event is used.
-- [ ] Add the comment on `child_trapping_sigterm_is_sigkilled_after_grace`
-      explaining ignored-signal-disposition inheritance across fork/execve
-      (GLM N8) and a comment asserting the reader-task bodies must remain
-      panic-free (Opus I4).
-- [ ] Verify `cargo test -p cast-agent` green (36+ tests); clippy; fmt.
-- [ ] Commit.
+- [x] Remove dead code `EndReason::child_signal` (+ its now-unused
+      `ExitStatusExt` import).
+- [x] Remove unused `tracing` + `tracing-subscriber` deps from `Cargo.toml`.
+- [x] Log prompt-writer task errors via `eprintln!` on `Err`.
+- [x] Log `spawn_line_writer` write errors before `break`.
+- [x] `Verdict.duration_ms`: `u128` -> `u64`.
+- [x] `opencode::extract_result`: `rev().filter().find_map()` so an earlier
+      valid text event is used if the trailing one is malformed.
+- [x] Add the N8 (ignored-signal inheritance) + I4 (reader-task panic-free)
+      comments.
+- [x] Verify `cargo test -p cast-agent` green (38 tests); clippy; fmt.
+- [x] Commit (refactor: cleanup dead code, unused deps, and error logging).
 
 ## Deferred (not in this plan, with rationale)
 

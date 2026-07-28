@@ -275,3 +275,54 @@ Saved branch.diff (.cue/cast-agent-mvp/tmp/1785214540-2fbba68/branch.diff) and d
 - **Open:** Address GLM N5: Interrupted exit.signal records the trigger not the child disposition — decide field semantics.
 - **Open:** Decide policy on the medium/low items: reader-death-in-control-plane (I2), prompt-write error swallowed (opus I2), unused tracing deps.
 
+## [7ac2ff7] Slice R1 done: bounded writer join fixes C1 escaped-grandchild hang (B1)
+
+Implemented Slice R1 of the review-fixes plan via TDD. The convergent BLOCKING finding from both code reviews (unbounded writer-thread join at supervisor.rs:279-283) is fixed and regression-tested. Committed.
+
+- **Found:** RED repro required care: an instant child-exit + our own group SIGKILL RACES the grandchild's setsid() and reaps it before it escapes, masking B1. Deterministic repro needs (a) a two-statement grandchild body so the shell does not exec-optimize away the fd1-holder, and (b) a brief `sleep 0.3` in the direct child so setsid() completes and the grandchild firmly escapes the group before the kill fires.
+- **Found:** Single-command `setsid sh -c 'sleep 30'` gets exec-optimized and does NOT reliably hold the pipe; `setsid sh -c 'sleep 30; echo x'` does.
+- **Found:** Confirmed RED: unfixed supervise() hangs the full 8s test watchdog.
+- **Decided:** Fix = abort() the reader task on the join timeout (not just drop its JoinHandle) so the abandoned task releases its line-writer Sender, unblocking the writer thread's recv(); PLUS bound the writer-thread join with timeout(READER_JOIN_TIMEOUT) as a defensive backstop. Used tokio::select! over `&mut task` so the handle stays owned/abortable.
+- **Decided:** Added pkgs.util-linux to cast-agent nativeCheckInputs in flake.nix (setsid lives there, needed for the regression test under nix build).
+- **Decided:** events fall back to events_from_disk after abort (per-line flush already made the on-disk trace authoritative).
+- **Open:** R2: error-path verdict (supervise Err -> Crashed + still write result.json, distinct exit code, not usage-2)
+- **Open:** R3: exit.signal reflects child disposition + new interrupt_signal field
+- **Open:** R4: cleanup nits (dead code, unused tracing deps, error logging, duration_ms u64, robust extract_result)
+- **Open:** Manual opencode smoke still outstanding (unrelated to review fixes)
+
+## [e22b370] Slice R2 done: spawn/supervise failure yields a crashed verdict (GLM I1)
+
+Implemented Slice R2 via TDD. Runtime failures (missing harness binary, post-spawn I/O error) now produce a result.json instead of exiting 2 with no receipt. Committed.
+
+- **Decided:** Added EndReason::SpawnFailed(String) + SuperviseFailed(String); both classify to Outcome::Crashed with ExitInfo{code:None,signal:None} and exit code 5.
+- **Decided:** supervise() returns Ok(SpawnFailed) on cmd.spawn() error rather than propagating; orchestrate maps a supervise Err to SuperviseFailed and STILL writes result.json.
+- **Decided:** Added optional Verdict.error_detail (serde skip_if none) carrying the spawn/supervise failure message.
+- **Decided:** main.rs Err arm is now pre-run-setup-only (persist-before-spawn write failures) -> exit 2 'setup failed'.
+- **Open:** R3: exit.signal reflects child disposition + interrupt_signal field
+- **Open:** R4: cleanup nits
+
+## [789f300] Slice R3 done: exit.signal reflects child death; new interrupt_signal field (GLM N5)
+
+Implemented Slice R3 via TDD. result.json exit now reflects the child's real disposition for both timed_out and interrupted; the trigger signal moved to a separate interrupt_signal field. Committed.
+
+- **Decided:** EndReason::TimedOut and Interrupted now carry Option<ExitStatus> child_status, filled by the post-teardown re-wait (replacing the discarded `let _ = child.wait()`).
+- **Decided:** Interrupted's signal field renamed to `trigger`; classify derives exit from child_status via exit_info_from_status (code if exited, else s.signal(), else fallback SIGKILL).
+- **Decided:** Verdict gained optional interrupt_signal (serde skip-if-none) = the trigger; exit.signal = child death.
+- **Decided:** Interrupt test contract: plain-sleep child honoring graceful stop dies by SIGTERM; trap-TERM child dies by SIGKILL after grace; trigger recorded separately.
+- **Open:** R4: cleanup nits (dead code EndReason::child_signal, unused tracing deps, error logging, duration_ms u64, robust extract_result, comments)
+- **Open:** recovery-outcome-contract.md note needs a follow-up update for the new exit/interrupt_signal semantics (.cue, not committed)
+
+## [aa2e6c8] Slice R4 done: cleanup, unused deps, error logging (review nits)
+
+Implemented Slice R4 (final slice of review-fixes plan). All review-actionable items now addressed. 38 tests green, clippy -D warnings clean, fmt clean. Committed.
+
+- **Decided:** Removed dead EndReason::child_signal + unused ExitStatusExt import in supervisor.rs.
+- **Decided:** Dropped tracing + tracing-subscriber deps from Cargo.toml (no subscriber ever installed; eprintln! everywhere).
+- **Decided:** Prompt-writer and run-log line-writer errors now logged via eprintln! instead of swallowed.
+- **Decided:** Verdict.duration_ms narrowed u128 -> u64.
+- **Decided:** opencode::extract_result uses rev().filter().find_map() so a malformed trailing text event falls back to an earlier valid one.
+- **Decided:** Added N8 comment (ignored-signal disposition inherited across fork/execve) + I4 reader-task-panic-free invariant comment.
+- **Open:** recovery-outcome-contract.md note update for exit/interrupt_signal semantics (.cue, human-committed)
+- **Open:** Manual opencode smoke (AC 3 + AC 6 human attestation) still outstanding
+- **Open:** Optional: run nix build .#cast-agent to confirm util-linux nativeCheckInput works in sandbox
+
