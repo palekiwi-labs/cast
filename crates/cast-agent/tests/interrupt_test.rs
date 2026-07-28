@@ -1,7 +1,10 @@
 //! AC 6: signal-driven interruption. Spawn the real `cast-agent` binary
-//! running a scripted fake harness (via `CAST_AGENT_FAKE_CMD`), signal it
-//! mid-run, and assert it writes `result.json(outcome=interrupted)` and tears
-//! down the child's process group (no live orphans). All fs via tempdir.
+//! running a scripted fake harness, signal it mid-run, and assert it writes
+//! `result.json(outcome=interrupted)` and tears down the child's process
+//! group (no live orphans). The fake harness is a `#!/bin/sh` shim named
+//! `opencode` placed first on the spawned child's `PATH`, so the production
+//! spawn path (`harness.base_command()` -> PATH lookup -> exec) runs
+//! end-to-end. All fs via tempdir.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};
@@ -68,9 +71,31 @@ fn find_run_dir(base: &Path) -> PathBuf {
         .expect("a run dir under the base")
 }
 
-/// Spawn cast-agent running `script` as its fake harness, with the run-dir
-/// base pinned to `base`. Returns the child handle.
-fn spawn_agent(base: &Path, script: &str) -> Child {
+/// Write a `#!/bin/sh` shim named `opencode` into `shim_dir` with `0o755`
+/// perms, whose body is `script`. The kernel execs the file directly, so
+/// `$$` inside `script` is the PID cast-agent spawns into its new process
+/// group — i.e. the same PID the supervisor will signal and the test records
+/// to `pgid_file`. Do NOT `exec` into a subshell from inside the shim, or
+/// `$$` and the signaled PID diverge.
+fn write_opencode_shim(shim_dir: &Path, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::create_dir_all(shim_dir).unwrap();
+    let shim = shim_dir.join("opencode");
+    std::fs::write(&shim, format!("#!/bin/sh\n{script}\n")).unwrap();
+    let perms = std::fs::Permissions::from_mode(0o755);
+    std::fs::set_permissions(&shim, perms).unwrap();
+}
+
+/// Spawn cast-agent with `opencode` on PATH resolving to a shim running
+/// `script`, and the run-dir base pinned to `base`. Prepends (does not
+/// replace) PATH so the shim itself can still resolve `sh`/`printf`/`sleep`.
+fn spawn_agent(base: &Path, shim_dir: &Path, script: &str) -> Child {
+    write_opencode_shim(shim_dir, script);
+    let mut new_path = shim_dir.as_os_str().to_owned();
+    new_path.push(":");
+    if let Some(orig) = std::env::var_os("PATH") {
+        new_path.push(&orig);
+    }
     Command::new(BIN)
         .args([
             "run",
@@ -80,7 +105,7 @@ fn spawn_agent(base: &Path, script: &str) -> Child {
             "60",
             "the prompt",
         ])
-        .env("CAST_AGENT_FAKE_CMD", script)
+        .env("PATH", &new_path)
         .env("CAST_AGENT_RUN_DIR", base)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -130,9 +155,10 @@ fn sigint_interrupts_and_tears_down_group() {
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path().join("runs");
     std::fs::create_dir_all(&base).unwrap();
+    let shim_dir = dir.path().join("shim");
     let pgid_file = dir.path().join("child.pgid");
 
-    let mut agent = spawn_agent(&base, &hang_script(&pgid_file));
+    let mut agent = spawn_agent(&base, &shim_dir, &hang_script(&pgid_file));
     assert!(
         wait_for_file(&pgid_file, Duration::from_secs(5)),
         "child started"
@@ -150,9 +176,10 @@ fn sigterm_interrupts_and_tears_down_group() {
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path().join("runs");
     std::fs::create_dir_all(&base).unwrap();
+    let shim_dir = dir.path().join("shim");
     let pgid_file = dir.path().join("child.pgid");
 
-    let mut agent = spawn_agent(&base, &hang_script(&pgid_file));
+    let mut agent = spawn_agent(&base, &shim_dir, &hang_script(&pgid_file));
     assert!(
         wait_for_file(&pgid_file, Duration::from_secs(5)),
         "child started"
@@ -170,6 +197,7 @@ fn child_trapping_sigterm_is_sigkilled_after_grace() {
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path().join("runs");
     std::fs::create_dir_all(&base).unwrap();
+    let shim_dir = dir.path().join("shim");
     let pgid_file = dir.path().join("child.pgid");
 
     // The child ignores SIGTERM; only SIGKILL after the 3s grace can stop it.
@@ -180,7 +208,7 @@ fn child_trapping_sigterm_is_sigkilled_after_grace() {
         p = pgid_file.display()
     );
 
-    let mut agent = spawn_agent(&base, &script);
+    let mut agent = spawn_agent(&base, &shim_dir, &script);
     assert!(
         wait_for_file(&pgid_file, Duration::from_secs(5)),
         "child started"

@@ -101,14 +101,12 @@ async fn run(args: RunArgs) -> i32 {
     eprintln!("cast-agent: pid {}", std::process::id());
 
     let limits = limits_from_timeout(Duration::from_secs(args.timeout));
-    // Command resolution. `CAST_AGENT_FAKE_CMD` is a test/advanced override
-    // that runs `sh -c <value>` in place of the real harness binary, so the
-    // supervision + signal paths can be exercised end-to-end without a harness
-    // installed. Production always takes the harness branch.
-    let (exe, cmd_args) = match std::env::var("CAST_AGENT_FAKE_CMD") {
-        Ok(script) => ("sh".to_string(), vec!["-c".to_string(), script]),
-        Err(_) => (harness.base_command().to_string(), harness.headless_args()),
-    };
+    // Resolve the harness the declared way. Binary-level integration tests
+    // exercise the spawn path by putting a shim named `opencode` first on
+    // PATH (the helper in `tests/interrupt_test.rs`); there is no in-process
+    // override, so `result.json.harness` always names what actually ran.
+    let exe = harness.base_command().to_string();
+    let cmd_args = harness.headless_args();
 
     match orchestrate(harness.as_ref(), &exe, &cmd_args, &prompt, &run_dir, limits).await {
         Ok(report) => {
