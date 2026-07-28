@@ -19,6 +19,15 @@ fn headless_args_are_run_format_json() {
 }
 
 #[test]
+fn agent_args_map_to_opencode_agent_flag() {
+    let h = OpenCode;
+    assert_eq!(
+        h.agent_args("explore"),
+        Some(vec!["--agent".to_string(), "explore".to_string()])
+    );
+}
+
+#[test]
 fn extract_result_returns_last_text_event() {
     let h = OpenCode;
     let events = parse_fixture("opencode-run.jsonl");

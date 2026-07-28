@@ -41,6 +41,12 @@ struct RunArgs {
     #[arg(long)]
     run_dir: Option<PathBuf>,
 
+    /// Select the harness-side persona/agent config. For opencode this maps to
+    /// `opencode run --agent <name>` (persona prompt + permission profile +
+    /// model). An unsupported harness rejects this flag rather than ignoring it.
+    #[arg(long)]
+    agent: Option<String>,
+
     /// Inline prompt (lowest precedence; --file > stdin > positional).
     prompt: Option<String>,
 }
@@ -106,7 +112,23 @@ async fn run(args: RunArgs) -> i32 {
     // PATH (the helper in `tests/interrupt_test.rs`); there is no in-process
     // override, so `result.json.harness` always names what actually ran.
     let exe = harness.base_command().to_string();
-    let cmd_args = harness.headless_args();
+    let mut cmd_args = harness.headless_args();
+    // Append persona selection. If the operator asked for an --agent but the
+    // harness does not support it, reject loudly rather than silently dropping
+    // it (a silent drop is a quiet permission/scope regression: the run would
+    // launch the default agent with full tool access).
+    if let Some(name) = args.agent.as_deref() {
+        match harness.agent_args(name) {
+            Some(extra) => cmd_args.extend(extra),
+            None => {
+                eprintln!(
+                    "cast-agent: harness {} does not support --agent",
+                    harness.name()
+                );
+                return EXIT_USAGE;
+            }
+        }
+    }
 
     match orchestrate(harness.as_ref(), &exe, &cmd_args, &prompt, &run_dir, limits).await {
         Ok(report) => {

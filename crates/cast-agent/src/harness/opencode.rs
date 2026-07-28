@@ -38,6 +38,14 @@ impl Harness for OpenCode {
             .collect()
     }
 
+    fn agent_args(&self, name: &str) -> Option<Vec<String>> {
+        // Maps 1:1 to `opencode run --agent <name>`: the child opencode loads
+        // the persona prompt + permission profile + model itself. An unknown
+        // name is validated by opencode and surfaces as a non-zero child exit
+        // (a failed/crashed verdict), never a silent fall-back to the default.
+        Some(vec!["--agent".to_string(), name.to_string()])
+    }
+
     fn extract_result(&self, events: &[serde_json::Value]) -> Option<String> {
         // Filter to `text`-typed events and take the last one whose text is
         // actually extractable. The stream's terminal line is always a
