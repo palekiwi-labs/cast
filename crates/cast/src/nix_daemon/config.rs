@@ -10,8 +10,13 @@ pub fn generate_nix_conf(config: &Config) -> String {
     // Base features required for flakes
     conf.push_str("experimental-features = nix-command flakes\n");
 
-    // CRITICAL: Allow non-root users (like the dev container user) to connect to the daemon
-    conf.push_str("trusted-users = root *\n");
+    // Only root (the daemon itself) is trusted. The dev container user is
+    // merely *allowed* to connect to the daemon socket, not privilege-elevated.
+    // Substituters and public keys are baked into this server-side config, so
+    // a non-trusted user still benefits from the configured caches without
+    // being able to override them or import unsigned paths.
+    conf.push_str("trusted-users = root\n");
+    conf.push_str("allowed-users = *\n");
 
     // Build substituters list
     let mut substituters = vec!["https://cache.nixos.org".to_string()];
@@ -48,7 +53,8 @@ mod tests {
         let conf = generate_nix_conf(&config);
 
         assert!(conf.contains("experimental-features = nix-command flakes"));
-        assert!(conf.contains("trusted-users = root *"));
+        assert!(conf.contains("trusted-users = root\n"));
+        assert!(conf.contains("allowed-users = *\n"));
         assert!(conf.contains("substituters = https://cache.nixos.org\n"));
         assert!(conf.contains("trusted-substituters = https://cache.nixos.org\n"));
         assert!(conf.contains(
