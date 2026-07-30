@@ -12,13 +12,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ssh \
     && rm -rf /var/lib/apt/lists/*
 
-# Configure Nix system-wide: enable flakes and accept flake-declared
-# substituters/config non-interactively. `accept-flake-config = true` is a hard
-# prerequisite: without it, non-interactive harness fetches from
-# cache.numtide.com prompt and fail for AI agents.
+# Configure Nix system-wide: enable flakes only. `accept-flake-config = false`
+# is explicit: under the hardened nix daemon (trusted-users = root) the dev
+# user is non-trusted, so flake-forwarded substituters/keys are rejected
+# anyway. Setting it false deterministically suppresses the interactive prompt
+# path. Binary caches (e.g. cache.numtide.com) are provisioned daemon-side via
+# ~/.config/cast/cast.json (seeded on first run) -> generate_nix_conf.
 # (Nix store itself is mounted read-only from the nix-daemon volume.)
 RUN mkdir -p /etc/nix && \
-    printf 'experimental-features = nix-command flakes\naccept-flake-config = true\n' \
+    printf 'experimental-features = nix-command flakes\naccept-flake-config = false\n' \
         > /etc/nix/nix.conf
 
 # Add Nix to PATH (available once /nix is mounted)
