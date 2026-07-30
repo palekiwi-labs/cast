@@ -223,6 +223,9 @@ pub fn run_agent(
     // Scaffold the global flake (if absent) before detecting its presence so
     // the first run on a clean host works with no manual setup.
     scaffold_global_flake();
+    // Seed the global cast.json (if absent) so the numtide cache reaches the
+    // daemon server-side on the first run.
+    scaffold_global_cast_json();
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 
@@ -271,6 +274,32 @@ pub fn scaffold_global_flake() {
         Ok(false) => {}
         Err(e) => {
             tracing::warn!(error = %e, "failed to scaffold global nix flake");
+        }
+    }
+}
+
+/// Auto-scaffold the global cast config (`cast.json`) on a new host so the
+/// first `cast run`/`cast exec` provisions the numtide binary cache
+/// daemon-side, avoiding a silent regression to multi-minute source builds.
+///
+/// Like [`scaffold_global_flake`] this is a side-effecting, host-mutating step
+/// kept OUT of [`resolve_run_opts`] so unit tests never write to the real
+/// `$HOME`.
+pub fn scaffold_global_cast_json() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    match crate::dev::global_config::scaffold_if_missing(&home) {
+        Ok(true) => {
+            info!("scaffolded global cast config");
+            eprintln!(
+                "Created global cast config at {}",
+                home.join(".config/cast/cast.json").display()
+            );
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to scaffold global cast config");
         }
     }
 }
@@ -675,6 +704,10 @@ mod tests {
         assert!(
             !home.path().join(".config/cast/nix/flake.nix").exists(),
             "resolve_run_opts must not scaffold the global flake"
+        );
+        assert!(
+            !home.path().join(".config/cast/cast.json").exists(),
+            "resolve_run_opts must not scaffold the global cast.json"
         );
     }
 
