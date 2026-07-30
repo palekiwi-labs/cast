@@ -83,4 +83,21 @@ mod tests {
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("cache.numtide.com"));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("llm-agents"));
     }
+
+    #[test]
+    fn numtide_key_matches_default_cast_json() {
+        // Guard against key drift: the numtide public key must be byte-identical
+        // in the flake template and the seeded default cast.json. These are the
+        // two embedded sources of the cache trust anchor.
+        const NUMTIDE_KEY: &str =
+            "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=";
+        assert!(
+            GLOBAL_FLAKE_TEMPLATE.contains(NUMTIDE_KEY),
+            "flake template must contain the canonical numtide key"
+        );
+        assert!(
+            crate::dev::global_config::DEFAULT_CAST_JSON.contains(NUMTIDE_KEY),
+            "default cast.json must contain the canonical numtide key"
+        );
+    }
 }
