@@ -2,8 +2,12 @@
   description = "cast global harness devShells";
 
   # nixConfig declares the numtide binary cache so prebuilt harness packages
-  # are fetched rather than built from source. `cast`'s dev container enables
-  # `accept-flake-config = true`, so these are honoured non-interactively.
+  # are fetched rather than built from source. This is honoured in standalone /
+  # trusted nix environments. Inside `cast`'s dev container the nix daemon runs
+  # with `trusted-users = root`, so the non-trusted dev user cannot forward
+  # these flake-declared settings; the daemon instead provisions this cache
+  # server-side from `~/.config/cast/cast.json` (seeded with numtide on first
+  # run). This block is kept as documentation and for external use.
   nixConfig = {
     extra-substituters = [ "https://cache.numtide.com" ];
     extra-trusted-public-keys = [

@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The nix daemon's binary caches are now provisioned daemon-side from
+  `~/.config/cast/cast.json`. The first `cast run`/`cast exec` on a fresh host
+  seeds a default `cast.json` with the numtide cache so harnesses fetch
+  prebuilt rather than building from source. An existing `cast.json` is never
+  overwritten.
+
 ### Changed
 
+- **Security:** the nix daemon's `trusted-users` is tightened from `root *` to
+  `root` (with `allowed-users = *`). The non-trusted dev container user can
+  still connect to the daemon but can no longer override substituters, add
+  trusted keys, or import unsigned paths into the shared `/nix` store.
+- The dev container sets `accept-flake-config = false`. Under the hardened
+  daemon the non-trusted user's flake-forwarded settings are rejected anyway;
+  caches are provisioned via `cast.json` instead.
 - **Breaking:** `cast build <agent>` is replaced by a single `cast build`. The
   three per-agent build subcommands built the identical shared dev image, so
   the agent argument was removed. `--force` and `--no-cache` are unchanged.

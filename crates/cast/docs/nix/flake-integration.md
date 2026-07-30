@@ -57,16 +57,32 @@ nix flake init -t github:palekiwi-labs/cast#global
 
 ### Harness fetches and the numtide cache
 
-The template declares the `cache.numtide.com` binary cache via `nixConfig`, so
-prebuilt harness packages (from `numtide/llm-agents.nix`) are fetched rather
-than built from source. `cast`'s dev image sets `accept-flake-config = true`
-in its system `/etc/nix/nix.conf`, so this substituter is honoured
-**non-interactively** — no flake-config prompt blocks an AI agent.
+Prebuilt harness packages (from `numtide/llm-agents.nix`) should be fetched
+from the `cache.numtide.com` binary cache rather than built from source. How
+that cache reaches the builder differs between environments.
 
-> Security note: inside the dev container, `accept-flake-config = true`
-> auto-trusts any future flake's declared substituters and public keys
-> non-interactively. Signatures are still verified against those pinned keys,
-> so a fetched path must be signed by a key the flake declares.
+Inside `cast`'s dev container the nix daemon runs with `trusted-users = root`
+(a security hardening: the non-trusted dev user must not be able to override
+substituters or import unsigned paths into the shared `/nix` store). Because
+the dev user is non-trusted, flake-declared substituters/keys forwarded from
+the client are **rejected** by the daemon. The dev image therefore sets
+`accept-flake-config = false` in its system `/etc/nix/nix.conf`.
+
+Instead, the cache is provisioned **daemon-side** from
+`~/.config/cast/cast.json`: `cast` reads `nix_extra_substituters` /
+`nix_extra_trusted_public_keys` and bakes them into the daemon's server-side
+config via `generate_nix_conf`. The daemon (root, trusted) then performs
+substitution using its own config, so caches work for the non-trusted dev user.
+
+To avoid a silent regression to multi-minute source builds, the first
+`cast run`/`cast exec` on a fresh host seeds a default
+`~/.config/cast/cast.json` containing the numtide substituter and public key
+(a loud notice is printed; an existing `cast.json` is never overwritten). Edit
+this file to add or remove caches.
+
+The template's `nixConfig` cache block is retained as documentation and remains
+effective in standalone / trusted nix environments (e.g. running the flake
+directly outside `cast`).
 
 Harness versions are pinned by the global flake's `flake.lock`, not by
 `cast.json`.
