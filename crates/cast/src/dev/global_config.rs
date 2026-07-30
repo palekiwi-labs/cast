@@ -9,8 +9,8 @@ use anyhow::{Context, Result};
 ///
 /// Under the hardened nix daemon (`trusted-users = root`), the dev container
 /// user is non-trusted, so flake-declared cache settings are rejected by the
-/// daemon; the global flake template therefore ships its `nixConfig` block
-/// commented out. Caches reach the daemon only via `cast.json` ->
+/// daemon; the global flake template therefore declares none. This file is the
+/// only place the cache trust anchor ships: it reaches the daemon via
 /// `generate_nix_conf` -> daemon server-side config. Seeding a default with
 /// numtide preserves zero-config first-run cache access.
 pub(crate) const DEFAULT_CAST_JSON: &str = r#"{
@@ -81,8 +81,13 @@ mod tests {
 
     #[test]
     fn contains_numtide_cache() {
-        assert!(DEFAULT_CAST_JSON.contains("cache.numtide.com"));
-        assert!(DEFAULT_CAST_JSON.contains("niks3.numtide.com-1:"));
+        // The seeded config is the *only* place the cache trust anchor ships,
+        // so the key is asserted in full rather than by prefix.
+        assert!(DEFAULT_CAST_JSON.contains("https://cache.numtide.com"));
+        assert!(
+            DEFAULT_CAST_JSON
+                .contains("niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g=")
+        );
     }
 
     #[test]
