@@ -24,10 +24,30 @@ pub fn generate_nix_conf(config: &Config) -> String {
 
     conf.push_str(&format!("substituters = {}\n", substituters.join(" ")));
 
-    // Make sure all substituters are trusted
+    // Make sure all substituters are trusted, in both URL spellings.
+    //
+    // A non-trusted client forwards its own `substituters` value to the daemon,
+    // which accepts only entries present in `trusted-substituters` (union
+    // `substituters`), compared as exact strings. Nix compensates in one
+    // direction only -- it retries a client value with a trailing slash
+    // appended -- so a client value that already ends in `/` never matches a
+    // trusted entry that does not. Nix's own built-in default is
+    // `https://cache.nixos.org/`, which is exactly that case. Publishing both
+    // spellings of every substituter makes the match direction-agnostic.
+    let trusted_substituters: Vec<String> = substituters
+        .iter()
+        .flat_map(|s| {
+            let variant = match s.strip_suffix('/') {
+                Some(base) => base.to_string(),
+                None => format!("{s}/"),
+            };
+            [s.clone(), variant]
+        })
+        .collect();
+
     conf.push_str(&format!(
         "trusted-substituters = {}\n",
-        substituters.join(" ")
+        trusted_substituters.join(" ")
     ));
 
     // Build trusted public keys list
@@ -56,7 +76,11 @@ mod tests {
         assert!(conf.contains("trusted-users = root\n"));
         assert!(conf.contains("allowed-users = *\n"));
         assert!(conf.contains("substituters = https://cache.nixos.org\n"));
-        assert!(conf.contains("trusted-substituters = https://cache.nixos.org\n"));
+        assert!(
+            conf.contains(
+                "trusted-substituters = https://cache.nixos.org https://cache.nixos.org/\n"
+            )
+        );
         assert!(conf.contains(
             "trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY=\n"
         ));
@@ -75,10 +99,51 @@ mod tests {
         let conf = generate_nix_conf(&config);
 
         let expected_substituters = "substituters = https://cache.nixos.org https://cache.myorg.com https://nix-community.cachix.org\n";
-        let expected_trusted = "trusted-substituters = https://cache.nixos.org https://cache.myorg.com https://nix-community.cachix.org\n";
+        let expected_trusted = "trusted-substituters = \
+             https://cache.nixos.org https://cache.nixos.org/ \
+             https://cache.myorg.com https://cache.myorg.com/ \
+             https://nix-community.cachix.org https://nix-community.cachix.org/\n";
 
         assert!(conf.contains(expected_substituters));
         assert!(conf.contains(expected_trusted));
+    }
+
+    #[test]
+    fn trusted_substituters_include_trailing_slash_variants() {
+        let config = Config {
+            nix_extra_substituters: vec!["https://cache.numtide.com".to_string()],
+            ..Config::default()
+        };
+
+        let conf = generate_nix_conf(&config);
+
+        // Nix's built-in client default is `https://cache.nixos.org/` (with a
+        // trailing slash). The daemon matches client-forwarded substituters
+        // against `trusted-substituters` by exact string and only compensates
+        // one way, so both spellings must be published or the client value is
+        // rejected with "ignoring untrusted substituter".
+        assert!(
+            conf.contains(
+                "trusted-substituters = https://cache.nixos.org https://cache.nixos.org/ \
+                 https://cache.numtide.com https://cache.numtide.com/\n"
+            ),
+            "trusted-substituters must list both slash variants, got:\n{conf}"
+        );
+    }
+
+    #[test]
+    fn trusted_substituters_variant_of_slashed_entry_drops_the_slash() {
+        let config = Config {
+            nix_extra_substituters: vec!["https://cache.myorg.com/".to_string()],
+            ..Config::default()
+        };
+
+        let conf = generate_nix_conf(&config);
+
+        assert!(
+            conf.contains("https://cache.myorg.com/ https://cache.myorg.com\n"),
+            "a slashed substituter must also be trusted unslashed, got:\n{conf}"
+        );
     }
 
     #[test]

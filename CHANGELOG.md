@@ -31,6 +31,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matching the `cast nix-daemon` command it triggers. The dev image is not
   built from the nix-daemon image, so "base" was a misnomer.
 
+### Fixed
+
+- Spurious `ignoring untrusted substituter 'https://cache.nixos.org/'` warnings
+  from the nix daemon. The daemon's `trusted-substituters` now lists every
+  substituter in both spellings (with and without a trailing slash), since nix
+  compares client-forwarded substituters as exact strings and only compensates
+  for a *missing* slash, never an extra one.
+
 ### Removed
 
 - Orphaned `ureq` dependency, left over after the nix-native pivot deleted the
