@@ -33,6 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The global flake template ships its `nixConfig` cache block commented out. A
+  live block made nix prompt for approval on every devshell entry inside the
+  dev container, a prompt the non-trusted user cannot usefully answer since the
+  daemon rejects the settings either way. Caches are provisioned daemon-side
+  from `cast.json` instead. Existing global flakes are never overwritten —
+  comment the block out by hand, and remove any stale
+  `~/.local/share/nix/trusted-settings.json`, to stop the prompt.
 - Spurious `ignoring untrusted substituter 'https://cache.nixos.org/'` warnings
   from the nix daemon. The daemon's `trusted-substituters` now lists every
   substituter in both spellings (with and without a trailing slash), since nix

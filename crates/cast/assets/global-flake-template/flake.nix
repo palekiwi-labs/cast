@@ -1,19 +1,27 @@
 {
   description = "cast global harness devShells";
 
-  # nixConfig declares the numtide binary cache so prebuilt harness packages
-  # are fetched rather than built from source. This is honoured in standalone /
-  # trusted nix environments. Inside `cast`'s dev container the nix daemon runs
-  # with `trusted-users = root`, so the non-trusted dev user cannot forward
-  # these flake-declared settings; the daemon instead provisions this cache
-  # server-side from `~/.config/cast/cast.json` (seeded with numtide on first
-  # run). This block is kept as documentation and for external use.
-  nixConfig = {
-    extra-substituters = [ "https://cache.numtide.com" ];
-    extra-trusted-public-keys = [
-      "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
-    ];
-  };
+  # Binary caches are deliberately NOT declared here.
+  #
+  # Inside `cast`'s dev container the nix daemon runs with
+  # `trusted-users = root`, so the dev user is non-trusted and flake-declared
+  # substituters/keys are rejected by the daemon. A live `nixConfig` block is
+  # worse than useless there: nix prompts for approval on every devshell entry,
+  # and the prompt cannot be usefully answered -- the settings are rejected
+  # whichever way it is answered. `cast` provisions caches daemon-side instead,
+  # from `~/.config/cast/cast.json` (seeded with the numtide cache on first
+  # run); edit that file to add or remove caches.
+  #
+  # If you use this flake OUTSIDE `cast`, in a standalone or trusted nix
+  # environment, uncomment the block below so prebuilt harness packages are
+  # fetched from the numtide cache rather than built from source:
+  #
+  #   nixConfig = {
+  #     extra-substituters = [ "https://cache.numtide.com" ];
+  #     extra-trusted-public-keys = [
+  #       "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+  #     ];
+  #   };
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

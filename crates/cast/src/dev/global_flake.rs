@@ -79,9 +79,26 @@ mod tests {
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("universal ="));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("default ="));
 
-        // numtide substituter for non-interactive harness fetches.
+        // The numtide cache is referenced (as a commented-out `nixConfig`
+        // block for standalone use); see `template_does_not_declare_a_live_nix_config`.
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("cache.numtide.com"));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("llm-agents"));
+    }
+
+    #[test]
+    fn template_does_not_declare_a_live_nix_config() {
+        // A live `nixConfig` block makes nix prompt for approval on every
+        // devshell entry inside the dev container -- a prompt the non-trusted
+        // user cannot usefully answer, because the daemon rejects the settings
+        // either way. The block is kept commented out for standalone use.
+        let live = GLOBAL_FLAKE_TEMPLATE
+            .lines()
+            .find(|line| !line.trim_start().starts_with('#') && line.contains("nixConfig"));
+
+        assert!(
+            live.is_none(),
+            "template must not declare a live nixConfig block, found: {live:?}"
+        );
     }
 
     #[test]

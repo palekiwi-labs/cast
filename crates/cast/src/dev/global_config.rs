@@ -8,10 +8,11 @@ use anyhow::{Context, Result};
 /// numtide binary cache instead of building from source.
 ///
 /// Under the hardened nix daemon (`trusted-users = root`), the dev container
-/// user is non-trusted, so the global flake's `nixConfig` cache declarations
-/// are no longer forwarded to the daemon. Caches now reach the daemon only via
-/// `cast.json` -> `generate_nix_conf` -> daemon server-side config. Seeding a
-/// default with numtide preserves zero-config first-run cache access.
+/// user is non-trusted, so flake-declared cache settings are rejected by the
+/// daemon; the global flake template therefore ships its `nixConfig` block
+/// commented out. Caches reach the daemon only via `cast.json` ->
+/// `generate_nix_conf` -> daemon server-side config. Seeding a default with
+/// numtide preserves zero-config first-run cache access.
 pub(crate) const DEFAULT_CAST_JSON: &str = r#"{
   "nix_extra_substituters": ["https://cache.numtide.com"],
   "nix_extra_trusted_public_keys": [

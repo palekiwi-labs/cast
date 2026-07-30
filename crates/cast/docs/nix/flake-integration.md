@@ -68,6 +68,13 @@ the dev user is non-trusted, flake-declared substituters/keys forwarded from
 the client are **rejected** by the daemon. The dev image therefore sets
 `accept-flake-config = false` in its system `/etc/nix/nix.conf`.
 
+For that reason the shipped template's `nixConfig` block is **commented out**.
+A live `nixConfig` is not merely inert in the dev container, it is actively
+harmful: with `accept-flake-config = false` nix prompts for approval on every
+devshell entry, and the prompt cannot be usefully answered — the daemon
+rejects the settings whichever way it is answered. Uncomment the block only
+when using the flake standalone, outside `cast`, in a trusted nix environment.
+
 Instead, the cache is provisioned **daemon-side** from
 `~/.config/cast/cast.json`: `cast` reads `nix_extra_substituters` /
 `nix_extra_trusted_public_keys` and bakes them into the daemon's server-side
@@ -80,9 +87,11 @@ To avoid a silent regression to multi-minute source builds, the first
 (a loud notice is printed; an existing `cast.json` is never overwritten). Edit
 this file to add or remove caches.
 
-The template's `nixConfig` cache block is retained as documentation and remains
-effective in standalone / trusted nix environments (e.g. running the flake
-directly outside `cast`).
+If you scaffolded your global flake before this change, it still contains a
+live `nixConfig` block — `cast` never overwrites an existing flake. Comment
+the block out by hand to stop the approval prompt. You may also need to remove
+a stale `~/.local/share/nix/trusted-settings.json`, where nix records approval
+answers it was given previously.
 
 Harness versions are pinned by the global flake's `flake.lock`, not by
 `cast.json`.
