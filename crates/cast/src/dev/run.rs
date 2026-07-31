@@ -14,12 +14,12 @@ use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -153,6 +153,10 @@ pub fn run_in_container(
     for ag in all_agents() {
         ag.prepare_host(config, run_opts)?;
     }
+
+    // Prepare cross-harness host directories (e.g. ~/.agents) shared by every
+    // session regardless of which agents are included.
+    dev::universal::prepare_host(run_opts)?;
 
     let docker_flags = build_docker_run_flags(config, run_opts);
     let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
@@ -571,9 +575,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -583,9 +585,7 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts);
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]

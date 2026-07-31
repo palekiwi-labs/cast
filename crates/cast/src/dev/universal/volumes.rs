@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
+use crate::dev::universal::config_dir;
 use crate::user::ResolvedUser;
 
 /// Build the shared data volume arguments for the dev container.
@@ -22,11 +23,35 @@ pub fn build_universal_data_volume_args(config: &Config, user: &ResolvedUser) ->
     ]
 }
 
+/// Build the cross-harness `.agents` bind-mount arguments.
+///
+/// `.agents` is the vendor-neutral standard (`agentskills.io`) shared across
+/// harnesses for global skills (`~/.agents/skills/`). It is mounted
+/// unconditionally — regardless of which agents are included — so global
+/// skills are available across every agent session.
+pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
+    let home = opts
+        .host_home_dir
+        .as_deref()
+        .context("Failed to resolve user home directory")?;
+    let agents_host_dir = config_dir::get_config_dir(home);
+
+    Ok(vec![
+        "-v".to_string(),
+        format!(
+            "{}:/home/{}/.agents:rw",
+            agents_host_dir.display(),
+            opts.user.username
+        ),
+    ])
+}
+
 /// Build the complete set of agent-specific `docker run` arguments for the
 /// universal container.
 ///
 /// Composes four layers:
-/// 1. Shared data volumes (`-cache` / `-local`).
+/// 1. Shared data volumes (`-cache` / `-local`) plus the cross-harness
+///    `.agents` bind mount (all universal — present for every session).
 /// 2. Union of config-directory bind mounts from **every** included agent.
 /// 3. Environment-variable passthrough from the **launched** agent only.
 /// 4. User flake mount (`~/.config/cast/nix`) if present on the host.
@@ -39,8 +64,9 @@ pub fn build_universal_run_args(
 ) -> Result<Vec<String>> {
     let mut args: Vec<String> = vec![];
 
-    // 1. Shared data volumes (cache/local — once).
+    // 1. Shared data volumes (cache/local — once) + cross-harness .agents.
     args.extend(build_universal_data_volume_args(config, &opts.user));
+    args.extend(build_agents_config_args(opts)?);
 
     // 2. Union of config mounts for every included agent.
     for agent in included_agents {
@@ -107,6 +133,23 @@ mod tests {
     }
 
     // ── build_universal_data_volume_args ───────────────────────────────────
+
+    #[test]
+    fn universal_run_args_includes_cross_harness_agents_mount() {
+        let config = Config::default();
+        let opts = basic_opts();
+        let env = HashMap::new();
+
+        let agents: Vec<&dyn Agent> = vec![&OpenCode];
+        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+
+        // .agents is a universal cross-harness dir; always present regardless
+        // of which agents are included.
+        assert!(
+            args.iter().any(|a| a.contains("/.agents:rw")),
+            "cross-harness .agents mount missing: {args:?}"
+        );
+    }
 
     #[test]
     fn data_volumes_use_universal_namespace_and_correct_paths() {
