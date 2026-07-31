@@ -71,7 +71,7 @@ mod tests {
     }
 
     #[test]
-    fn template_defines_expected_shells_and_cache() {
+    fn template_defines_expected_shells() {
         // Named per-harness shells plus a universal shell.
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("opencode ="));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("pi ="));
@@ -79,8 +79,18 @@ mod tests {
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("universal ="));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("default ="));
 
-        // numtide substituter for non-interactive harness fetches.
-        assert!(GLOBAL_FLAKE_TEMPLATE.contains("cache.numtide.com"));
         assert!(GLOBAL_FLAKE_TEMPLATE.contains("llm-agents"));
+    }
+
+    #[test]
+    fn template_declares_no_nix_config() {
+        // A `nixConfig` block makes nix prompt for approval on every devshell
+        // entry -- a prompt the non-trusted dev user cannot usefully answer,
+        // because the daemon rejects the settings either way. Caches belong in
+        // the seeded `cast.json`, which reaches the daemon server-side.
+        assert!(
+            !GLOBAL_FLAKE_TEMPLATE.contains("nixConfig"),
+            "template must not declare a nixConfig block"
+        );
     }
 }

@@ -3,9 +3,9 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
@@ -91,11 +91,16 @@ mod tests {
     }
 
     #[test]
-    fn dev_dockerfile_accepts_flake_config() {
+    fn dev_dockerfile_disables_flake_config() {
+        // Under the hardened daemon (trusted-users = root) the dev user is
+        // non-trusted, so flake-forwarded substituters/keys are rejected
+        // regardless. Set accept-flake-config = false explicitly to
+        // deterministically suppress the prompt path. Caches are provisioned
+        // daemon-side via cast.json instead.
         assert!(
-            DEV_DOCKERFILE.contains("accept-flake-config = true"),
-            "system nix.conf must enable accept-flake-config for \
-             non-interactive harness fetches"
+            DEV_DOCKERFILE.contains("accept-flake-config = false"),
+            "system nix.conf must disable accept-flake-config; caches are \
+             provisioned daemon-side via cast.json"
         );
     }
 

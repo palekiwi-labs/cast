@@ -7,14 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The nix daemon's binary caches are now provisioned daemon-side from
+  `~/.config/cast/cast.json`. The first `cast run`/`cast exec` on a fresh host
+  seeds a default `cast.json` with the numtide cache so harnesses fetch
+  prebuilt rather than building from source. An existing `cast.json` is never
+  overwritten.
+
 ### Changed
 
+- **Security:** the nix daemon's `trusted-users` is tightened from `root *` to
+  `root` (with `allowed-users = *`). The non-trusted dev container user can
+  still connect to the daemon but can no longer override substituters, add
+  trusted keys, or import unsigned paths into the shared `/nix` store.
+- The dev container sets `accept-flake-config = false`. Under the hardened
+  daemon the non-trusted user's flake-forwarded settings are rejected anyway;
+  caches are provisioned via `cast.json` instead.
 - **Breaking:** `cast build <agent>` is replaced by a single `cast build`. The
   three per-agent build subcommands built the identical shared dev image, so
   the agent argument was removed. `--force` and `--no-cache` are unchanged.
 - **Breaking:** `cast build`'s `--base` flag is renamed to `--nix-daemon`,
   matching the `cast nix-daemon` command it triggers. The dev image is not
   built from the nix-daemon image, so "base" was a misnomer.
+
+### Fixed
+
+- The global flake template no longer declares a `nixConfig` cache block. It
+  made nix prompt for approval on every devshell entry, a prompt the
+  non-trusted dev user cannot usefully answer since the daemon rejects the
+  settings either way. Caches ship in the seeded `cast.json` instead. Existing
+  global flakes are never overwritten — delete the block by hand, and remove
+  any stale `~/.local/share/nix/trusted-settings.json`, to stop the prompt.
+- Spurious `ignoring untrusted substituter 'https://cache.nixos.org/'` warnings
+  from the nix daemon. The daemon's `trusted-substituters` now lists every
+  substituter in both spellings (with and without a trailing slash), since nix
+  compares client-forwarded substituters as exact strings and only compensates
+  for a *missing* slash, never an extra one.
 
 ### Removed
 
