@@ -3,9 +3,9 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
-use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
@@ -91,11 +91,16 @@ mod tests {
     }
 
     #[test]
-    fn dev_dockerfile_accepts_flake_config() {
+    fn dev_dockerfile_disables_flake_config() {
+        // Under the hardened daemon (trusted-users = root) the dev user is
+        // non-trusted, so flake-forwarded substituters/keys are rejected
+        // regardless. Set accept-flake-config = false explicitly to
+        // deterministically suppress the prompt path. Caches are provisioned
+        // daemon-side via cast.json instead.
         assert!(
-            DEV_DOCKERFILE.contains("accept-flake-config = true"),
-            "system nix.conf must enable accept-flake-config for \
-             non-interactive harness fetches"
+            DEV_DOCKERFILE.contains("accept-flake-config = false"),
+            "system nix.conf must disable accept-flake-config; caches are \
+             provisioned daemon-side via cast.json"
         );
     }
 
@@ -107,6 +112,18 @@ mod tests {
         assert!(DEV_DOCKERFILE.contains(".config"));
         assert!(DEV_DOCKERFILE.contains(".cache"));
         assert!(DEV_DOCKERFILE.contains(".local"));
+    }
+
+    #[test]
+    fn dev_dockerfile_creates_and_chowns_cross_harness_agents_dir() {
+        // The vendor-neutral cross-harness .agents dir must be pre-created and
+        // chowned so a bind-mounted ~/.agents lands on a user-owned directory.
+        // Exactly two occurrences: one in mkdir, one in chown.
+        assert_eq!(
+            DEV_DOCKERFILE.matches("/home/${USERNAME}/.agents").count(),
+            2,
+            "Dockerfile.dev must reference /home/${{USERNAME}}/.agents in both mkdir and chown"
+        );
     }
 
     #[test]

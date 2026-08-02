@@ -119,9 +119,10 @@ fn dispatch_run(
 ///
 /// Both `cast run` and `cast exec` route through this so the two commands
 /// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
-/// data volumes and the union of every agent's config-directory mounts
-/// (universal mounts are the unconditional default). Environment passthrough
-/// comes from the launched agent only.
+/// data volumes, the cross-harness `~/.agents` bind mount, and the union of
+/// every agent's config-directory mounts (universal mounts are the
+/// unconditional default). Environment passthrough comes from the launched
+/// agent only.
 fn build_session_run_args(
     launched_agent: &dyn Agent,
     config: &Config,
@@ -134,9 +135,10 @@ fn build_session_run_args(
 /// Shared container-run core used by both `run_agent` and `exec`.
 ///
 /// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: prepare_host for every known agent (universal
-/// mounts), docker flags, the universal agent args, dispatch on tty_mode, and
-/// duration logging.
+/// command vector. Handles: per-agent `prepare_host` for every known agent,
+/// `universal::prepare_host` (creates the cross-harness `~/.agents` dir),
+/// docker flags, the universal agent args, dispatch on tty_mode, and duration
+/// logging.
 pub fn run_in_container(
     docker: &DockerClient,
     agent: &dyn Agent,
@@ -153,6 +155,10 @@ pub fn run_in_container(
     for ag in all_agents() {
         ag.prepare_host(config, run_opts)?;
     }
+
+    // Prepare cross-harness host directories (e.g. ~/.agents) shared by every
+    // session regardless of which agents are included.
+    dev::universal::prepare_host(run_opts)?;
 
     let docker_flags = build_docker_run_flags(config, run_opts);
     let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
@@ -223,6 +229,9 @@ pub fn run_agent(
     // Scaffold the global flake (if absent) before detecting its presence so
     // the first run on a clean host works with no manual setup.
     scaffold_global_flake();
+    // Seed the global cast.json (if absent) so the numtide cache reaches the
+    // daemon server-side on the first run.
+    scaffold_global_cast_json();
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 
@@ -271,6 +280,32 @@ pub fn scaffold_global_flake() {
         Ok(false) => {}
         Err(e) => {
             tracing::warn!(error = %e, "failed to scaffold global nix flake");
+        }
+    }
+}
+
+/// Auto-scaffold the global cast config (`cast.json`) on a new host so the
+/// first `cast run`/`cast exec` provisions the numtide binary cache
+/// daemon-side, avoiding a silent regression to multi-minute source builds.
+///
+/// Like [`scaffold_global_flake`] this is a side-effecting, host-mutating step
+/// kept OUT of [`resolve_run_opts`] so unit tests never write to the real
+/// `$HOME`.
+pub fn scaffold_global_cast_json() {
+    let Some(home) = dirs::home_dir() else {
+        return;
+    };
+    match crate::dev::global_config::scaffold_if_missing(&home) {
+        Ok(true) => {
+            info!("scaffolded global cast config");
+            eprintln!(
+                "Created global cast config at {}",
+                home.join(".config/cast/cast.json").display()
+            );
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::warn!(error = %e, "failed to scaffold global cast config");
         }
     }
 }
@@ -675,6 +710,10 @@ mod tests {
         assert!(
             !home.path().join(".config/cast/nix/flake.nix").exists(),
             "resolve_run_opts must not scaffold the global flake"
+        );
+        assert!(
+            !home.path().join(".config/cast/cast.json").exists(),
+            "resolve_run_opts must not scaffold the global cast.json"
         );
     }
 

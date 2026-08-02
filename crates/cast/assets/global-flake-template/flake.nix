@@ -1,15 +1,8 @@
 {
   description = "cast global harness devShells";
 
-  # nixConfig declares the numtide binary cache so prebuilt harness packages
-  # are fetched rather than built from source. `cast`'s dev container enables
-  # `accept-flake-config = true`, so these are honoured non-interactively.
-  nixConfig = {
-    extra-substituters = [ "https://cache.numtide.com" ];
-    extra-trusted-public-keys = [
-      "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
-    ];
-  };
+  # Binary caches are not declared here: `cast` provisions them daemon-side
+  # from `~/.config/cast/cast.json`, seeded on first run.
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
