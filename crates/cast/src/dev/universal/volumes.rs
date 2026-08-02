@@ -141,6 +141,36 @@ mod tests {
     // ── build_agents_config_args ───────────────────────────────────────────
 
     #[test]
+    fn build_agents_config_args_emits_exact_mount_spec() {
+        let opts = basic_opts();
+        let args = build_agents_config_args(&opts).unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "-v".to_string(),
+                "/home/alice/.agents:/home/alice/.agents:rw".to_string(),
+            ],
+            "expected exact .agents bind-mount spec"
+        );
+    }
+
+    #[test]
+    fn build_agents_config_args_errors_when_host_home_is_none() {
+        let opts = RunOpts {
+            host_home_dir: None,
+            ..basic_opts()
+        };
+
+        let result = build_agents_config_args(&opts);
+
+        assert!(
+            result.is_err(),
+            "build_agents_config_args must error when host_home_dir is None"
+        );
+    }
+
+    #[test]
     fn build_agents_config_args_skips_when_workspace_is_agents_dir() {
         // workspace root == host .agents dir → no duplicate mount (the
         // workspace bind mount already covers the target).
@@ -174,7 +204,7 @@ mod tests {
         // .agents is a universal cross-harness dir; always present regardless
         // of which agents are included.
         assert!(
-            args.iter().any(|a| a.contains("/.agents:rw")),
+            args.contains(&"/home/alice/.agents:/home/alice/.agents:rw".to_string()),
             "cross-harness .agents mount missing: {args:?}"
         );
     }
