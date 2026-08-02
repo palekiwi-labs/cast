@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
+use crate::dev::universal::config_dir;
 use crate::user::ResolvedUser;
 
 /// Build the shared data volume arguments for the dev container.
@@ -22,11 +23,41 @@ pub fn build_universal_data_volume_args(config: &Config, user: &ResolvedUser) ->
     ]
 }
 
+/// Build the cross-harness `.agents` bind-mount arguments.
+///
+/// `.agents` is the vendor-neutral standard (`agentskills.io`) shared across
+/// harnesses for global skills (`~/.agents/skills/`). It is mounted
+/// unconditionally — regardless of which agents are included — so global
+/// skills are available across every agent session.
+pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
+    let home = opts
+        .host_home_dir
+        .as_deref()
+        .context("Failed to resolve user home directory")?;
+    let agents_host_dir = config_dir::get_config_dir(home);
+
+    // Skip if the workspace root is the same as the .agents dir (the
+    // workspace bind mount already covers the target).
+    if agents_host_dir == opts.workspace.root {
+        return Ok(vec![]);
+    }
+
+    Ok(vec![
+        "-v".to_string(),
+        format!(
+            "{}:/home/{}/.agents:rw",
+            agents_host_dir.display(),
+            opts.user.username
+        ),
+    ])
+}
+
 /// Build the complete set of agent-specific `docker run` arguments for the
 /// universal container.
 ///
 /// Composes four layers:
-/// 1. Shared data volumes (`-cache` / `-local`).
+/// 1. Shared data volumes (`-cache` / `-local`) plus the cross-harness
+///    `.agents` bind mount (all universal — present for every session).
 /// 2. Union of config-directory bind mounts from **every** included agent.
 /// 3. Environment-variable passthrough from the **launched** agent only.
 /// 4. User flake mount (`~/.config/cast/nix`) if present on the host.
@@ -39,8 +70,9 @@ pub fn build_universal_run_args(
 ) -> Result<Vec<String>> {
     let mut args: Vec<String> = vec![];
 
-    // 1. Shared data volumes (cache/local — once).
+    // 1. Shared data volumes (cache/local — once) + cross-harness .agents.
     args.extend(build_universal_data_volume_args(config, &opts.user));
+    args.extend(build_agents_config_args(opts)?);
 
     // 2. Union of config mounts for every included agent.
     for agent in included_agents {
@@ -106,6 +138,58 @@ mod tests {
         }
     }
 
+    // ── build_agents_config_args ───────────────────────────────────────────
+
+    #[test]
+    fn build_agents_config_args_emits_exact_mount_spec() {
+        let opts = basic_opts();
+        let args = build_agents_config_args(&opts).unwrap();
+
+        assert_eq!(
+            args,
+            vec![
+                "-v".to_string(),
+                "/home/alice/.agents:/home/alice/.agents:rw".to_string(),
+            ],
+            "expected exact .agents bind-mount spec"
+        );
+    }
+
+    #[test]
+    fn build_agents_config_args_errors_when_host_home_is_none() {
+        let opts = RunOpts {
+            host_home_dir: None,
+            ..basic_opts()
+        };
+
+        let result = build_agents_config_args(&opts);
+
+        assert!(
+            result.is_err(),
+            "build_agents_config_args must error when host_home_dir is None"
+        );
+    }
+
+    #[test]
+    fn build_agents_config_args_skips_when_workspace_is_agents_dir() {
+        // workspace root == host .agents dir → no duplicate mount (the
+        // workspace bind mount already covers the target).
+        let opts = RunOpts {
+            workspace: ResolvedWorkspace {
+                container_path: PathBuf::from("/home/alice/.agents"),
+                root: PathBuf::from("/home/alice/.agents"),
+            },
+            ..basic_opts()
+        };
+
+        let args = build_agents_config_args(&opts).unwrap();
+
+        assert!(
+            args.is_empty(),
+            "expected no .agents mount when workspace root is ~/.agents, got: {args:?}"
+        );
+    }
+
     // ── build_universal_data_volume_args ───────────────────────────────────
 
     #[test]
@@ -140,6 +224,23 @@ mod tests {
     }
 
     // ── build_universal_run_args ───────────────────────────────────────────
+
+    #[test]
+    fn universal_run_args_includes_cross_harness_agents_mount() {
+        let config = Config::default();
+        let opts = basic_opts();
+        let env = HashMap::new();
+
+        let agents: Vec<&dyn Agent> = vec![&OpenCode];
+        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+
+        // .agents is a universal cross-harness dir; present regardless of
+        // which agents are included.
+        assert!(
+            args.contains(&"/home/alice/.agents:/home/alice/.agents:rw".to_string()),
+            "cross-harness .agents mount missing: {args:?}"
+        );
+    }
 
     #[test]
     fn all_three_agents_includes_all_config_dirs_and_single_data_volumes() {

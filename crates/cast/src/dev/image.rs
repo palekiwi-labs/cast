@@ -115,6 +115,18 @@ mod tests {
     }
 
     #[test]
+    fn dev_dockerfile_creates_and_chowns_cross_harness_agents_dir() {
+        // The vendor-neutral cross-harness .agents dir must be pre-created and
+        // chowned so a bind-mounted ~/.agents lands on a user-owned directory.
+        // Exactly two occurrences: one in mkdir, one in chown.
+        assert_eq!(
+            DEV_DOCKERFILE.matches("/home/${USERNAME}/.agents").count(),
+            2,
+            "Dockerfile.dev must reference /home/${{USERNAME}}/.agents in both mkdir and chown"
+        );
+    }
+
+    #[test]
     fn dev_dockerfile_configures_git_safe_directory() {
         assert!(DEV_DOCKERFILE.contains(r#"git config --system safe.directory "*""#));
     }

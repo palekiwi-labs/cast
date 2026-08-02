@@ -66,6 +66,7 @@ RUN set -e; \
              /home/${USERNAME}/.claude \
              /home/${USERNAME}/.pi \
              /home/${USERNAME}/.config \
+             /home/${USERNAME}/.agents \
              /home/${USERNAME}/.local \
              ${EXTRA_DIRS} && \
     chown -R ${UID}:${GID} /workspace \
@@ -73,6 +74,7 @@ RUN set -e; \
                            /home/${USERNAME}/.claude \
                            /home/${USERNAME}/.pi \
                            /home/${USERNAME}/.config \
+                           /home/${USERNAME}/.agents \
                            /home/${USERNAME}/.local \
                            /home/${USERNAME} \
                            ${EXTRA_DIRS} 2>/dev/null || true
