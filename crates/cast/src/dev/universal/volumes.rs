@@ -36,6 +36,12 @@ pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
         .context("Failed to resolve user home directory")?;
     let agents_host_dir = config_dir::get_config_dir(home);
 
+    // Skip if the workspace root is the same as the .agents dir (the
+    // workspace bind mount already covers the target).
+    if agents_host_dir == opts.workspace.root {
+        return Ok(vec![]);
+    }
+
     Ok(vec![
         "-v".to_string(),
         format!(
@@ -130,6 +136,28 @@ mod tests {
             tty_mode: TtyMode::Interactive,
             publish: false,
         }
+    }
+
+    // ── build_agents_config_args ───────────────────────────────────────────
+
+    #[test]
+    fn build_agents_config_args_skips_when_workspace_is_agents_dir() {
+        // workspace root == host .agents dir → no duplicate mount (the
+        // workspace bind mount already covers the target).
+        let opts = RunOpts {
+            workspace: ResolvedWorkspace {
+                container_path: PathBuf::from("/home/alice/.agents"),
+                root: PathBuf::from("/home/alice/.agents"),
+            },
+            ..basic_opts()
+        };
+
+        let args = build_agents_config_args(&opts).unwrap();
+
+        assert!(
+            args.is_empty(),
+            "expected no .agents mount when workspace root is ~/.agents, got: {args:?}"
+        );
     }
 
     // ── build_universal_data_volume_args ───────────────────────────────────
