@@ -193,23 +193,6 @@ mod tests {
     // ── build_universal_data_volume_args ───────────────────────────────────
 
     #[test]
-    fn universal_run_args_includes_cross_harness_agents_mount() {
-        let config = Config::default();
-        let opts = basic_opts();
-        let env = HashMap::new();
-
-        let agents: Vec<&dyn Agent> = vec![&OpenCode];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
-
-        // .agents is a universal cross-harness dir; always present regardless
-        // of which agents are included.
-        assert!(
-            args.contains(&"/home/alice/.agents:/home/alice/.agents:rw".to_string()),
-            "cross-harness .agents mount missing: {args:?}"
-        );
-    }
-
-    #[test]
     fn data_volumes_use_universal_namespace_and_correct_paths() {
         let config = Config::default(); // volumes_namespace = "cast"
         let user = alice();
@@ -241,6 +224,23 @@ mod tests {
     }
 
     // ── build_universal_run_args ───────────────────────────────────────────
+
+    #[test]
+    fn universal_run_args_includes_cross_harness_agents_mount() {
+        let config = Config::default();
+        let opts = basic_opts();
+        let env = HashMap::new();
+
+        let agents: Vec<&dyn Agent> = vec![&OpenCode];
+        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+
+        // .agents is a universal cross-harness dir; present regardless of
+        // which agents are included.
+        assert!(
+            args.contains(&"/home/alice/.agents:/home/alice/.agents:rw".to_string()),
+            "cross-harness .agents mount missing: {args:?}"
+        );
+    }
 
     #[test]
     fn all_three_agents_includes_all_config_dirs_and_single_data_volumes() {

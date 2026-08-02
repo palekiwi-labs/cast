@@ -119,9 +119,10 @@ fn dispatch_run(
 ///
 /// Both `cast run` and `cast exec` route through this so the two commands
 /// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
-/// data volumes and the union of every agent's config-directory mounts
-/// (universal mounts are the unconditional default). Environment passthrough
-/// comes from the launched agent only.
+/// data volumes, the cross-harness `~/.agents` bind mount, and the union of
+/// every agent's config-directory mounts (universal mounts are the
+/// unconditional default). Environment passthrough comes from the launched
+/// agent only.
 fn build_session_run_args(
     launched_agent: &dyn Agent,
     config: &Config,
@@ -134,9 +135,10 @@ fn build_session_run_args(
 /// Shared container-run core used by both `run_agent` and `exec`.
 ///
 /// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: prepare_host for every known agent (universal
-/// mounts), docker flags, the universal agent args, dispatch on tty_mode, and
-/// duration logging.
+/// command vector. Handles: per-agent `prepare_host` for every known agent,
+/// `universal::prepare_host` (creates the cross-harness `~/.agents` dir),
+/// docker flags, the universal agent args, dispatch on tty_mode, and duration
+/// logging.
 pub fn run_in_container(
     docker: &DockerClient,
     agent: &dyn Agent,
