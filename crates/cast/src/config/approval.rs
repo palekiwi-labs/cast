@@ -396,6 +396,56 @@ mod tests {
         assert_eq!(h1, h2);
     }
 
+    /// The whole security rationale for putting the allowlist in `Config`:
+    /// an agent that edits `cast.json` to open a new channel to the host
+    /// must trip re-approval rather than take effect silently.
+    #[test]
+    fn test_env_passthrough_addition_changes_hash_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path();
+
+        let approved = Config::default();
+        let mut tampered = Config::default();
+        tampered
+            .env_passthrough
+            .push("AWS_SECRET_ACCESS_KEY".to_string());
+
+        let approved_hash = compute_config_hash(&approved, path).unwrap();
+        let tampered_hash = compute_config_hash(&tampered, path).unwrap();
+        assert_ne!(approved_hash, tampered_hash);
+
+        let mut store = ApprovalStore::default();
+        let canonical = std::fs::canonicalize(path).unwrap();
+        store.add_entry(
+            approved_hash,
+            canonical.to_string_lossy().into_owned(),
+            serde_json::to_value(&approved).unwrap(),
+        );
+
+        let status = get_approval_status_with(&tampered, path, &store).unwrap();
+        assert!(
+            matches!(status, ApprovalStatus::Changed),
+            "adding an env_passthrough name must require re-approval, got {status:?}"
+        );
+    }
+
+    /// Names are config; values are not. `ApprovalStore` persists the
+    /// serialized config in cleartext to disk and `cast config diff` prints
+    /// it, so a forwarded secret must never appear there.
+    #[test]
+    fn test_env_passthrough_serializes_name_but_never_value() {
+        let mut config = Config::default();
+        config.env_passthrough.push("GH_TOKEN".to_string());
+
+        let serialized = serde_json::to_string(&config).unwrap();
+
+        assert!(serialized.contains("GH_TOKEN"));
+        assert!(
+            !serialized.contains("super-secret-value"),
+            "config must not carry host env values: {serialized}"
+        );
+    }
+
     #[test]
     fn test_approval_store_in_memory() {
         let mut store = ApprovalStore::default();
