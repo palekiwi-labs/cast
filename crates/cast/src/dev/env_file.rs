@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 use std::path::Path;
 use tracing::debug;
 
@@ -35,20 +35,26 @@ pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<Stri
 /// read the value from its own (inherited) environment, so secrets stay out of
 /// cast's argv and therefore out of `ps` for other host users.
 ///
+/// Takes host env variable NAMES only, never values: the function has no use
+/// for a value, and the missing value channel is what makes a leak from here
+/// unrepresentable rather than merely unlikely. Filtering (e.g. dropping names
+/// whose host value is empty) belongs at the boundary that legitimately holds
+/// values — see `run_in_container`.
+///
 /// A name is skipped when it is not a valid shell variable name
-/// (`[A-Za-z_][A-Za-z0-9_]*`) or is not set in `host_env`. Duplicates emit a
-/// single pair, and output is sorted by name so it is independent of the order
-/// names appear in `cast.json`.
+/// (`[A-Za-z_][A-Za-z0-9_]*`) or is absent from `host_env_names`. Duplicates
+/// emit a single pair, and output is sorted by name so it is independent of
+/// the order names appear in `cast.json`.
 pub fn build_env_passthrough_args(
     allowlist: &[String],
-    host_env: &BTreeMap<String, String>,
+    host_env_names: &BTreeSet<String>,
 ) -> Vec<String> {
     let names: Vec<&str> = allowlist
         .iter()
         .map(String::as_str)
         .filter(|name| is_valid_env_name(name))
-        .filter(|name| host_env.contains_key(*name))
-        .collect::<std::collections::BTreeSet<_>>()
+        .filter(|name| host_env_names.contains(*name))
+        .collect::<BTreeSet<_>>()
         .into_iter()
         .collect();
 
@@ -77,11 +83,8 @@ mod tests {
     use super::*;
     use tempfile::TempDir;
 
-    fn env(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
-        pairs
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
-            .collect()
+    fn host(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|s| s.to_string()).collect()
     }
 
     fn names(items: &[&str]) -> Vec<String> {
@@ -90,37 +93,23 @@ mod tests {
 
     #[test]
     fn test_env_passthrough_emits_valueless_flag_for_present_name() {
-        let host = env(&[("GH_TOKEN", "ghp_secret")]);
+        let host = host(&["GH_TOKEN"]);
         let args = build_env_passthrough_args(&names(&["GH_TOKEN"]), &host);
+        // Valueless form: docker reads the value from its own inherited env,
+        // so the secret never reaches cast's argv.
         assert_eq!(args, vec!["-e", "GH_TOKEN"]);
     }
 
     #[test]
-    fn test_env_passthrough_never_emits_the_value() {
-        let host = env(&[("GH_TOKEN", "ghp_secret")]);
-        let args = build_env_passthrough_args(&names(&["GH_TOKEN"]), &host);
-        assert!(
-            args.iter().all(|arg| !arg.contains("ghp_secret")),
-            "secret value leaked into args: {args:?}"
-        );
-    }
-
-    #[test]
     fn test_env_passthrough_skips_name_unset_on_host() {
-        let host = env(&[("OTHER", "1")]);
+        let host = host(&["OTHER"]);
         let args = build_env_passthrough_args(&names(&["GH_TOKEN"]), &host);
         assert!(args.is_empty());
     }
 
     #[test]
     fn test_env_passthrough_skips_invalid_names() {
-        let host = env(&[
-            ("", "x"),
-            ("1BAD", "x"),
-            ("HAS-DASH", "x"),
-            ("HAS SPACE", "x"),
-            ("HAS=EQUALS", "x"),
-        ]);
+        let host = host(&["", "1BAD", "HAS-DASH", "HAS SPACE", "HAS=EQUALS"]);
         let allowlist = names(&["", "1BAD", "HAS-DASH", "HAS SPACE", "HAS=EQUALS"]);
         let args = build_env_passthrough_args(&allowlist, &host);
         assert!(args.is_empty(), "invalid names emitted: {args:?}");
@@ -128,7 +117,7 @@ mod tests {
 
     #[test]
     fn test_env_passthrough_accepts_leading_underscore_and_digits() {
-        let host = env(&[("_PRIVATE", "x"), ("VAR2", "y")]);
+        let host = host(&["_PRIVATE", "VAR2"]);
         let args = build_env_passthrough_args(&names(&["_PRIVATE", "VAR2"]), &host);
         // Byte order: '_' (0x5F) sorts after uppercase letters.
         assert_eq!(args, vec!["-e", "VAR2", "-e", "_PRIVATE"]);
@@ -136,14 +125,14 @@ mod tests {
 
     #[test]
     fn test_env_passthrough_sorts_independently_of_config_order() {
-        let host = env(&[("ZULU", "1"), ("ALPHA", "2"), ("MIKE", "3")]);
+        let host = host(&["ZULU", "ALPHA", "MIKE"]);
         let args = build_env_passthrough_args(&names(&["ZULU", "MIKE", "ALPHA"]), &host);
         assert_eq!(args, vec!["-e", "ALPHA", "-e", "MIKE", "-e", "ZULU"]);
     }
 
     #[test]
     fn test_env_passthrough_dedupes_repeated_name() {
-        let host = env(&[("GH_TOKEN", "x")]);
+        let host = host(&["GH_TOKEN"]);
         let allowlist = names(&["GH_TOKEN", "GH_TOKEN"]);
         let args = build_env_passthrough_args(&allowlist, &host);
         assert_eq!(args, vec!["-e", "GH_TOKEN"]);
@@ -151,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_env_passthrough_empty_allowlist_emits_nothing() {
-        let host = env(&[("GH_TOKEN", "x")]);
+        let host = host(&["GH_TOKEN"]);
         let args = build_env_passthrough_args(&[], &host);
         assert!(args.is_empty());
     }
