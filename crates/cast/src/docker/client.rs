@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -149,6 +149,14 @@ impl DockerClient {
     /// This keeps `cast` alive to monitor the container's lifecycle and capture
     /// its exit code. It ignores SIGINT and SIGQUIT in the parent to allow
     /// Docker to handle them, resetting them to SIG_DFL in the child.
+    ///
+    /// INVARIANT: the docker child must inherit cast's environment. Env var
+    /// passthrough (both `Agent::env_passthrough_args` and the config-driven
+    /// `env_passthrough` allowlist) emits the valueless `-e NAME` form, which
+    /// makes docker read each value from its own environment so secrets stay
+    /// out of cast's argv. Adding `env_clear()` or env sanitisation here would
+    /// silently break passthrough: the vars would simply be absent inside the
+    /// container, with no error.
     pub fn interactive_command(&self, args: Vec<String>) -> Result<ExitStatus> {
         use std::os::unix::process::CommandExt;
 
@@ -188,6 +196,9 @@ impl DockerClient {
     ///
     /// Returns the `ExitStatus` without bailing on non-zero exit codes, allowing
     /// the caller to decide how to handle agent failures.
+    ///
+    /// INVARIANT: as in `interactive_command`, the docker child must inherit
+    /// cast's environment for valueless `-e NAME` passthrough to work.
     pub fn headless_command(&self, args: Vec<String>, container_name: &str) -> Result<ExitStatus> {
         debug!(
             command = "docker",
