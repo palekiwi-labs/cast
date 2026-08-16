@@ -9,6 +9,9 @@ schema, see [src/config/schema.rs][schema-src].
 - `cpus`: CPU limit (e.g., `1.0`).
 - `network`: Docker network to use (default: `"bridge"`).
 - `forbidden_paths`: List of host paths that should be masked in the sandbox.
+- `env_passthrough`: List of host environment variable *names* to forward into
+  the sandbox. Values are read from the host at run time and never stored. See
+  [Environment Overrides][env-overrides].
 
 ## Nix Settings
 
@@ -71,4 +74,5 @@ A legacy `agent_versions` key is silently ignored if present.
 
 [schema-src]: ../../src/config/schema.rs
 [mcp-config]: ../mcp/configuration.md
+[env-overrides]: env-overrides.md
 [flake-integration]: ../nix/flake-integration.md
