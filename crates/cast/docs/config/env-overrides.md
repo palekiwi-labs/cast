@@ -43,19 +43,29 @@ Behaviour:
   or logged.
 - A name that is unset or empty on the host is silently skipped.
 - Names must match `[A-Za-z_][A-Za-z0-9_]*`; anything else is ignored.
+- `PATH`, `HOME`, and `NIX_REMOTE` are reserved and always dropped: they come
+  from the image or the container user, and a host value for them breaks the
+  sandbox.
 - Duplicates collapse, and the emitted arguments are sorted by name.
-- Passthrough values take precedence over entries in `cast.env`, because Docker
-  applies `--env` after `--env-file`. They do not override `cast`'s own
-  infrastructure variables.
+- Passthrough values take precedence over entries in `cast.env` (Docker
+  applies `--env` after `--env-file`) and over the image's own `ENV` defaults.
+  They do not override the variables `cast` sets itself (`USER`, `TERM`,
+  `CAST_MCP_URL`, ...), which are emitted later in argv.
 
 ### Precedence
 
 `env_passthrough` is a list, and lists **replace** rather than merge across
 config files. A project `cast.json` that sets `env_passthrough` overrides the
 global list entirely; the global list applies only when the project config is
-silent about it. This is intentional: the effective allowlist is always
-auditable by reading a single file, and the failure mode is a missing variable
+silent about it. This is intentional: the failure mode is a missing variable
 rather than a silently inherited one.
+
+The allowlist is itself a config field, so `CAST_ENV_PASSTHROUGH` in `cast`'s
+own environment outranks both `cast.json` files. Auditing the effective list
+therefore means reading the project file *and* checking the environment — use
+`cast config diff`, which reflects the merged result. An allowlist extended
+this way (for example by a `direnv` `.envrc`) still changes the config hash
+and still requires `cast config allow`.
 
 ### Approval
 
