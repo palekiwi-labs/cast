@@ -429,21 +429,19 @@ mod tests {
         );
     }
 
-    /// Names are config; values are not. `ApprovalStore` persists the
-    /// serialized config in cleartext to disk and `cast config diff` prints
-    /// it, so a forwarded secret must never appear there.
+    /// Names are config; values are not. The serialized config is what the
+    /// approval store writes to disk and what `cast config diff` prints, so
+    /// pin that the field is a bare list of names with no value channel.
     #[test]
-    fn test_env_passthrough_serializes_name_but_never_value() {
+    fn test_env_passthrough_serializes_as_bare_name_list() {
         let mut config = Config::default();
         config.env_passthrough.push("GH_TOKEN".to_string());
 
-        let serialized = serde_json::to_string(&config).unwrap();
+        let value = serde_json::to_value(&config).unwrap();
+        let list = value["env_passthrough"].as_array().unwrap();
 
-        assert!(serialized.contains("GH_TOKEN"));
-        assert!(
-            !serialized.contains("super-secret-value"),
-            "config must not carry host env values: {serialized}"
-        );
+        // An array of plain strings has nowhere to put a value.
+        assert_eq!(list, &[serde_json::Value::from("GH_TOKEN")]);
     }
 
     #[test]
