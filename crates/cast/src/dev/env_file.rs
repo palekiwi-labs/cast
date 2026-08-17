@@ -29,22 +29,13 @@ pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<Stri
     args
 }
 
-/// Returns valueless `-e NAME` args for allowlisted host env vars.
-///
-/// The value is deliberately never emitted: `docker run -e NAME` makes docker
-/// read the value from its own (inherited) environment, so secrets stay out of
-/// cast's argv and therefore out of `ps` for other host users.
-///
-/// Takes host env variable NAMES only, never values: the function has no use
-/// for a value, and the missing value channel is what makes a leak from here
-/// unrepresentable rather than merely unlikely. Filtering (e.g. dropping names
-/// whose host value is empty) belongs at the boundary that legitimately holds
-/// values — see `run_in_container`.
+/// Returns valueless `-e NAME` args for allowlisted host env vars: docker
+/// reads each value from its own inherited environment, so values never
+/// reach cast's argv.
 ///
 /// A name is skipped when it is not a valid shell variable name
 /// (`[A-Za-z_][A-Za-z0-9_]*`) or is absent from `host_env_names`. Duplicates
-/// emit a single pair, and output is sorted by name so it is independent of
-/// the order names appear in `cast.json`.
+/// collapse and output is sorted by name.
 pub fn build_env_passthrough_args(
     allowlist: &[String],
     host_env_names: &BTreeSet<String>,
@@ -59,7 +50,6 @@ pub fn build_env_passthrough_args(
         .collect();
 
     if !names.is_empty() {
-        // Names only. Logging a value here would defeat the whole design.
         debug!(names = ?names, "passing through host env vars");
     }
 

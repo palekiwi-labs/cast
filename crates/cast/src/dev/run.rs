@@ -14,12 +14,12 @@ use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{get_user, ResolvedUser};
+use crate::user::{ResolvedUser, get_user};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -150,12 +150,9 @@ pub fn run_in_container(
 ) -> Result<ExitStatus> {
     let env: HashMap<String, String> = std::env::vars().collect();
 
-    // Names only, for the config-driven passthrough allowlist. Two reasons to
-    // narrow here rather than downstream: the value channel is dropped at the
-    // one boundary that legitimately holds values, and this is the only place
-    // that can apply a value-dependent policy — a set-but-empty host var is
-    // excluded, since `-e NAME` beats --env-file and an empty value would
-    // otherwise silently shadow a real one from cast.env.
+    // Names only, and set-but-empty host vars are excluded: `-e NAME` beats
+    // --env-file, so an empty host value would silently shadow a real one
+    // from cast.env.
     let host_env_names: BTreeSet<String> = env
         .iter()
         .filter(|(_, value)| !value.is_empty())
@@ -367,11 +364,6 @@ pub fn resolve_run_opts(
 ///
 /// Agent-specific arguments (env vars, program-specific mounts, etc.) are
 /// NOT included here — each agent appends them via `Agent::extra_run_args`.
-///
-/// `host_env_names` carries the NAMES of the host's environment variables and
-/// deliberately not their values: it is only ever tested for membership, and
-/// omitting the value channel keeps host secrets out of this function's reach
-/// entirely. See `run_in_container` for where it is built.
 pub fn build_docker_run_flags(
     config: &Config,
     opts: &RunOpts,
@@ -421,14 +413,10 @@ pub fn build_docker_run_flags(
     ));
 
     // Environment: approval-gated host passthrough, as valueless `-e NAME`.
-    //
-    // Position matters in one direction only. Docker collects every
-    // --env-file entry first and then appends every --env entry, last one
-    // winning, so these beat cast.env regardless of where they sit in argv —
-    // placing them after the --env-file block is documentation, not
-    // mechanism. Placing them BEFORE cast's own `-e USER=` below is
-    // load-bearing: that precedence IS positional, and it keeps cast
-    // authoritative for the names it sets itself.
+    // Docker applies --env after --env-file (last one wins), so these beat
+    // cast.env wherever they sit; but against cast's own `-e USER=` below the
+    // precedence is positional, so passthrough must come first to keep cast
+    // authoritative for its own vars.
     run_args.extend(build_env_passthrough_args(
         &config.env_passthrough,
         host_env_names,
@@ -622,7 +610,9 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+        );
     }
 
     #[test]
@@ -687,7 +677,9 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+        );
     }
 
     #[test]

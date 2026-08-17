@@ -48,21 +48,8 @@ pub struct Config {
     /// are never stored here, so they never reach the approval hash, the
     /// approval store on disk, or `cast config diff`.
     ///
-    /// A plain list of names, deliberately: a map of name to bool invites the
-    /// misreading "set GH_TOKEN to true", which is unacceptable ambiguity for
-    /// a security-relevant key.
-    ///
-    /// Note that figment replaces list-valued keys wholesale rather than
-    /// merging them, so a project `cast.json` overrides the global allowlist
-    /// instead of extending it. That is the desired behaviour: the effective
-    /// allowlist is auditable by reading a single file, and the failure mode
-    /// is fail-closed (a name you expected is absent, which surfaces
-    /// immediately) rather than a forgotten global name silently applying to
-    /// every project.
-    ///
     /// Adding a name changes the config hash and therefore requires
-    /// `cast config allow`. That is the security property: an agent that edits
-    /// `cast.json` cannot open a new channel to the host silently.
+    /// `cast config allow`.
     #[serde(default)]
     pub env_passthrough: Vec<String>,
 

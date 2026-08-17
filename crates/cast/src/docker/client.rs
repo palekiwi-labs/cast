@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -150,13 +150,10 @@ impl DockerClient {
     /// its exit code. It ignores SIGINT and SIGQUIT in the parent to allow
     /// Docker to handle them, resetting them to SIG_DFL in the child.
     ///
-    /// INVARIANT: the docker child must inherit cast's environment. Env var
-    /// passthrough (both `Agent::env_passthrough_args` and the config-driven
-    /// `env_passthrough` allowlist) emits the valueless `-e NAME` form, which
-    /// makes docker read each value from its own environment so secrets stay
-    /// out of cast's argv. Adding `env_clear()` or env sanitisation here would
-    /// silently break passthrough: the vars would simply be absent inside the
-    /// container, with no error.
+    /// INVARIANT: the docker child must inherit cast's environment. Env
+    /// passthrough emits the valueless `-e NAME` form, so docker reads each
+    /// value from its own environment; `env_clear()` or env sanitisation
+    /// here would silently break it.
     pub fn interactive_command(&self, args: Vec<String>) -> Result<ExitStatus> {
         use std::os::unix::process::CommandExt;
 

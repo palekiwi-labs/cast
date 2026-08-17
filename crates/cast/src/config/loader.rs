@@ -2,8 +2,8 @@ use super::Config;
 use crate::paths::home_config_dir;
 use anyhow::{Context, Result};
 use figment::{
-    providers::{Env, Format, Json, Serialized},
     Figment,
+    providers::{Env, Format, Json, Serialized},
 };
 use std::path::PathBuf;
 use tracing::info;
@@ -29,13 +29,9 @@ pub fn load_config_from(base_dir: &std::path::Path) -> Result<Config> {
 
 /// Load configuration with an explicit global config path.
 ///
-/// Exists so tests can supply a temp-dir global config instead of relying on
-/// the real `$HOME`. The alternative — `figment::Jail` — mutates process-global
-/// state (`set_var`, `set_current_dir`) and its internal lock only serialises
-/// jail-against-jail, not against the other tests running concurrently in the
-/// same binary. That is a genuine data race on `getenv`/`setenv`, which is why
-/// `std::env::set_var` is `unsafe` in edition 2024. Threading the path through
-/// keeps the tests sound and sandbox-safe.
+/// Exists so tests can supply a temp-dir global config instead of the real
+/// `$HOME`. Deliberately avoids `figment::Jail`, which mutates process-global
+/// state and races with concurrent tests.
 pub fn load_config_with_global(
     base_dir: &std::path::Path,
     global_path: Option<&std::path::Path>,
@@ -143,14 +139,8 @@ mod tests {
         assert_eq!(config.mcp.port, 4000);
     }
 
-    /// The global allowlist must survive a project config that also sets
-    /// `env_passthrough`. This is the reason the field is a map and not a
-    /// `Vec<String>`: figment's `merge` replaces arrays wholesale and only
-    /// recurses into dicts (`coalesce.rs`), so an array would let the project
-    /// file silently shadow the whole global allowlist.
-    ///
     /// Writes a global and a project `cast.json` into a temp dir and returns
-    /// the loaded config. Avoids `figment::Jail` deliberately — see
+    /// the loaded config. Avoids `figment::Jail` — see
     /// `load_config_with_global`.
     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
         let dir = tempfile::tempdir().unwrap();
@@ -168,11 +158,9 @@ mod tests {
         load_config_with_global(&project_dir, Some(&global_path)).unwrap()
     }
 
-    /// A project `cast.json` replaces the global allowlist rather than
-    /// extending it, because figment merges dicts but replaces lists. This is
-    /// intended, not incidental: the effective allowlist stays auditable from
-    /// a single file, and the failure mode is fail-closed. Pinned so the
-    /// behaviour cannot drift silently.
+    /// Figment replaces list-valued keys wholesale, so a project
+    /// `env_passthrough` replaces the global list. Pinned so the behaviour
+    /// cannot drift silently.
     #[test]
     fn test_env_passthrough_project_replaces_global() {
         let config = load_with_configs(
