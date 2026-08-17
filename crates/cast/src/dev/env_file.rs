@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::path::Path;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Returns --env-file <path> args for cast.env files that exist on the host.
 ///
@@ -29,13 +29,20 @@ pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<Stri
     args
 }
 
+/// Names the image or the container user owns; forwarding a host value for
+/// them breaks the sandbox itself (nix PATH, home-directory mounts, or the
+/// read-only store client), and no host value can be meaningful inside the
+/// container, so they are dropped rather than warned about at load time.
+pub const RESERVED_ENV_NAMES: &[&str] = &["PATH", "HOME", "NIX_REMOTE"];
+
 /// Returns valueless `-e NAME` args for allowlisted host env vars: docker
 /// reads each value from its own inherited environment, so values never
 /// reach cast's argv.
 ///
 /// A name is skipped when it is not a valid shell variable name
-/// (`[A-Za-z_][A-Za-z0-9_]*`) or is absent from `host_env_names`. Duplicates
-/// collapse and output is sorted by name.
+/// (`[A-Za-z_][A-Za-z0-9_]*`), is reserved (see `RESERVED_ENV_NAMES`), or is
+/// absent from `host_env_names`. Duplicates collapse and output is sorted
+/// by name.
 pub fn build_env_passthrough_args(
     allowlist: &[String],
     host_env_names: &BTreeSet<String>,
@@ -43,6 +50,14 @@ pub fn build_env_passthrough_args(
     let names: Vec<&str> = allowlist
         .iter()
         .map(String::as_str)
+        .filter(|name| {
+            if RESERVED_ENV_NAMES.contains(name) {
+                warn!(name = %name, "dropping reserved env_passthrough name");
+                false
+            } else {
+                true
+            }
+        })
         .filter(|name| is_valid_env_name(name))
         .filter(|name| host_env_names.contains(*name))
         .collect::<BTreeSet<_>>()
@@ -103,6 +118,25 @@ mod tests {
         let allowlist = names(&["", "1BAD", "HAS-DASH", "HAS SPACE", "HAS=EQUALS"]);
         let args = build_env_passthrough_args(&allowlist, &host);
         assert!(args.is_empty(), "invalid names emitted: {args:?}");
+    }
+
+    #[test]
+    fn test_env_passthrough_drops_reserved_names() {
+        let host = host(&["PATH", "HOME", "NIX_REMOTE"]);
+        let allowlist = names(&["PATH", "HOME", "NIX_REMOTE"]);
+        let args = build_env_passthrough_args(&allowlist, &host);
+        assert!(
+            args.is_empty(),
+            "reserved names must never be forwarded: {args:?}"
+        );
+    }
+
+    #[test]
+    fn test_env_passthrough_reserved_drop_spares_other_names() {
+        let host = host(&["PATH", "GH_TOKEN"]);
+        let allowlist = names(&["PATH", "GH_TOKEN"]);
+        let args = build_env_passthrough_args(&allowlist, &host);
+        assert_eq!(args, vec!["-e", "GH_TOKEN"]);
     }
 
     #[test]
