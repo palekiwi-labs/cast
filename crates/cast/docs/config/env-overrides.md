@@ -43,9 +43,9 @@ Behaviour:
   or logged.
 - A name that is unset or empty on the host is silently skipped.
 - Names must match `[A-Za-z_][A-Za-z0-9_]*`; anything else is ignored.
-- `PATH`, `HOME`, and `NIX_REMOTE` are reserved and always dropped: they come
-  from the image or the container user, and a host value for them breaks the
-  sandbox.
+- `PATH`, `HOME`, and `NIX_REMOTE` are reserved and always dropped, with a
+  warning on stderr: they come from the image or the container user, and a
+  host value for them breaks the sandbox.
 - Duplicates collapse, and the emitted arguments are sorted by name.
 - Passthrough values take precedence over entries in `cast.env` (Docker
   applies `--env` after `--env-file`) and over the image's own `ENV` defaults.

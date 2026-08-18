@@ -9,7 +9,7 @@ use crate::config::{ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
-use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args};
+use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args, reserved_names_in};
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
@@ -158,6 +158,38 @@ pub fn run_in_container(
         .filter(|(_, value)| !value.is_empty())
         .map(|(name, _)| name.clone())
         .collect();
+
+    // warn! writes to the file log; eprintln! writes to the console. The
+    // reserved-name drop would otherwise be invisible: the run succeeds
+    // and the variable is simply absent inside the container.
+    let reserved = reserved_names_in(&config.env_passthrough);
+    if !reserved.is_empty() {
+        eprintln!(
+            "Warning: env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
+             so they are never forwarded. Remove them from env_passthrough.",
+            reserved
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    // warn! writes to the file log; eprintln! writes to the console. The
+    // reserved-name drop would otherwise be invisible: the run succeeds
+    // and the variable is simply absent inside the container.
+    let reserved = reserved_names_in(&config.env_passthrough);
+    if !reserved.is_empty() {
+        eprintln!(
+            "Warning: env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
+             so they are never forwarded. Remove them from env_passthrough.",
+            reserved
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 
     // Prepare host directories for ALL known agents so every config dir and
     // cache dir exists before the container starts (universal mounts).

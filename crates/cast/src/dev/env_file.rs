@@ -32,8 +32,21 @@ pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<Stri
 /// Names the image or the container user owns; forwarding a host value for
 /// them breaks the sandbox itself (nix PATH, home-directory mounts, or the
 /// read-only store client), and no host value can be meaningful inside the
-/// container, so they are dropped rather than warned about at load time.
+/// container. They pass config approval like any other entry and are
+/// dropped when the passthrough args are built, with a warning per name.
 pub const RESERVED_ENV_NAMES: &[&str] = &["PATH", "HOME", "NIX_REMOTE"];
+
+/// Reserved names listed in `allowlist`, deduplicated and sorted, for the
+/// run boundary to surface on the console (the file log already records
+/// each drop; the args builder stays console-silent so its unit tests
+/// print nothing).
+pub fn reserved_names_in(allowlist: &[String]) -> BTreeSet<String> {
+    allowlist
+        .iter()
+        .filter(|name| RESERVED_ENV_NAMES.contains(&name.as_str()))
+        .cloned()
+        .collect()
+}
 
 /// Returns valueless `-e NAME` args for allowlisted host env vars: docker
 /// reads each value from its own inherited environment, so values never
@@ -47,17 +60,19 @@ pub fn build_env_passthrough_args(
     allowlist: &[String],
     host_env_names: &BTreeSet<String>,
 ) -> Vec<String> {
+    let reserved: BTreeSet<&str> = allowlist
+        .iter()
+        .map(String::as_str)
+        .filter(|name| RESERVED_ENV_NAMES.contains(name))
+        .collect();
+    for name in &reserved {
+        warn!(name = %name, "dropping reserved env_passthrough name");
+    }
+
     let names: Vec<&str> = allowlist
         .iter()
         .map(String::as_str)
-        .filter(|name| {
-            if RESERVED_ENV_NAMES.contains(name) {
-                warn!(name = %name, "dropping reserved env_passthrough name");
-                false
-            } else {
-                true
-            }
-        })
+        .filter(|name| !reserved.contains(name))
         .filter(|name| is_valid_env_name(name))
         .filter(|name| host_env_names.contains(*name))
         .collect::<BTreeSet<_>>()
@@ -137,6 +152,18 @@ mod tests {
         let allowlist = names(&["PATH", "GH_TOKEN"]);
         let args = build_env_passthrough_args(&allowlist, &host);
         assert_eq!(args, vec!["-e", "GH_TOKEN"]);
+    }
+
+    #[test]
+    fn test_reserved_names_in_dedupes_sorts_and_ignores_others() {
+        let allowlist = names(&["GH_TOKEN", "HOME", "PATH", "HOME"]);
+        let reserved: Vec<String> = reserved_names_in(&allowlist).into_iter().collect();
+        assert_eq!(reserved, names(&["HOME", "PATH"]));
+    }
+
+    #[test]
+    fn test_reserved_names_in_empty_when_allowlist_has_none() {
+        assert!(reserved_names_in(&names(&["GH_TOKEN"])).is_empty());
     }
 
     #[test]
