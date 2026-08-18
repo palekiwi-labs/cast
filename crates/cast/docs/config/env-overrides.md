@@ -61,11 +61,16 @@ silent about it. This is intentional: the failure mode is a missing variable
 rather than a silently inherited one.
 
 The allowlist is itself a config field, so `CAST_ENV_PASSTHROUGH` in `cast`'s
-own environment outranks both `cast.json` files. Auditing the effective list
-therefore means reading the project file *and* checking the environment — use
-`cast config diff`, which reflects the merged result. An allowlist extended
-this way (for example by a `direnv` `.envrc`) still changes the config hash
-and still requires `cast config allow`.
+own environment outranks both `cast.json` files. Being a list, it needs the
+bracketed form — `export CAST_ENV_PASSTHROUGH='[GH_TOKEN, NPM_TOKEN]'`; an
+unbracketed value fails to parse and every `cast` invocation errors until
+the variable is fixed or unset. Auditing the effective list therefore means
+reading the project file *and* checking the environment — use
+`cast config show`, which prints the merged result (`cast config diff`
+prints only changes against the approved snapshot, so it is silent once the
+config is approved). An allowlist extended this way (for example by a
+`direnv` `.envrc`) still changes the config hash and still requires
+`cast config allow`.
 
 ### Approval
 

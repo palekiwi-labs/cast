@@ -2,8 +2,8 @@ use super::Config;
 use crate::paths::home_config_dir;
 use anyhow::{Context, Result};
 use figment::{
-    Figment,
     providers::{Env, Format, Json, Serialized},
+    Figment,
 };
 use std::path::PathBuf;
 use tracing::info;
@@ -198,6 +198,40 @@ mod tests {
     fn test_env_passthrough_defaults_to_empty() {
         let config = load_with_configs(None, None);
         assert!(config.env_passthrough.is_empty());
+    }
+
+    /// Pins the env-var syntax the docs prescribe for `env_passthrough`.
+    /// figment parses every `CAST_*` value with its magic parser, which
+    /// only produces an array for bracketed input; an unbracketed name
+    /// parses as a plain string, which cannot deserialize into
+    /// `Vec<String>` and fails every `cast` invocation until the variable
+    /// is fixed or unset. Element case is preserved (only the key path is
+    /// lowercased), unlike the `CAST_ENV_PASSTHROUGH__NAME` nesting route
+    /// that was considered and dropped.
+    ///
+    /// Tested at the figment `Value` level rather than through the process
+    /// environment: setting a real env var would race the parallel tests
+    /// that call `load_config_from` — the same soundness reason
+    /// `figment::Jail` was rejected.
+    #[test]
+    fn test_cast_env_passthrough_requires_bracketed_list_literal() {
+        use figment::value::Value;
+
+        let bracketed = "[GH_TOKEN, NPM_TOKEN]".parse::<Value>().unwrap();
+        let names: Vec<String> = bracketed
+            .as_array()
+            .expect("bracketed literal must parse as an array")
+            .iter()
+            .cloned()
+            .map(|v| v.into_string().expect("element must be a string"))
+            .collect();
+        assert_eq!(names, vec!["GH_TOKEN".to_string(), "NPM_TOKEN".to_string()]);
+
+        let unbracketed = "GH_TOKEN".parse::<Value>().unwrap();
+        assert!(
+            unbracketed.as_array().is_none(),
+            "unbracketed value must not parse as an array"
+        );
     }
 
     #[test]
