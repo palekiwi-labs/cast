@@ -175,22 +175,6 @@ pub fn run_in_container(
         );
     }
 
-    // warn! writes to the file log; eprintln! writes to the console. The
-    // reserved-name drop would otherwise be invisible: the run succeeds
-    // and the variable is simply absent inside the container.
-    let reserved = reserved_names_in(&config.env_passthrough);
-    if !reserved.is_empty() {
-        eprintln!(
-            "Warning: env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
-             so they are never forwarded. Remove them from env_passthrough.",
-            reserved
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-
     // Prepare host directories for ALL known agents so every config dir and
     // cache dir exists before the container starts (universal mounts).
     for ag in all_agents() {
