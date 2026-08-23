@@ -149,6 +149,11 @@ impl DockerClient {
     /// This keeps `cast` alive to monitor the container's lifecycle and capture
     /// its exit code. It ignores SIGINT and SIGQUIT in the parent to allow
     /// Docker to handle them, resetting them to SIG_DFL in the child.
+    ///
+    /// INVARIANT: the docker child must inherit cast's environment. Env
+    /// passthrough emits the valueless `-e NAME` form, so docker reads each
+    /// value from its own environment; `env_clear()` or env sanitisation
+    /// here would silently break it.
     pub fn interactive_command(&self, args: Vec<String>) -> Result<ExitStatus> {
         use std::os::unix::process::CommandExt;
 
@@ -188,6 +193,9 @@ impl DockerClient {
     ///
     /// Returns the `ExitStatus` without bailing on non-zero exit codes, allowing
     /// the caller to decide how to handle agent failures.
+    ///
+    /// INVARIANT: as in `interactive_command`, the docker child must inherit
+    /// cast's environment for valueless `-e NAME` passthrough to work.
     pub fn headless_command(&self, args: Vec<String>, container_name: &str) -> Result<ExitStatus> {
         debug!(
             command = "docker",

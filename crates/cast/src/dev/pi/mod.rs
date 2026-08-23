@@ -3,10 +3,8 @@ use anyhow::{Context, Result};
 use crate::config::Config;
 use crate::dev::agent::Agent;
 use crate::dev::run::RunOpts;
-use std::collections::HashMap;
 
 pub mod config_dir;
-pub mod env;
 
 pub struct Pi;
 
@@ -43,10 +41,6 @@ impl Agent for Pi {
                 opts.user.username
             ),
         ])
-    }
-
-    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
-        env::build_passthrough_env_args(env)
     }
 }
 

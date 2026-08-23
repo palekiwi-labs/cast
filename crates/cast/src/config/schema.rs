@@ -44,6 +44,12 @@ pub struct Config {
     pub forbidden_paths: Vec<String>,
 
     #[serde(default)]
+    pub env_passthrough: Vec<String>,
+
+    #[serde(default)]
+    pub extra_env_passthrough: Vec<String>,
+
+    #[serde(default)]
     pub mcp: McpConfig,
 }
 
@@ -159,6 +165,8 @@ impl Default for Config {
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             forbidden_paths: Vec::new(),
+            env_passthrough: Vec::new(),
+            extra_env_passthrough: Vec::new(),
             mcp: McpConfig::default(),
         }
     }

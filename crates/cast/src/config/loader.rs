@@ -24,9 +24,16 @@ pub fn load_config() -> Result<Config> {
 }
 
 pub fn load_config_from(base_dir: &std::path::Path) -> Result<Config> {
+    load_config_with_global(base_dir, global_config_path().as_deref())
+}
+
+pub fn load_config_with_global(
+    base_dir: &std::path::Path,
+    global_path: Option<&std::path::Path>,
+) -> Result<Config> {
     let mut figment = Figment::new().merge(Serialized::defaults(Config::default()));
 
-    if let Some(global_path) = global_config_path() {
+    if let Some(global_path) = global_path {
         figment = figment.merge(Json::file(global_path));
     }
 
@@ -125,6 +132,110 @@ mod tests {
         assert_eq!(config.mcp.hostname, "0.0.0.0");
         // Should have port from cast-mcp.json (precedence)
         assert_eq!(config.mcp.port, 4000);
+    }
+
+    fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
+        let dir = tempfile::tempdir().unwrap();
+        let project_dir = dir.path().join("project");
+        std::fs::create_dir_all(&project_dir).unwrap();
+
+        let global_path = dir.path().join("global-cast.json");
+        if let Some(body) = global {
+            std::fs::write(&global_path, body).unwrap();
+        }
+        if let Some(body) = project {
+            std::fs::write(project_dir.join("cast.json"), body).unwrap();
+        }
+
+        load_config_with_global(&project_dir, Some(&global_path)).unwrap()
+    }
+
+    #[test]
+    fn test_env_passthrough_project_replaces_global() {
+        let config = load_with_configs(
+            Some(r#"{ "env_passthrough": ["GLOBAL_TOKEN"] }"#),
+            Some(r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#),
+        );
+
+        assert_eq!(config.env_passthrough, vec!["PROJECT_TOKEN".to_string()]);
+    }
+
+    #[test]
+    fn test_env_passthrough_global_applies_when_project_is_silent() {
+        let config = load_with_configs(
+            Some(r#"{ "env_passthrough": ["GLOBAL_TOKEN"] }"#),
+            Some(r#"{ "memory": "2048m" }"#),
+        );
+
+        assert_eq!(config.env_passthrough, vec!["GLOBAL_TOKEN".to_string()]);
+    }
+
+    #[test]
+    fn test_env_passthrough_accepts_multiple_names() {
+        let config = load_with_configs(
+            None,
+            Some(r#"{ "env_passthrough": ["GH_TOKEN", "ANTHROPIC_API_KEY"] }"#),
+        );
+
+        assert_eq!(
+            config.env_passthrough,
+            vec!["GH_TOKEN".to_string(), "ANTHROPIC_API_KEY".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_env_passthrough_defaults_to_empty() {
+        let config = load_with_configs(None, None);
+        assert!(config.env_passthrough.is_empty());
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_defaults_to_empty() {
+        let config = load_with_configs(None, None);
+        assert!(config.extra_env_passthrough.is_empty());
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_project_replaces_global() {
+        let config = load_with_configs(
+            Some(r#"{ "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#),
+            Some(r#"{ "extra_env_passthrough": ["PROJECT_EXTRA"] }"#),
+        );
+
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["PROJECT_EXTRA".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_global_applies_when_project_is_silent() {
+        let config = load_with_configs(
+            Some(r#"{ "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#),
+            Some(r#"{ "memory": "2048m" }"#),
+        );
+
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["GLOBAL_EXTRA".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_env_passthrough_keys_replace_independently() {
+        let config = load_with_configs(
+            Some(
+                r#"{ "env_passthrough": ["GLOBAL_BASE"],
+                     "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#,
+            ),
+            Some(r#"{ "extra_env_passthrough": ["PROJECT_EXTRA"] }"#),
+        );
+
+        assert_eq!(config.env_passthrough, vec!["GLOBAL_BASE".to_string()]);
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["PROJECT_EXTRA".to_string()]
+        );
     }
 
     #[test]

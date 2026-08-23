@@ -1,7 +1,4 @@
 pub mod config_dir;
-pub mod env;
-
-use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
@@ -51,10 +48,6 @@ impl Agent for OpenCode {
                 opts.user.username
             ),
         ])
-    }
-
-    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
-        env::build_passthrough_env_args(env)
     }
 }
 

@@ -31,8 +31,7 @@ global devShell, the trait defines only the program-specific layer on top of
 the shared image:
 1. Config-directory bind mounts (`config_mount_args`)
 2. Host preparation (creating directories) via `prepare_host`
-3. Docker run argument generation (`extra_run_args`, `env_passthrough_args`)
-4. Command wrapping (nested `nix develop` shell selection)
+3. Command wrapping (nested `nix develop` shell selection) via `build_command`
 
 The trait no longer handles version resolution or image building — those are
 gone with the nix-native model. For the full trait definition, see

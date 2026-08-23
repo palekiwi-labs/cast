@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::{Context, Result};
 
 use crate::config::Config;
@@ -55,18 +53,15 @@ pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
 /// Build the complete set of agent-specific `docker run` arguments for the
 /// universal container.
 ///
-/// Composes four layers:
+/// Composes three layers:
 /// 1. Shared data volumes (`-cache` / `-local`) plus the cross-harness
 ///    `.agents` bind mount (all universal — present for every session).
 /// 2. Union of config-directory bind mounts from **every** included agent.
-/// 3. Environment-variable passthrough from the **launched** agent only.
-/// 4. User flake mount (`~/.config/cast/nix`) if present on the host.
+/// 3. User flake mount (`~/.config/cast/nix`) if present on the host.
 pub fn build_universal_run_args(
     included_agents: &[&dyn Agent],
-    launched_agent: &dyn Agent,
     config: &Config,
     opts: &RunOpts,
-    env: &HashMap<String, String>,
 ) -> Result<Vec<String>> {
     let mut args: Vec<String> = vec![];
 
@@ -79,11 +74,7 @@ pub fn build_universal_run_args(
         args.extend(agent.config_mount_args(config, opts)?);
     }
 
-    // 3. Env passthrough from the launched agent only (subprocess agents
-    //    inherit the container env).
-    args.extend(launched_agent.env_passthrough_args(env));
-
-    // 4. User flake mount (~/.config/cast/nix), if present.
+    // 3. User flake mount (~/.config/cast/nix), if present.
     let user_flake_host_dir = opts
         .host_home_dir
         .as_ref()
@@ -229,10 +220,9 @@ mod tests {
     fn universal_run_args_includes_cross_harness_agents_mount() {
         let config = Config::default();
         let opts = basic_opts();
-        let env = HashMap::new();
 
         let agents: Vec<&dyn Agent> = vec![&OpenCode];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+        let args = build_universal_run_args(&agents, &config, &opts).unwrap();
 
         // .agents is a universal cross-harness dir; present regardless of
         // which agents are included.
@@ -246,10 +236,9 @@ mod tests {
     fn all_three_agents_includes_all_config_dirs_and_single_data_volumes() {
         let config = Config::default();
         let opts = basic_opts();
-        let env = HashMap::new();
 
         let agents: Vec<&dyn Agent> = vec![&OpenCode, &ClaudeCode, &Pi];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+        let args = build_universal_run_args(&agents, &config, &opts).unwrap();
 
         // All config dirs present (opencode, claude, claude.json, pi).
         assert!(
@@ -288,11 +277,10 @@ mod tests {
     fn subset_excludes_excluded_agent_config_dirs() {
         let config = Config::default();
         let opts = basic_opts();
-        let env = HashMap::new();
 
         // Only opencode + pi included — claudecode excluded.
         let agents: Vec<&dyn Agent> = vec![&OpenCode, &Pi];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+        let args = build_universal_run_args(&agents, &config, &opts).unwrap();
 
         // Included agents' config dirs present.
         assert!(args.iter().any(|a| a.contains("/.config/opencode:rw")));
@@ -313,10 +301,9 @@ mod tests {
     fn no_two_mounts_share_the_same_container_target() {
         let config = Config::default();
         let opts = basic_opts();
-        let env = HashMap::new();
 
         let agents: Vec<&dyn Agent> = vec![&OpenCode, &ClaudeCode, &Pi];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+        let args = build_universal_run_args(&agents, &config, &opts).unwrap();
 
         // Extract the container target path from each `-v` arg.
         // A `-v` arg has the shape "host_src:container_target:rw".
@@ -352,10 +339,9 @@ mod tests {
             ..Config::default()
         };
         let opts = basic_opts();
-        let env = HashMap::new();
 
         let agents: Vec<&dyn Agent> = vec![&OpenCode, &Pi];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
+        let args = build_universal_run_args(&agents, &config, &opts).unwrap();
 
         assert!(
             args.iter().any(|a| a.contains("myteam-cache")),
@@ -364,43 +350,6 @@ mod tests {
         assert!(
             args.iter().any(|a| a.contains("myteam-local")),
             "custom namespace missing on local volume: {args:?}"
-        );
-    }
-
-    #[test]
-    fn env_passthrough_from_launched_agent_only() {
-        let config = Config::default();
-        let opts = basic_opts();
-
-        // ANTHROPIC_API_KEY is in every agent's passthrough set; OPENCODE_*
-        // is opencode-only; PI_OFFLINE is pi-only. By launching OpenCode we
-        // should see OPENCODE_MODELS_URL but not PI_OFFLINE.
-        let mut env = HashMap::new();
-        env.insert("ANTHROPIC_API_KEY".to_string(), "sk-123".to_string());
-        env.insert(
-            "OPENCODE_MODELS_URL".to_string(),
-            "http://models".to_string(),
-        );
-        env.insert("PI_OFFLINE".to_string(), "true".to_string());
-
-        let agents: Vec<&dyn Agent> = vec![&OpenCode, &ClaudeCode, &Pi];
-        let args = build_universal_run_args(&agents, &OpenCode, &config, &opts, &env).unwrap();
-
-        // Launched agent's passthrough vars present.
-        assert!(
-            args.contains(&"ANTHROPIC_API_KEY".to_string()),
-            "ANTHROPIC_API_KEY should be present via launched agent passthrough"
-        );
-        assert!(
-            args.contains(&"OPENCODE_MODELS_URL".to_string()),
-            "OPENCODE_MODELS_URL should be present (launched agent is opencode)"
-        );
-
-        // PI_OFFLINE is pi-specific; absent because env comes from the
-        // launched agent (opencode) only.
-        assert!(
-            !args.contains(&"PI_OFFLINE".to_string()),
-            "PI_OFFLINE should be absent (env from launched agent only)"
         );
     }
 }

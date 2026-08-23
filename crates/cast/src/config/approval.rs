@@ -397,6 +397,89 @@ mod tests {
     }
 
     #[test]
+    fn test_env_passthrough_addition_changes_hash_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path();
+
+        let approved = Config::default();
+        let mut tampered = Config::default();
+        tampered
+            .env_passthrough
+            .push("AWS_SECRET_ACCESS_KEY".to_string());
+
+        let approved_hash = compute_config_hash(&approved, path).unwrap();
+        let tampered_hash = compute_config_hash(&tampered, path).unwrap();
+        assert_ne!(approved_hash, tampered_hash);
+
+        let mut store = ApprovalStore::default();
+        let canonical = std::fs::canonicalize(path).unwrap();
+        store.add_entry(
+            approved_hash,
+            canonical.to_string_lossy().into_owned(),
+            serde_json::to_value(&approved).unwrap(),
+        );
+
+        let status = get_approval_status_with(&tampered, path, &store).unwrap();
+        assert!(
+            matches!(status, ApprovalStatus::Changed),
+            "adding an env_passthrough name must require re-approval, got {status:?}"
+        );
+    }
+
+    #[test]
+    fn test_env_passthrough_serializes_as_bare_name_list() {
+        let mut config = Config::default();
+        config.env_passthrough.push("GH_TOKEN".to_string());
+
+        let value = serde_json::to_value(&config).unwrap();
+        let list = value["env_passthrough"].as_array().unwrap();
+
+        // An array of plain strings has nowhere to put a value.
+        assert_eq!(list, &[serde_json::Value::from("GH_TOKEN")]);
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_addition_changes_hash_and_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path();
+
+        let approved = Config::default();
+        let mut tampered = Config::default();
+        tampered
+            .extra_env_passthrough
+            .push("AWS_SECRET_ACCESS_KEY".to_string());
+
+        let approved_hash = compute_config_hash(&approved, path).unwrap();
+        let tampered_hash = compute_config_hash(&tampered, path).unwrap();
+        assert_ne!(approved_hash, tampered_hash);
+
+        let mut store = ApprovalStore::default();
+        let canonical = std::fs::canonicalize(path).unwrap();
+        store.add_entry(
+            approved_hash,
+            canonical.to_string_lossy().into_owned(),
+            serde_json::to_value(&approved).unwrap(),
+        );
+
+        let status = get_approval_status_with(&tampered, path, &store).unwrap();
+        assert!(
+            matches!(status, ApprovalStatus::Changed),
+            "adding an extra_env_passthrough name must require re-approval, got {status:?}"
+        );
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_serializes_as_bare_name_list() {
+        let mut config = Config::default();
+        config.extra_env_passthrough.push("GH_TOKEN".to_string());
+
+        let value = serde_json::to_value(&config).unwrap();
+        let list = value["extra_env_passthrough"].as_array().unwrap();
+
+        assert_eq!(list, &[serde_json::Value::from("GH_TOKEN")]);
+    }
+
+    #[test]
     fn test_approval_store_in_memory() {
         let mut store = ApprovalStore::default();
         let hash = "abc123".to_string();

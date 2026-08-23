@@ -114,7 +114,6 @@ pub fn exec(
 
     run_in_container(
         &docker,
-        agent,
         config,
         &run_opts,
         &container_name,

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -9,7 +9,7 @@ use crate::config::{ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::container_name::resolve_container_name;
-use crate::dev::env_file::build_env_file_args;
+use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args, reserved_names_in};
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
@@ -59,7 +59,7 @@ pub struct SessionFlags {
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent contributes its own
-/// context via `Agent::config_mount_args` and `Agent::env_passthrough_args`.
+/// context via `Agent::config_mount_args`.
 pub struct RunOpts {
     pub workspace: ResolvedWorkspace,
     pub user: ResolvedUser,
@@ -121,15 +121,9 @@ fn dispatch_run(
 /// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
 /// data volumes, the cross-harness `~/.agents` bind mount, and the union of
 /// every agent's config-directory mounts (universal mounts are the
-/// unconditional default). Environment passthrough comes from the launched
-/// agent only.
-fn build_session_run_args(
-    launched_agent: &dyn Agent,
-    config: &Config,
-    run_opts: &RunOpts,
-    env: &HashMap<String, String>,
-) -> Result<Vec<String>> {
-    build_universal_run_args(all_agents(), launched_agent, config, run_opts, env)
+/// unconditional default).
+fn build_session_run_args(config: &Config, run_opts: &RunOpts) -> Result<Vec<String>> {
+    build_universal_run_args(all_agents(), config, run_opts)
 }
 
 /// Shared container-run core used by both `run_agent` and `exec`.
@@ -141,14 +135,32 @@ fn build_session_run_args(
 /// logging.
 pub fn run_in_container(
     docker: &DockerClient,
-    agent: &dyn Agent,
     config: &ApprovedConfig,
     run_opts: &RunOpts,
     container_name: &str,
     image_tag: &str,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
-    let env: HashMap<String, String> = std::env::vars().collect();
+    // Names only, and set-but-empty host vars are excluded: `-e NAME` beats
+    // --env-file, so an empty host value would silently shadow a real one
+    // from cast.env.
+    let host_env_names: BTreeSet<String> = std::env::vars()
+        .filter(|(_, value)| !value.is_empty())
+        .map(|(name, _)| name)
+        .collect();
+
+    let reserved = reserved_names_in(&effective_env_passthrough(config));
+    if !reserved.is_empty() {
+        eprintln!(
+            "Warning: env_passthrough/extra_env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
+             so they are never forwarded. Remove them from env_passthrough or extra_env_passthrough.",
+            reserved
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
 
     // Prepare host directories for ALL known agents so every config dir and
     // cache dir exists before the container starts (universal mounts).
@@ -160,8 +172,8 @@ pub fn run_in_container(
     // session regardless of which agents are included.
     dev::universal::prepare_host(run_opts)?;
 
-    let docker_flags = build_docker_run_flags(config, run_opts);
-    let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
+    let docker_flags = build_docker_run_flags(config, run_opts, &host_env_names);
+    let extra_args = build_session_run_args(config, run_opts)?;
 
     dispatch_run(
         docker,
@@ -246,15 +258,7 @@ pub fn run_agent(
 
     let cmd = agent.build_command(config, &run_opts, extra_args);
 
-    run_in_container(
-        &docker,
-        agent,
-        config,
-        &run_opts,
-        &container_name,
-        &image_tag,
-        cmd,
-    )
+    run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
 }
 
 /// Auto-scaffold the global cast flake on a new host so the first
@@ -351,11 +355,27 @@ pub fn resolve_run_opts(
     }
 }
 
+/// Effective env passthrough allowlist: `env_passthrough` (base) then
+/// `extra_env_passthrough` (per-project additions), before the single
+/// filter pass (validity, reserved names, unset/empty, dedupe, sort)
+/// applied inside [`build_env_passthrough_args`]. The concat lives here
+/// so every consumer — the reserved-name warning and the flags builder —
+/// sees the same list and cannot drift apart.
+fn effective_env_passthrough(config: &Config) -> Vec<String> {
+    let mut names = config.env_passthrough.clone();
+    names.extend(config.extra_env_passthrough.iter().cloned());
+    names
+}
+
 /// Build the generic set of Docker run flags that apply to every agent.
 ///
-/// Agent-specific arguments (env vars, program-specific mounts, etc.) are
-/// NOT included here — each agent appends them via `Agent::extra_run_args`.
-pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
+/// Agent-specific arguments (program-specific mounts, etc.) are NOT included
+/// here — each agent contributes them via `Agent::config_mount_args`.
+pub fn build_docker_run_flags(
+    config: &Config,
+    opts: &RunOpts,
+    host_env_names: &BTreeSet<String>,
+) -> Vec<String> {
     // TTY flags: interactive gets "-it", headless gets neither.
     // Headless runs are fire-and-forget; the agent receives its input via
     // extra_args, not stdin. Passing -i with an inherited terminal stdin
@@ -397,6 +417,11 @@ pub fn build_docker_run_flags(config: &Config, opts: &RunOpts) -> Vec<String> {
     run_args.extend(build_env_file_args(
         &opts.workspace.root,
         opts.host_home_dir.as_deref(),
+    ));
+
+    run_args.extend(build_env_passthrough_args(
+        &effective_env_passthrough(config),
+        host_env_names,
     ));
 
     // Environment: user identity (unconditional in both modes).
@@ -518,6 +543,16 @@ mod tests {
         }
     }
 
+    /// Host environment with no variables set, for the majority of flag tests
+    /// that are not about passthrough.
+    fn no_host_env() -> BTreeSet<String> {
+        BTreeSet::new()
+    }
+
+    fn host_env(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
     fn make_headless_opts(user: ResolvedUser, workspace: ResolvedWorkspace, port: u16) -> RunOpts {
         RunOpts {
             workspace,
@@ -554,7 +589,7 @@ mod tests {
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         // Generic flags present
         assert!(run_args.contains(&"--rm".to_string()));
@@ -583,12 +618,146 @@ mod tests {
     }
 
     #[test]
+    fn test_build_docker_run_flags_env_passthrough_emitted_valueless() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN"]));
+
+        assert!(run_args.contains(&"GH_TOKEN".to_string()));
+        // No `NAME=value` form: the value must not reach cast's argv.
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("GH_TOKEN=")),
+            "passthrough emitted a valued arg: {run_args:?}"
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_env_passthrough_omitted_when_unset_on_host() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert!(!run_args.contains(&"GH_TOKEN".to_string()));
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_env_passthrough_precedes_cast_infra_vars() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN"]));
+
+        let passthrough = run_args.iter().position(|a| a == "GH_TOKEN").unwrap();
+        let user = run_args.iter().position(|a| a == "USER=alice").unwrap();
+
+        // Load-bearing: docker's last-occurrence-wins makes this ordering the
+        // only thing keeping cast authoritative for the names it sets itself.
+        // An allowlisted USER must not be able to override cast's own.
+        assert!(
+            passthrough < user,
+            "passthrough must precede cast's infra vars: {run_args:?}"
+        );
+        // The `-e` belonging to the passthrough name sits immediately before it.
+        assert_eq!(run_args[passthrough - 1], "-e");
+    }
+
+    #[test]
+    fn test_effective_env_passthrough_concatenates_base_then_extra() {
+        let config = Config {
+            env_passthrough: vec!["BASE_ONE".to_string(), "BASE_TWO".to_string()],
+            extra_env_passthrough: vec!["EXTRA_ONE".to_string()],
+            ..Config::default()
+        };
+
+        assert_eq!(
+            effective_env_passthrough(&config),
+            vec![
+                "BASE_ONE".to_string(),
+                "BASE_TWO".to_string(),
+                "EXTRA_ONE".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_effective_env_passthrough_empty_when_both_keys_empty() {
+        assert!(effective_env_passthrough(&Config::default()).is_empty());
+    }
+
+    /// The reserved-name warning feeds from the effective list, so a
+    /// reserved name smuggled into the extra key must be caught too.
+    #[test]
+    fn test_reserved_names_include_extra_list_entries() {
+        let config = Config {
+            extra_env_passthrough: vec!["GH_TOKEN".to_string(), "PATH".to_string()],
+            ..Config::default()
+        };
+
+        let reserved = reserved_names_in(&effective_env_passthrough(&config));
+
+        assert_eq!(reserved, BTreeSet::from(["PATH".to_string()]));
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_base_and_extra_both_emit_valueless() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            extra_env_passthrough: vec!["NPM_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args =
+            build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN", "NPM_TOKEN"]));
+
+        assert!(run_args.contains(&"GH_TOKEN".to_string()));
+        assert!(run_args.contains(&"NPM_TOKEN".to_string()));
+        assert!(
+            !run_args
+                .iter()
+                .any(|a| a.starts_with("GH_TOKEN=") || a.starts_with("NPM_TOKEN=")),
+            "passthrough emitted a valued arg: {run_args:?}"
+        );
+    }
+
+    /// A name allowlisted in both keys is one name: the dedupe pass runs
+    /// over the concatenation, so it emits a single `-e` pair.
+    #[test]
+    fn test_build_docker_run_flags_cross_key_duplicate_emits_one_pair() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            extra_env_passthrough: vec!["GH_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN"]));
+
+        assert_eq!(
+            run_args.iter().filter(|a| a.as_str() == "GH_TOKEN").count(),
+            1,
+            "duplicate across keys must emit one -e pair: {run_args:?}"
+        );
+    }
+
+    #[test]
     fn test_build_docker_run_flags_mcp_custom_port() {
         let mut config = Config::default();
         config.mcp.port = 9000;
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
         assert!(
             run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
         );
@@ -602,7 +771,7 @@ mod tests {
         };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         let add_host_pos = run_args.iter().position(|r| r == "--add-host");
         assert!(add_host_pos.is_some(), "Should contain --add-host");
@@ -620,7 +789,7 @@ mod tests {
         };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             !run_args.contains(&"--add-host".to_string()),
@@ -645,7 +814,7 @@ mod tests {
         };
 
         let opts = make_interactive_opts(alice_user(), workspace, 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(run_args.contains(
             &"/home/alice/project/secrets:ro,noexec,nosuid,size=1k,mode=000".to_string()
@@ -744,13 +913,10 @@ mod tests {
 
     #[test]
     fn test_session_run_args_use_universal_topology() {
-        use crate::dev::opencode::OpenCode;
-
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-        let env = HashMap::new();
 
-        let args = build_session_run_args(&OpenCode, &config, &opts, &env).unwrap();
+        let args = build_session_run_args(&config, &opts).unwrap();
 
         // Shared cache/local volumes — NOT per-agent.
         assert!(
@@ -787,7 +953,7 @@ mod tests {
     fn test_build_docker_run_flags_injects_cast_host_name() {
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
@@ -800,7 +966,7 @@ mod tests {
     fn test_build_docker_run_flags_headless_injects_cast_host_name() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             run_args.contains(&"CAST_HOST_NAME=test-host".to_string()),
@@ -815,7 +981,7 @@ mod tests {
     fn test_build_docker_run_flags_headless_no_tty_flags() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             !run_args.contains(&"-i".to_string()),
@@ -836,7 +1002,7 @@ mod tests {
         // publish: false (the default) → no -p flag regardless of tty mode.
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             !run_args.contains(&"-p".to_string()),
@@ -848,7 +1014,7 @@ mod tests {
     fn test_build_docker_run_flags_headless_no_color_vars() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             !run_args.iter().any(|a| a.contains("FORCE_COLOR")),
@@ -868,7 +1034,7 @@ mod tests {
     fn test_build_docker_run_flags_headless_injects_no_color() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             run_args.contains(&"NO_COLOR=1".to_string()),
@@ -880,7 +1046,7 @@ mod tests {
     fn test_build_docker_run_flags_headless_user_present() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             run_args.contains(&"USER=alice".to_string()),
@@ -897,7 +1063,7 @@ mod tests {
             host_name: "test-host".to_string(),
             ..make_interactive_opts(alice_user(), alice_workspace(), 32768)
         };
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         let p_pos = run_args.iter().position(|a| a == "-p");
         assert!(p_pos.is_some(), "Should contain -p when publish is true");
@@ -913,7 +1079,7 @@ mod tests {
         // publish: false → no -p regardless of tty mode.
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-        let run_args = build_docker_run_flags(&config, &opts);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
 
         assert!(
             !run_args.contains(&"-p".to_string()),
