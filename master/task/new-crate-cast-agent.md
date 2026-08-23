@@ -1,7 +1,7 @@
 ---
 title: new crate cast-agent
 priority: normal
-status: open
+status: closed
 ---
 ## Background
 

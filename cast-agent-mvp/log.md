@@ -326,3 +326,39 @@ Implemented Slice R4 (final slice of review-fixes plan). All review-actionable i
 - **Open:** Manual opencode smoke (AC 3 + AC 6 human attestation) still outstanding
 - **Open:** Optional: run nix build .#cast-agent to confirm util-linux nativeCheckInput works in sandbox
 
+## [aa2e6c8] cast-agent MVP complete: manual QA attested, all ACs met, task closed
+
+User attested Manual QA passes for the cast-agent MVP (real `opencode run --format json` smoke: live `tail -f stream.jsonl` streaming confirmed; Ctrl-C interrupt confirmed yielding `result.json(outcome=interrupted)` with no orphaned processes; also covers the previously-UNVERIFIED opencode `text` event `part.text` vs top-level `text` field shape). With the human-attested criteria satisfied, all seven Acceptance Criteria now have evidence. Reconciled the cue bookkeeping: filled AC 3 + AC 6 human-attested evidence in the master task card, transitioned the task status in-progress -> complete, checked the last outstanding Manual smoke checkbox in the phase-1-mvp executive plan (status open -> complete), and fixed two stale R3 RED/GREEN checkboxes in the review-fixes plan (the work was committed at 789f300 but the boxes were never flipped). No git commit made — all edits are inside .cue/, which agents must not commit.
+
+Final verified state: cargo test -p cast-agent = 38 tests green across 7 suites (exit 0); cargo clippy -D warnings clean; cargo fmt --check clean. The review-fixes plan (R1-R4) is fully implemented and verified against source; the phase-1-mvp plan has zero unchecked items remaining.
+
+One doc follow-up remains (in .cue/, human-committed): note/recovery-outcome-contract.md should be updated for the new exit/interrupt_signal semantics introduced in R3 (exit.signal now reflects the child's actual death disposition; the trigger moved to a separate interrupt_signal field). This is documentation-only; the code and tests already reflect the new contract.
+
+- **Found:** User attestation received: manual QA passes (real opencode smoke + Ctrl-C interrupt) — satisfies the human-attested portions of AC 3 and AC 6
+- **Found:** Manual smoke also closes the previously-open opencode text-event field verification (part.text vs text) — extractor tolerates both shapes
+- **Found:** Verification re-run: 38 tests green, clippy -D warnings clean, fmt --check clean; all 4 review-fixes commits present (7ac2ff7/e22b370/789f300/aa2e6c8)
+- **Decided:** Task cast-agent MVP -> status: complete (all 7 ACs evidence-filled; human attestation for AC 3 + AC 6 received in-conversation)
+- **Decided:** phase-1-mvp executive plan -> status: complete (zero unchecked items; Manual smoke human-attested)
+- **Decided:** Fixed stale R3 RED/GREEN checkboxes in review-fixes.md to match the committed work (789f300)
+- **Decided:** Did NOT git commit: all edits inside .cue/, which agents must not commit per the cue skill
+- **Open:** Doc-only follow-up (in .cue/, human-committed): update note/recovery-outcome-contract.md for the R3 exit/interrupt_signal semantics change
+
+## [aa2e6c8] Closed stale recovery-outcome-contract note with R3 exit/interrupt_signal update
+
+Addressed the stale design note note/recovery-outcome-contract.md for the R3 contract change. The note is a historical design-conversation record, so rather than rewriting the trail I: (1) added a prominent "UPDATE (post-implementation, R3)" banner at the top documenting the current truth — exit.signal/code now ALWAYS reflect the child's reaped death disposition, the trigger moved to a separate interrupt_signal field (interrupted-only), and error_detail is spawn/supervise failures only (in-stream detection deferred); (2) annotated the three concrete stale spots inline — the draft result.json JSON example (added interrupt_signal field + clarifying note), the Ctrl-C teardown Sequence (now shows re-wait to reap + the exit/interrupt_signal split), and the result.json fields list (added interrupt_signal + error_detail, marked exit as "child's reaped disposition"); (3) closed the note — its content has dissolved into the now-complete spec/plan/task per the cue note lifecycle, and corrected the stale intro ("not yet folded into spec/plan"). No git commit — .cue/ edits only.
+
+- **Decided:** Treated the note as a historical design trail, not current truth: added a superseding R3 banner at top + inline annotations on the 3 stale spots rather than rewriting history
+- **Decided:** Closed the note (status in-progress -> closed): content dissolved into the now-complete spec/plan/task per the cue note lifecycle
+- **Decided:** Corrected the stale intro claim 'not yet folded into spec/plan' to reflect it has been folded in and shipped
+
+## [2b25028] Added --agent flag to cast-agent (todo closed, committed 2b25028)
+
+Implemented the deferred `--agent <name>` flag on `cast-agent run` via TDD, closing the agent-flag-mvp-dependency todo. The Layer-2 opencode task drop-in in cue-plugins needs this to faithfully forward `subagent_type` to the correct persona; without it the model believed it delegated to a read-only persona while actually launching the default full-access agent.
+
+- **Found:** Harness::agent_args already existed as a None-returning trait default; only OpenCode override + CLI wiring were missing
+- **Decided:** OpenCode::agent_args returns Some([--agent, name]) — passthrough; opencode itself validates unknown names (surfaces as failed/crashed verdict, never a silent default fallback)
+- **Decided:** main.rs rejects --agent with EXIT_USAGE(2) if the harness's agent_args returns None, rather than silently dropping the arg (the quiet permission regression the todo warned about)
+- **Decided:** Reworded doc comment to satisfy clippy::doc_lazy_continuation
+- **Open:** Full harness build + real opencode smoke of --agent explore not run in this session (human/devshell)
+- **Open:** Plugin-side counterpart (cue-plugins task.ts:41-42) still needs to pass --agent through to cast-agent
+

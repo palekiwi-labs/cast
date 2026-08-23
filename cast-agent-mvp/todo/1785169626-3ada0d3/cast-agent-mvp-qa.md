@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 priority: high
 refs:
 - .cue/master/task/cast-agent-mvp.md

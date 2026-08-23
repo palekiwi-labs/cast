@@ -1,5 +1,5 @@
 ---
-status: open
+status: inbox
 priority: normal
 ---
 ## Context

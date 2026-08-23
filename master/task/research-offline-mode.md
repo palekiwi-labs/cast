@@ -1,5 +1,5 @@
 ---
-status: open
+status: inbox
 title: research offline mode
 priority: normal
 ---

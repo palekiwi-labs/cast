@@ -1,0 +1,19 @@
+pl@7450ea16fcb3:~/code/palekiwi-labs/cast$ opencode run --agent Explore "Reply with exactly: PONG"
+!  agent "Explore" not found. Falling back to default agent
+
+> build · glm-5.2
+
+PONG
+
+pl@7450ea16fcb3:~/code/palekiwi-labs/cast$ opencode run --agent explore "Reply with exactly: PONG"
+!  agent "explore" is a subagent, not a primary agent. Falling back to default agent
+
+> build · glm-5.2
+
+PONG
+
+pl@7450ea16fcb3:~/code/palekiwi-labs/cast$ opencode run --agent plan "Reply with exactly: PONG"
+
+> plan · glm-5.2
+
+PONG

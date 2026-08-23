@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: closed
 refs:
 - .cue/cast-agent-mvp/doc/streaming-supervisor-design.md
 - .cue/cast-agent-mvp/spec/index.md
@@ -8,10 +8,35 @@ refs:
 ---
 # Note: recovery-oriented outcome contract + signal handling
 
+> **UPDATE (post-implementation, R3):** this note is a historical
+> design-conversation record. Its content has DISSOLVED into the now-complete
+> outcome artifacts (`spec/index.md`, `plan/index.md`, the `cast-agent-mvp`
+> task card) and the implemented code, so it is CLOSED. Read it as a trail of
+> how the contract was reasoned out, not as current truth. Two items below were
+> revised at implementation time and supersede the body text:
+>
+> 1. **`exit.signal` semantics (REVISED in R3 / commit `789f300`).** The body
+>    implies `exit.signal` records the *trigger* signal cast-agent received.
+>    The implemented contract is: `exit.signal`/`exit.code` ALWAYS reflect the
+>    CHILD's actual reaped death disposition (SIGTERM if it honored the grace,
+>    SIGKILL if force-killed after the grace; a normal exit code otherwise).
+>    The trigger signal cast-agent received moved to a SEPARATE
+>    `interrupt_signal` field (present only for `interrupted` outcomes). This
+>    makes `TimedOut` and `Interrupted` consistent: `exit` always says *how the
+>    child died*, never *why cast-agent acted*. See the `result.json` example
+>    below and `finalize.rs::exit_info_from_status`.
+>
+> 2. **`error_detail` (CLARIFIED).** The draft example shows a stream-derived
+>    `"provider rate limit"` detail. In-stream error detection is DEFERRED
+>    (passive MVP); `error_detail` is populated only for `SpawnFailed` /
+>    `SuperviseFailed` (runtime failures), and is omitted from `result.json`
+>    when absent (`skip_serializing_if = Option::is_none`).
+
 Conversation anchor. Exploring whether cast-agent should return a structured
 OUTCOME + durable artifact bundle (not just final text), and react to signals,
-to enable caller-side recovery/continuation. Not yet folded into spec/plan —
-pending a scope decision.
+to enable caller-side recovery/continuation. (Originally "not yet folded into
+spec/plan — pending a scope decision"; SINCE folded in and shipped — see banner
+above.)
 
 ## Motivating scenario (from the user)
 
@@ -49,12 +74,15 @@ One addressable handle bundling everything:
   result.json     # outcome manifest, written on teardown
 ```
 
-`result.json` shape (draft):
+`result.json` shape (draft — see the R3 banner above for the revised
+`exit`/`interrupt_signal` semantics; `error_detail` is now spawn/supervise
+failures only):
 ```json
 {
   "outcome": "interrupted",
   "final_message": null,
   "exit": { "code": null, "signal": "SIGTERM" },
+  "interrupt_signal": "SIGINT",
   "prompt_path": "...", "log_path": "...",
   "event_count": 42, "duration_ms": 18734,
   "error_detail": "provider rate limit (from stream error event)"
@@ -149,10 +177,12 @@ REPLACES SIGINT's default (terminate) disposition -> cast-agent won't die on
 Ctrl-C; it fully controls its own exit.
 
 **Sequence:** signal arm fires -> SIGTERM child group -> short grace window ->
-SIGKILL group -> readers hit EOF, yield collected events -> write `result.json`
-(outcome=interrupted, exit.signal, prompt_path, log_path) -> stdout empty ->
-exit with interrupted code. Idempotent/race-safe (killpg on dead group = ESRCH
-ignored).
+SIGKILL group -> re-`wait()` to reap the child's real disposition -> readers
+hit EOF, yield collected events -> write `result.json` (outcome=interrupted;
+`exit.signal` = how the child died [reaped], `interrupt_signal` = the trigger
+cast-agent received; prompt_path, log_path) -> stdout empty -> exit with
+interrupted code. Idempotent/race-safe (killpg on dead group = ESRCH
+ignored). (R3: `exit` reflects the reaped child, not the trigger — see banner.)
 
 **Knobs:** (1) double-Ctrl-C escalation: 1st = graceful; 2nd during grace =
 immediate SIGKILL + exit (still write result.json). cast-agent owns the SIGINT
@@ -191,9 +221,10 @@ live-flushed stream.jsonl is the durability fallback.
     large. The evidence. For deep analysis / handing to another agent.
   - `result.json` = small, structured, harness-AGNOSTIC verdict cast-agent
     synthesizes. The receipt. Fields: `outcome`, `final_message` (happy-path
-    payload without parsing the stream), `exit{code,signal}`, pointers
-    (`log_path`, `prompt_path`), metadata (harness, event_count, duration,
-    started_at). Rationale: the stream can't say WHY it stopped (a crash just
+    payload without parsing the stream), `exit{code,signal}` (child's reaped
+    disposition), `interrupt_signal` (trigger, interrupted-only), `error_detail`
+    (spawn/supervise failures only), pointers (`log_path`, `prompt_path`),
+    metadata (harness, event_count, duration, started_at). Rationale: the stream can't say WHY it stopped (a crash just
     stops); only the supervisor knows. Caller reads result.json first (cheap,
     always present), dives into stream.jsonl only when needed. result.json
     REFERENCES the trace via log_path (never embeds inline). CONFIRMED.

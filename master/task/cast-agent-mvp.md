@@ -1,7 +1,7 @@
 ---
 title: cast-agent MVP
-status: in-progress
-priority: high
+status: closed
+priority: normal
 refs:
 - /home/pl/code/palekiwi-labs/cast/.cue/cast-agent-mvp/spec/index.md
 - .cue/cast-agent-mvp/plan/index.md
@@ -85,12 +85,13 @@ now), the multiplexer, and the Layer-2 MCP wrapper tools (those live in
    - Verify by: unit/integration tests for stream consumption + extraction;
      manual smoke run against `opencode run --format json` inside the cast
      devshell.
-   - Evidence: AUTOMATED PORTION MET — `cargo test -p cast-agent` exit 0;
-     3 e2e `orchestrate` tests (completed/failed/timed_out) drive a scripted
-     `sh` fake harness through the full spawn-stream-extract-result.json path
-     (`tests/orchestrate_test.rs`, commit `d39b279`). MANUAL SMOKE RUN
-     OUTSTANDING — requires a devshell with `opencode` installed; needs human
-     attestation (also covers the `part.text` vs `text` field verification).
+    - Evidence: AUTOMATED PORTION MET — `cargo test -p cast-agent` exit 0;
+      3 e2e `orchestrate` tests (completed/failed/timed_out) drive a scripted
+      `sh` fake harness through the full spawn-stream-extract-result.json path
+      (`tests/orchestrate_test.rs`, commit `d39b279`). MANUAL SMOKE
+      HUMAN-ATTESTED 2026-07-28 — real `opencode run --format json` run;
+      live `tail -f stream.jsonl` streaming + Ctrl-C interrupt confirmed;
+      covers the `part.text` vs `text` field verification.
 
 4. **Process supervision: wall-clock timeout kills the whole process group.**
    - Mirrors the pattern in `crates/cast/src/mcp/exec.rs:37-65`
@@ -126,9 +127,10 @@ now), the multiplexer, and the Layer-2 MCP wrapper tools (those live in
      double-signal escalation during grace, trap-SIGTERM -> SIGKILL after 3s
      grace) using a `#!/bin/sh` `opencode` shim on PATH (PATH-substitution,
      exercising the real `base_command()` -> PATH spawn path); group death
-     asserted via `live_group_members` poll (same non-reaping-pid-1 rationale
-     as AC 4) (originally commit `00c6ca1`; PATH-shim refactor `2fbba68`).
-     MANUAL CTRL-C SMOKE RUN OUTSTANDING — needs human attestation.
+      asserted via `live_group_members` poll (same non-reaping-pid-1 rationale
+      as AC 4) (originally commit `00c6ca1`; PATH-shim refactor `2fbba68`).
+      MANUAL CTRL-C SMOKE HUMAN-ATTESTED 2026-07-28 — confirmed
+      `result.json(outcome=interrupted)` + no orphaned processes.
 
 7. **Per-run artifact bundle + structured `result.json` are produced.**
    - Every run creates a run directory (`prompt.txt`, `stream.jsonl` live-

@@ -78,14 +78,14 @@ commits per the `git-commit` skill; cue-log after each commit.
 
 ## Slice R3 — `exit` field reflects child disposition (Interrupted/TimedOut)
 
-- [ ] RED: update `finalize.rs` unit tests + `interrupt_test.rs` for the new
+- [x] RED: update `finalize.rs` unit tests + `interrupt_test.rs` for the new
       contract. `EndReason::TimedOut`/`Interrupted` now carry `child_status:
       Option<ExitStatus>`. `Interrupted`'s `signal` field is renamed `trigger`.
       `Verdict` gains `interrupt_signal: Option<i32>` (skip-if-none). The
       interrupt tests assert `exit.signal` == how the child DIED (SIGTERM for
       the `sleep` honors-grace cases; SIGKILL for the trap-SIGTERM case) and
       `interrupt_signal` == the trigger cast-agent received.
-- [ ] GREEN:
+- [x] GREEN:
       - Change `EndReason::TimedOut` -> `TimedOut { child_status:
         Option<ExitStatus> }`; `EndReason::Interrupted { signal }` ->
         `Interrupted { trigger: i32, child_status: Option<ExitStatus> }`.

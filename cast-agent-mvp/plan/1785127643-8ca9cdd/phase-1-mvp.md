@@ -1,5 +1,5 @@
 ---
-status: open
+status: complete
 refs:
 - .cue/cast-agent-mvp/plan/index.md
 - .cue/cast-agent-mvp/spec/index.md
@@ -304,12 +304,12 @@ Grounding facts verified against source this session:
       automated portion). GREEN: wire `main.rs run` to orchestrator.
       (3 e2e `orchestrate` tests inject a `sh` fake harness; `run.rs` +
       `main.rs` wired at `d39b279`. Full suite 35 tests green; exit 0.)
-- [ ] Manual smoke: real `opencode run --format json` in the cast devshell;
+- [x] Manual smoke: real `opencode run --format json` in the cast devshell;
       `tail -f <run-dir>/stream.jsonl` to confirm live streaming; Ctrl-C
       mid-run to confirm the interrupt path yields `result.json(interrupted)`
       and no orphaned processes. Capture as evidence for AC 3 + AC 6.
-      (OUTSTANDING — needs a devshell with `opencode` installed; human
-      attestation required.)
+      (HUMAN-ATTESTED 2026-07-28 — manual QA passed; covers the `part.text`
+      vs `text` field verification for AC 3.)
 
 ## Slice 1d — Nix + hygiene
 
