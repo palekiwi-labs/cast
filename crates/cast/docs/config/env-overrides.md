@@ -19,22 +19,36 @@ Every configuration field in `cast` can be overridden by environment variables.
 | `use_flake`    | `CAST_USE_FLAKE`     |
 | `extra_data_volumes.cargo.target` | `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET` |
 
-## Passing Host Variables Into the Sandbox (`env_passthrough`)
+## Passing Host Variables Into the Sandbox (`env_passthrough` and `extra_env_passthrough`)
 
 The overrides above configure `cast` itself. To make a variable from your host
-shell visible *inside* the container — a token you do not want written to
-`cast.env` on disk — list its **name** in `env_passthrough`:
+shell visible *inside* the container — such as provider API keys or a token
+you do not want written to `cast.env` on disk — list its **name** in
+`env_passthrough` or `extra_env_passthrough`:
 
 ```json
+// ~/.config/cast/cast.json (global base)
 {
-  "env_passthrough": ["GH_TOKEN", "ANTHROPIC_API_KEY"]
+  "env_passthrough": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
 }
 ```
 
-For each listed name that is set (and non-empty) in `cast`'s own environment,
-`cast` emits `docker run -e NAME` in the valueless form. Docker reads the value
-from its own inherited environment, so the secret never appears in `cast`'s
-argv and is not visible to other host users via `ps`.
+```json
+// ./cast.json (project additions)
+{
+  "extra_env_passthrough": ["GH_TOKEN"]
+}
+```
+
+`cast` forwards no user-configurable host variables by default. Adding provider
+API keys to global `env_passthrough` is the standard way to provide credentials
+to agents inside sandboxes.
+
+For each listed name in the effective set (`env_passthrough` ++
+`extra_env_passthrough`) that is set (and non-empty) in `cast`'s host
+environment, `cast` emits `docker run -e NAME` in the valueless form. Docker
+reads the value from its own inherited environment, so the secret never appears
+in `cast`'s argv and is not visible to other host users via `ps`.
 
 Behaviour:
 
@@ -46,45 +60,63 @@ Behaviour:
 - `PATH`, `HOME`, and `NIX_REMOTE` are reserved and always dropped, with a
   warning on stderr: they come from the image or the container user, and a
   host value for them breaks the sandbox.
-- Duplicates collapse, and the emitted arguments are sorted by name.
+- Duplicates across and within lists collapse, and the emitted arguments are
+  sorted by name.
 - Passthrough values take precedence over entries in `cast.env` (Docker
   applies `--env` after `--env-file`) and over the image's own `ENV` defaults.
   They do not override the variables `cast` sets itself (`USER`, `TERM`,
   `CAST_MCP_URL`, ...), which are emitted later in argv.
 
-### Precedence
+### Precedence and Replacement
 
-`env_passthrough` is a list, and lists **replace** rather than merge across
-config files. A project `cast.json` that sets `env_passthrough` overrides the
-global list entirely; the global list applies only when the project config is
-silent about it. This is intentional: the failure mode is a missing variable
-rather than a silently inherited one.
+`env_passthrough` and `extra_env_passthrough` are lists, and lists **replace**
+rather than merge across config files.
 
-The allowlist is itself a config field, so `CAST_ENV_PASSTHROUGH` in `cast`'s
-own environment outranks both `cast.json` files. Being a list, it needs the
-bracketed form — `export CAST_ENV_PASSTHROUGH='[GH_TOKEN, NPM_TOKEN]'`; an
-unbracketed value fails to parse and every `cast` invocation errors until
-the variable is fixed or unset. Auditing the effective list therefore means
-reading the project file *and* checking the environment — use
-`cast config show`, which prints the merged result (`cast config diff`
-prints only changes against the approved snapshot, so it is silent once the
-config is approved). An allowlist extended this way (for example by a
-`direnv` `.envrc`) still changes the config hash and still requires
-`cast config allow`.
+- A project `cast.json` that sets `env_passthrough` replaces the global base
+  list entirely.
+- A project `cast.json` that sets `extra_env_passthrough` replaces the global
+  extra list entirely.
+- The two keys replace independently: a project that sets only
+  `extra_env_passthrough` leaves the global `env_passthrough` intact.
+
+Note that `extra_env_passthrough` is additive to `env_passthrough` within the
+effective configuration, but it does *not* union global extra entries across
+projects. Each key replaces wholesale at the file level. This is intentional:
+the failure mode is a missing variable rather than a silently inherited one, and
+the effective allowlist remains fully auditable.
+
+The allowlists are config fields, so `CAST_ENV_PASSTHROUGH` and
+`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank both
+`cast.json` files. Being lists, they require the bracketed form:
+
+```sh
+export CAST_ENV_PASSTHROUGH='[ANTHROPIC_API_KEY, OPENAI_API_KEY]'
+export CAST_EXTRA_ENV_PASSTHROUGH='[GH_TOKEN, NPM_TOKEN]'
+```
+
+An unbracketed value (e.g. `CAST_ENV_PASSTHROUGH=GH_TOKEN`) fails to parse and
+causes every `cast` invocation to error until the variable is fixed or unset.
+
+Auditing the effective configuration means reading the files *and* checking the
+environment — use `cast config show`, which prints the merged result (`cast config
+diff` prints only changes against the approved snapshot, so it is silent once the
+config is approved).
 
 ### Approval
 
-`env_passthrough` is part of `Config`, so it is covered by the approval hash.
-Adding a name causes `cast` to report the configuration as changed and requires
+Both `env_passthrough` and `extra_env_passthrough` are part of `Config`, so they
+are covered by the approval hash. Adding or changing a name in either field
+causes `cast` to report the configuration as changed and requires
 `cast config allow` before the next run. See [Approval](approval.md).
 
-**Trust boundary.** Approval gates *which names* cross into the container, not
-what your shell put in them. If something later overwrites an
-already-approved `GH_TOKEN` — an `.envrc`, a sourced script — `cast` will pass
-the new value through without prompting. Anyone able to run arbitrary code in
-your shell already has host code execution and can exfiltrate data without
-involving `cast`; approval here is a control over the channel, not a
-sanitiser of its contents.
+**Trust boundary.** Config allowlists are the sole environment variable
+forwarding channel into the sandbox. Approval gates *which names* cross into the
+container, not what your shell put in them. If something later overwrites an
+already-approved variable (such as `GH_TOKEN` modified by an `.envrc` or a
+sourced script), `cast` will pass the new value through without prompting.
+Anyone able to run arbitrary code in your shell already has host code execution
+and can exfiltrate data without involving `cast`; approval here is a control
+over the channel, not a sanitiser of its contents.
 
 ## Specialized Env Vars
 

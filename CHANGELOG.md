@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `env_passthrough` and `extra_env_passthrough` configuration keys in
+  `cast.json` to allowlist host environment variable names for forwarding into
+  containers without storing or leaking secret values to disk, approval
+  snapshots, or logs.
+- `CAST_ENV_PASSTHROUGH` and `CAST_EXTRA_ENV_PASSTHROUGH` environment variable
+  overrides using bracketed list syntax (e.g. `'[GH_TOKEN]'`).
 - The nix daemon's binary caches are now provisioned daemon-side from
   `~/.config/cast/cast.json`. The first `cast run`/`cast exec` on a fresh host
   seeds a default `cast.json` with the numtide cache so harnesses fetch
@@ -17,6 +23,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Adding `env_passthrough` and `extra_env_passthrough` to the configuration
+  schema alters the serialized JSON hash of `Config`. Existing approved project
+  configurations will report `ApprovalStatus::Changed` once on upgrade and
+  require `cast config allow`.
 - **Security:** the nix daemon's `trusted-users` is tightened from `root *` to
   `root` (with `allowed-users = *`). The non-trusted dev container user can
   still connect to the daemon but can no longer override substituters, add
@@ -47,6 +57,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** Hardcoded per-agent environment variable forwarding has been
+  completely removed across all harnesses (OpenCode, ClaudeCode, Pi).
+  Previously, `cast` automatically passed through common provider API keys
+  (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.) from the host. Configuration
+  allowlists (`env_passthrough` and `extra_env_passthrough`) are now the sole
+  passthrough channel. **Migration:** Add your provider API keys to
+  `env_passthrough` in your global `~/.config/cast/cast.json` (e.g.
+  `"env_passthrough": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]`), otherwise
+  agents will lack API credentials inside the sandbox.
 - Orphaned `ureq` dependency, left over after the nix-native pivot deleted the
   harness version fetcher.
 

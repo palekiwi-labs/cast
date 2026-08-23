@@ -9,8 +9,12 @@ schema, see [src/config/schema.rs][schema-src].
 - `cpus`: CPU limit (e.g., `1.0`).
 - `network`: Docker network to use (default: `"bridge"`).
 - `forbidden_paths`: List of host paths that should be masked in the sandbox.
-- `env_passthrough`: List of host environment variable *names* to forward into
-  the sandbox. Values are read from the host at run time and never stored. See
+- `env_passthrough`: Base list of host environment variable *names* to forward
+  into the sandbox (intended for global config). Values are read from the host
+  at run time and never stored. See [Environment Overrides][env-overrides].
+- `extra_env_passthrough`: Additional list of host environment variable *names*
+  to forward into the sandbox (intended for project config). Values are read
+  from the host at run time and never stored. See
   [Environment Overrides][env-overrides].
 
 ## Nix Settings
