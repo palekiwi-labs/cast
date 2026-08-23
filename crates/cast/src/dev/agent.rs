@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use anyhow::Result;
 
 use crate::config::Config;
@@ -25,14 +23,6 @@ pub trait Agent {
     /// (universal mounts are the unconditional default).
     fn config_mount_args(&self, _config: &Config, _opts: &RunOpts) -> Result<Vec<String>> {
         Ok(vec![])
-    }
-
-    /// Return the agent's environment-variable passthrough args (`-e VAR` pairs).
-    ///
-    /// Called for the launched agent only (subprocess agents inherit the
-    /// container env).
-    fn env_passthrough_args(&self, _env: &HashMap<String, String>) -> Vec<String> {
-        Vec::new()
     }
 
     /// Perform host-side preparation (e.g. create directories) before the container

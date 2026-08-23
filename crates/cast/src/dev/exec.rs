@@ -1,6 +1,6 @@
 use std::process::ExitStatus;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use tracing::{debug, info, info_span};
 
 use crate::config::{ApprovedConfig, Config};
@@ -9,12 +9,12 @@ use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::run::{
-    RunOpts, SessionFlags, resolve_run_opts, run_in_container, scaffold_global_cast_json,
-    scaffold_global_flake,
+    resolve_run_opts, run_in_container, scaffold_global_cast_json, scaffold_global_flake, RunOpts,
+    SessionFlags,
 };
 use crate::dev::workspace::get_workspace;
-use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
 use crate::user::get_user;
 
@@ -114,7 +114,6 @@ pub fn exec(
 
     run_in_container(
         &docker,
-        agent,
         config,
         &run_opts,
         &container_name,

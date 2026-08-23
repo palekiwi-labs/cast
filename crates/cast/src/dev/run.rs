@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::Instant;
 
@@ -14,12 +14,12 @@ use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -59,7 +59,7 @@ pub struct SessionFlags {
 
 /// Generic options for building the Docker run command.
 /// Contains only agent-agnostic data; each agent contributes its own
-/// context via `Agent::config_mount_args` and `Agent::env_passthrough_args`.
+/// context via `Agent::config_mount_args`.
 pub struct RunOpts {
     pub workspace: ResolvedWorkspace,
     pub user: ResolvedUser,
@@ -121,15 +121,9 @@ fn dispatch_run(
 /// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
 /// data volumes, the cross-harness `~/.agents` bind mount, and the union of
 /// every agent's config-directory mounts (universal mounts are the
-/// unconditional default). Environment passthrough comes from the launched
-/// agent only.
-fn build_session_run_args(
-    launched_agent: &dyn Agent,
-    config: &Config,
-    run_opts: &RunOpts,
-    env: &HashMap<String, String>,
-) -> Result<Vec<String>> {
-    build_universal_run_args(all_agents(), launched_agent, config, run_opts, env)
+/// unconditional default).
+fn build_session_run_args(config: &Config, run_opts: &RunOpts) -> Result<Vec<String>> {
+    build_universal_run_args(all_agents(), config, run_opts)
 }
 
 /// Shared container-run core used by both `run_agent` and `exec`.
@@ -141,22 +135,18 @@ fn build_session_run_args(
 /// logging.
 pub fn run_in_container(
     docker: &DockerClient,
-    agent: &dyn Agent,
     config: &ApprovedConfig,
     run_opts: &RunOpts,
     container_name: &str,
     image_tag: &str,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
-    let env: HashMap<String, String> = std::env::vars().collect();
-
     // Names only, and set-but-empty host vars are excluded: `-e NAME` beats
     // --env-file, so an empty host value would silently shadow a real one
     // from cast.env.
-    let host_env_names: BTreeSet<String> = env
-        .iter()
+    let host_env_names: BTreeSet<String> = std::env::vars()
         .filter(|(_, value)| !value.is_empty())
-        .map(|(name, _)| name.clone())
+        .map(|(name, _)| name)
         .collect();
 
     // warn! writes to the file log; eprintln! writes to the console. The
@@ -186,7 +176,7 @@ pub fn run_in_container(
     dev::universal::prepare_host(run_opts)?;
 
     let docker_flags = build_docker_run_flags(config, run_opts, &host_env_names);
-    let extra_args = build_session_run_args(agent, config, run_opts, &env)?;
+    let extra_args = build_session_run_args(config, run_opts)?;
 
     dispatch_run(
         docker,
@@ -271,15 +261,7 @@ pub fn run_agent(
 
     let cmd = agent.build_command(config, &run_opts, extra_args);
 
-    run_in_container(
-        &docker,
-        agent,
-        config,
-        &run_opts,
-        &container_name,
-        &image_tag,
-        cmd,
-    )
+    run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
 }
 
 /// Auto-scaffold the global cast flake on a new host so the first
@@ -638,9 +620,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -750,8 +730,9 @@ mod tests {
         assert!(run_args.contains(&"GH_TOKEN".to_string()));
         assert!(run_args.contains(&"NPM_TOKEN".to_string()));
         assert!(
-            !run_args.iter().any(|a| a.starts_with("GH_TOKEN=")
-                || a.starts_with("NPM_TOKEN=")),
+            !run_args
+                .iter()
+                .any(|a| a.starts_with("GH_TOKEN=") || a.starts_with("NPM_TOKEN=")),
             "passthrough emitted a valued arg: {run_args:?}"
         );
     }
@@ -783,9 +764,7 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]
@@ -938,13 +917,10 @@ mod tests {
 
     #[test]
     fn test_session_run_args_use_universal_topology() {
-        use crate::dev::opencode::OpenCode;
-
         let config = Config::default();
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-        let env = HashMap::new();
 
-        let args = build_session_run_args(&OpenCode, &config, &opts, &env).unwrap();
+        let args = build_session_run_args(&config, &opts).unwrap();
 
         // Shared cache/local volumes — NOT per-agent.
         assert!(

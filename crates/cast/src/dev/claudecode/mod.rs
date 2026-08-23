@@ -1,7 +1,4 @@
 pub mod config_dir;
-pub mod env;
-
-use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 
@@ -56,10 +53,6 @@ impl Agent for ClaudeCode {
                 opts.user.username
             ),
         ])
-    }
-
-    fn env_passthrough_args(&self, env: &HashMap<String, String>) -> Vec<String> {
-        env::build_passthrough_env_args(env)
     }
 }
 
@@ -125,16 +118,5 @@ mod tests {
             "expected claude.json bind mount in args: {:?}",
             args
         );
-    }
-
-    #[test]
-    fn test_env_passthrough_args_includes_anthropic_key() {
-        let mut env = HashMap::new();
-        env.insert("ANTHROPIC_API_KEY".to_string(), "sk-abc".to_string());
-
-        let args = ClaudeCode.env_passthrough_args(&env);
-
-        assert!(args.contains(&"-e".to_string()));
-        assert!(args.contains(&"ANTHROPIC_API_KEY".to_string()));
     }
 }
