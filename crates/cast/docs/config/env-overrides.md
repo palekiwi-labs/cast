@@ -26,15 +26,17 @@ shell visible *inside* the container — such as provider API keys or a token
 you do not want written to `cast.env` on disk — list its **name** in
 `env_passthrough` or `extra_env_passthrough`:
 
+In your global configuration (`~/.config/cast/cast.json`):
+
 ```json
-// ~/.config/cast/cast.json (global base)
 {
   "env_passthrough": ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
 }
 ```
 
+In your project configuration (`./cast.json`):
+
 ```json
-// ./cast.json (project additions)
 {
   "extra_env_passthrough": ["GH_TOKEN"]
 }
@@ -109,8 +111,9 @@ are covered by the approval hash. Adding or changing a name in either field
 causes `cast` to report the configuration as changed and requires
 `cast config allow` before the next run. See [Approval](approval.md).
 
-**Trust boundary.** Config allowlists are the sole environment variable
-forwarding channel into the sandbox. Approval gates *which names* cross into the
+**Trust boundary.** Config allowlists are the sole channel for forwarding
+variables from cast's own environment into the sandbox (`cast.env` files are the
+separate, file-based channel). Approval gates *which names* cross into the
 container, not what your shell put in them. If something later overwrites an
 already-approved variable (such as `GH_TOKEN` modified by an `.envrc` or a
 sourced script), `cast` will pass the new value through without prompting.

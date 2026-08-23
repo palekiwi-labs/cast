@@ -9,7 +9,7 @@ pub use approval::{
     deny_workspace_config, get_approval_status, load_approval_store,
 };
 pub use diff::format_config_diff;
-pub use loader::{load_config, load_config_from, load_config_with_global};
+pub use loader::{load_config, load_config_from};
 pub use schema::{
     ArgTemplate, ConditionalBlock, Config, McpConfig, McpEnvConfig, McpToolConfig, VolumeConfig,
 };

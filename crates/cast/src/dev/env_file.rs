@@ -60,11 +60,7 @@ pub fn build_env_passthrough_args(
     allowlist: &[String],
     host_env_names: &BTreeSet<String>,
 ) -> Vec<String> {
-    let reserved: BTreeSet<&str> = allowlist
-        .iter()
-        .map(String::as_str)
-        .filter(|name| RESERVED_ENV_NAMES.contains(name))
-        .collect();
+    let reserved = reserved_names_in(allowlist);
     for name in &reserved {
         warn!(name = %name, "dropping reserved env_passthrough name");
     }
@@ -72,7 +68,7 @@ pub fn build_env_passthrough_args(
     let names: Vec<&str> = allowlist
         .iter()
         .map(String::as_str)
-        .filter(|name| !reserved.contains(name))
+        .filter(|name| !reserved.contains(*name))
         .filter(|name| is_valid_env_name(name))
         .filter(|name| host_env_names.contains(*name))
         .collect::<BTreeSet<_>>()
