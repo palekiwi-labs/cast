@@ -53,6 +53,20 @@ pub struct Config {
     #[serde(default)]
     pub env_passthrough: Vec<String>,
 
+    /// Per-project additions to [`Config::env_passthrough`]. Intended for
+    /// a project `cast.json`: the effective allowlist at run time is
+    /// `env_passthrough ++ extra_env_passthrough`, then one filter pass.
+    /// Like the base list, this holds variable NAMES only — values are
+    /// read from the host environment at run time and are never stored
+    /// here, so they never reach the approval hash, the approval store
+    /// on disk, or `cast config diff`.
+    ///
+    /// Each key replaces (not merges) across config files independently.
+    /// Adding a name changes the config hash and therefore requires
+    /// `cast config allow`.
+    #[serde(default)]
+    pub extra_env_passthrough: Vec<String>,
+
     #[serde(default)]
     pub mcp: McpConfig,
 }
@@ -170,6 +184,7 @@ impl Default for Config {
             nix_extra_trusted_public_keys: Vec::new(),
             forbidden_paths: Vec::new(),
             env_passthrough: Vec::new(),
+            extra_env_passthrough: Vec::new(),
             mcp: McpConfig::default(),
         }
     }

@@ -162,7 +162,7 @@ pub fn run_in_container(
     // warn! writes to the file log; eprintln! writes to the console. The
     // reserved-name drop would otherwise be invisible: the run succeeds
     // and the variable is simply absent inside the container.
-    let reserved = reserved_names_in(&config.env_passthrough);
+    let reserved = reserved_names_in(&effective_env_passthrough(config));
     if !reserved.is_empty() {
         eprintln!(
             "Warning: env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
@@ -380,6 +380,18 @@ pub fn resolve_run_opts(
 ///
 /// Agent-specific arguments (env vars, program-specific mounts, etc.) are
 /// NOT included here — each agent appends them via `Agent::extra_run_args`.
+/// Effective env passthrough allowlist: `env_passthrough` (base) then
+/// `extra_env_passthrough` (per-project additions), before the single
+/// filter pass (validity, reserved names, unset/empty, dedupe, sort)
+/// applied inside [`build_env_passthrough_args`]. The concat lives here
+/// so every consumer — the reserved-name warning and the flags builder —
+/// sees the same list and cannot drift apart.
+fn effective_env_passthrough(config: &Config) -> Vec<String> {
+    let mut names = config.env_passthrough.clone();
+    names.extend(config.extra_env_passthrough.iter().cloned());
+    names
+}
+
 pub fn build_docker_run_flags(
     config: &Config,
     opts: &RunOpts,
@@ -434,7 +446,7 @@ pub fn build_docker_run_flags(
     // precedence is positional, so passthrough must come first to keep cast
     // authoritative for its own vars.
     run_args.extend(build_env_passthrough_args(
-        &config.env_passthrough,
+        &effective_env_passthrough(config),
         host_env_names,
     ));
 
@@ -684,6 +696,84 @@ mod tests {
         );
         // The `-e` belonging to the passthrough name sits immediately before it.
         assert_eq!(run_args[passthrough - 1], "-e");
+    }
+
+    #[test]
+    fn test_effective_env_passthrough_concatenates_base_then_extra() {
+        let config = Config {
+            env_passthrough: vec!["BASE_ONE".to_string(), "BASE_TWO".to_string()],
+            extra_env_passthrough: vec!["EXTRA_ONE".to_string()],
+            ..Config::default()
+        };
+
+        assert_eq!(
+            effective_env_passthrough(&config),
+            vec![
+                "BASE_ONE".to_string(),
+                "BASE_TWO".to_string(),
+                "EXTRA_ONE".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn test_effective_env_passthrough_empty_when_both_keys_empty() {
+        assert!(effective_env_passthrough(&Config::default()).is_empty());
+    }
+
+    /// The reserved-name warning feeds from the effective list, so a
+    /// reserved name smuggled into the extra key must be caught too.
+    #[test]
+    fn test_reserved_names_include_extra_list_entries() {
+        let config = Config {
+            extra_env_passthrough: vec!["GH_TOKEN".to_string(), "PATH".to_string()],
+            ..Config::default()
+        };
+
+        let reserved = reserved_names_in(&effective_env_passthrough(&config));
+
+        assert_eq!(reserved, BTreeSet::from(["PATH".to_string()]));
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_base_and_extra_both_emit_valueless() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            extra_env_passthrough: vec!["NPM_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args =
+            build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN", "NPM_TOKEN"]));
+
+        assert!(run_args.contains(&"GH_TOKEN".to_string()));
+        assert!(run_args.contains(&"NPM_TOKEN".to_string()));
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("GH_TOKEN=")
+                || a.starts_with("NPM_TOKEN=")),
+            "passthrough emitted a valued arg: {run_args:?}"
+        );
+    }
+
+    /// A name allowlisted in both keys is one name: the dedupe pass runs
+    /// over the concatenation, so it emits a single `-e` pair.
+    #[test]
+    fn test_build_docker_run_flags_cross_key_duplicate_emits_one_pair() {
+        let config = Config {
+            env_passthrough: vec!["GH_TOKEN".to_string()],
+            extra_env_passthrough: vec!["GH_TOKEN".to_string()],
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["GH_TOKEN"]));
+
+        assert_eq!(
+            run_args.iter().filter(|a| a.as_str() == "GH_TOKEN").count(),
+            1,
+            "duplicate across keys must emit one -e pair: {run_args:?}"
+        );
     }
 
     #[test]

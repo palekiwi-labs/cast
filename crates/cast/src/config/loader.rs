@@ -200,6 +200,63 @@ mod tests {
         assert!(config.env_passthrough.is_empty());
     }
 
+    #[test]
+    fn test_extra_env_passthrough_defaults_to_empty() {
+        let config = load_with_configs(None, None);
+        assert!(config.extra_env_passthrough.is_empty());
+    }
+
+    /// Same replacement semantics as the base list, per key: a project
+    /// `extra_env_passthrough` replaces the global one. The additive
+    /// reading (global extra merged into every project) was rejected —
+    /// it would recreate the unauditable global union.
+    #[test]
+    fn test_extra_env_passthrough_project_replaces_global() {
+        let config = load_with_configs(
+            Some(r#"{ "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#),
+            Some(r#"{ "extra_env_passthrough": ["PROJECT_EXTRA"] }"#),
+        );
+
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["PROJECT_EXTRA".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_extra_env_passthrough_global_applies_when_project_is_silent() {
+        let config = load_with_configs(
+            Some(r#"{ "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#),
+            Some(r#"{ "memory": "2048m" }"#),
+        );
+
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["GLOBAL_EXTRA".to_string()]
+        );
+    }
+
+    /// The two keys replace independently: a project that sets only
+    /// `extra_env_passthrough` leaves the global base list intact, and
+    /// vice versa. Replacement is scoped per workspace, so a project can
+    /// never alter another project's effective allowlist.
+    #[test]
+    fn test_env_passthrough_keys_replace_independently() {
+        let config = load_with_configs(
+            Some(
+                r#"{ "env_passthrough": ["GLOBAL_BASE"],
+                     "extra_env_passthrough": ["GLOBAL_EXTRA"] }"#,
+            ),
+            Some(r#"{ "extra_env_passthrough": ["PROJECT_EXTRA"] }"#),
+        );
+
+        assert_eq!(config.env_passthrough, vec!["GLOBAL_BASE".to_string()]);
+        assert_eq!(
+            config.extra_env_passthrough,
+            vec!["PROJECT_EXTRA".to_string()]
+        );
+    }
+
     /// Pins the env-var syntax the docs prescribe for `env_passthrough`.
     /// figment parses every `CAST_*` value with its magic parser, which
     /// only produces an array for bracketed input; an unbracketed name
