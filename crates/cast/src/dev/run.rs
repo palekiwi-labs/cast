@@ -149,9 +149,6 @@ pub fn run_in_container(
         .map(|(name, _)| name)
         .collect();
 
-    // warn! writes to the file log; eprintln! writes to the console. The
-    // reserved-name drop would otherwise be invisible: the run succeeds
-    // and the variable is simply absent inside the container.
     let reserved = reserved_names_in(&effective_env_passthrough(config));
     if !reserved.is_empty() {
         eprintln!(
@@ -422,11 +419,6 @@ pub fn build_docker_run_flags(
         opts.host_home_dir.as_deref(),
     ));
 
-    // Environment: approval-gated host passthrough, as valueless `-e NAME`.
-    // Docker applies --env after --env-file (last one wins), so these beat
-    // cast.env wherever they sit; but against cast's own `-e USER=` below the
-    // precedence is positional, so passthrough must come first to keep cast
-    // authoritative for its own vars.
     run_args.extend(build_env_passthrough_args(
         &effective_env_passthrough(config),
         host_env_names,

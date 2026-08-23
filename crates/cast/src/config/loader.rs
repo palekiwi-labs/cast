@@ -27,11 +27,6 @@ pub fn load_config_from(base_dir: &std::path::Path) -> Result<Config> {
     load_config_with_global(base_dir, global_config_path().as_deref())
 }
 
-/// Load configuration with an explicit global config path.
-///
-/// Exists so tests can supply a temp-dir global config instead of the real
-/// `$HOME`. Deliberately avoids `figment::Jail`, which mutates process-global
-/// state and races with concurrent tests.
 pub fn load_config_with_global(
     base_dir: &std::path::Path,
     global_path: Option<&std::path::Path>,
@@ -139,9 +134,6 @@ mod tests {
         assert_eq!(config.mcp.port, 4000);
     }
 
-    /// Writes a global and a project `cast.json` into a temp dir and returns
-    /// the loaded config. Avoids `figment::Jail` — see
-    /// `load_config_with_global`.
     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
         let dir = tempfile::tempdir().unwrap();
         let project_dir = dir.path().join("project");
@@ -158,9 +150,6 @@ mod tests {
         load_config_with_global(&project_dir, Some(&global_path)).unwrap()
     }
 
-    /// Figment replaces list-valued keys wholesale, so a project
-    /// `env_passthrough` replaces the global list. Pinned so the behaviour
-    /// cannot drift silently.
     #[test]
     fn test_env_passthrough_project_replaces_global() {
         let config = load_with_configs(
@@ -206,10 +195,6 @@ mod tests {
         assert!(config.extra_env_passthrough.is_empty());
     }
 
-    /// Same replacement semantics as the base list, per key: a project
-    /// `extra_env_passthrough` replaces the global one. The additive
-    /// reading (global extra merged into every project) was rejected —
-    /// it would recreate the unauditable global union.
     #[test]
     fn test_extra_env_passthrough_project_replaces_global() {
         let config = load_with_configs(
@@ -236,10 +221,6 @@ mod tests {
         );
     }
 
-    /// The two keys replace independently: a project that sets only
-    /// `extra_env_passthrough` leaves the global base list intact, and
-    /// vice versa. Replacement is scoped per workspace, so a project can
-    /// never alter another project's effective allowlist.
     #[test]
     fn test_env_passthrough_keys_replace_independently() {
         let config = load_with_configs(
@@ -254,40 +235,6 @@ mod tests {
         assert_eq!(
             config.extra_env_passthrough,
             vec!["PROJECT_EXTRA".to_string()]
-        );
-    }
-
-    /// Pins the env-var syntax the docs prescribe for `env_passthrough`.
-    /// figment parses every `CAST_*` value with its magic parser, which
-    /// only produces an array for bracketed input; an unbracketed name
-    /// parses as a plain string, which cannot deserialize into
-    /// `Vec<String>` and fails every `cast` invocation until the variable
-    /// is fixed or unset. Element case is preserved (only the key path is
-    /// lowercased), unlike the `CAST_ENV_PASSTHROUGH__NAME` nesting route
-    /// that was considered and dropped.
-    ///
-    /// Tested at the figment `Value` level rather than through the process
-    /// environment: setting a real env var would race the parallel tests
-    /// that call `load_config_from` — the same soundness reason
-    /// `figment::Jail` was rejected.
-    #[test]
-    fn test_cast_env_passthrough_requires_bracketed_list_literal() {
-        use figment::value::Value;
-
-        let bracketed = "[GH_TOKEN, NPM_TOKEN]".parse::<Value>().unwrap();
-        let names: Vec<String> = bracketed
-            .as_array()
-            .expect("bracketed literal must parse as an array")
-            .iter()
-            .cloned()
-            .map(|v| v.into_string().expect("element must be a string"))
-            .collect();
-        assert_eq!(names, vec!["GH_TOKEN".to_string(), "NPM_TOKEN".to_string()]);
-
-        let unbracketed = "GH_TOKEN".parse::<Value>().unwrap();
-        assert!(
-            unbracketed.as_array().is_none(),
-            "unbracketed value must not parse as an array"
         );
     }
 

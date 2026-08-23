@@ -29,17 +29,8 @@ pub fn build_env_file_args(cwd: &Path, host_home_dir: Option<&Path>) -> Vec<Stri
     args
 }
 
-/// Names the image or the container user owns; forwarding a host value for
-/// them breaks the sandbox itself (nix PATH, home-directory mounts, or the
-/// read-only store client), and no host value can be meaningful inside the
-/// container. They pass config approval like any other entry and are
-/// dropped when the passthrough args are built, with a warning per name.
 pub const RESERVED_ENV_NAMES: &[&str] = &["PATH", "HOME", "NIX_REMOTE"];
 
-/// Reserved names listed in `allowlist`, deduplicated and sorted, for the
-/// run boundary to surface on the console (the file log already records
-/// each drop; the args builder stays console-silent so its unit tests
-/// print nothing).
 pub fn reserved_names_in(allowlist: &[String]) -> BTreeSet<String> {
     allowlist
         .iter()

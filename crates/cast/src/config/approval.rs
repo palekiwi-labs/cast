@@ -396,9 +396,6 @@ mod tests {
         assert_eq!(h1, h2);
     }
 
-    /// The whole security rationale for putting the allowlist in `Config`:
-    /// an agent that edits `cast.json` to open a new channel to the host
-    /// must trip re-approval rather than take effect silently.
     #[test]
     fn test_env_passthrough_addition_changes_hash_and_status() {
         let dir = tempfile::tempdir().unwrap();
@@ -429,9 +426,6 @@ mod tests {
         );
     }
 
-    /// Names are config; values are not. The serialized config is what the
-    /// approval store writes to disk and what `cast config diff` prints, so
-    /// pin that the field is a bare list of names with no value channel.
     #[test]
     fn test_env_passthrough_serializes_as_bare_name_list() {
         let mut config = Config::default();
@@ -444,9 +438,6 @@ mod tests {
         assert_eq!(list, &[serde_json::Value::from("GH_TOKEN")]);
     }
 
-    /// The extra list opens the same channel as the base list, so it must
-    /// trip re-approval identically: an agent that adds a name via
-    /// `extra_env_passthrough` must not take effect silently.
     #[test]
     fn test_extra_env_passthrough_addition_changes_hash_and_status() {
         let dir = tempfile::tempdir().unwrap();
@@ -477,7 +468,6 @@ mod tests {
         );
     }
 
-    /// Same shape guarantee as the base list: bare names, no value channel.
     #[test]
     fn test_extra_env_passthrough_serializes_as_bare_name_list() {
         let mut config = Config::default();
