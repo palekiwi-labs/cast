@@ -150,6 +150,75 @@ mod tests {
         assert_eq!(config.memory, "4096m");
     }
 
+    #[test]
+    fn test_local_config_falls_through_to_project_config() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("cast.json"),
+            r#"{ "memory": "2048m", "cpus": 2.0 }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("cast.local.json"),
+            r#"{ "memory": "4096m" }"#,
+        )
+        .unwrap();
+
+        let config = load_config_from(dir.path()).unwrap();
+
+        assert_eq!(config.memory, "4096m");
+        assert_eq!(config.cpus, 2.0);
+    }
+
+    #[test]
+    fn test_missing_local_config_does_not_change_project_config() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("cast.json"),
+            r#"{ "memory": "2048m", "cpus": 2.0 }"#,
+        )
+        .unwrap();
+
+        let config = load_config_from(dir.path()).unwrap();
+
+        assert_eq!(config.memory, "2048m");
+        assert_eq!(config.cpus, 2.0);
+    }
+
+    #[test]
+    fn test_mcp_config_overrides_local_mcp_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("cast.local.json"),
+            r#"{ "mcp": { "port": 3000 } }"#,
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("cast-mcp.json"), r#"{ "port": 4000 }"#).unwrap();
+
+        let config = load_config_from(dir.path()).unwrap();
+
+        assert_eq!(config.mcp.port, 4000);
+    }
+
+    #[test]
+    fn test_local_config_replaces_project_arrays() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("cast.json"),
+            r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.path().join("cast.local.json"),
+            r#"{ "env_passthrough": ["LOCAL_TOKEN"] }"#,
+        )
+        .unwrap();
+
+        let config = load_config_from(dir.path()).unwrap();
+
+        assert_eq!(config.env_passthrough, vec!["LOCAL_TOKEN".to_string()]);
+    }
+
     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
         let dir = tempfile::tempdir().unwrap();
         let project_dir = dir.path().join("project");
