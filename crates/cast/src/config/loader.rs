@@ -11,9 +11,10 @@ use tracing::info;
 /// Load configuration from all sources with proper precedence:
 /// 1. Environment variables (CAST_*)
 /// 2. MCP-specific project config (./cast-mcp.json)
-/// 3. Project config (./cast.json)
-/// 4. Global config (~/.config/cast/cast.json)
-/// 5. Defaults
+/// 3. Local project config (./cast.local.json)
+/// 4. Project config (./cast.json)
+/// 5. Global config (~/.config/cast/cast.json)
+/// 6. Defaults
 ///
 /// Environment variable format:
 /// - Use single underscore for field names: CAST_NIX_VOLUME_NAME → nix_volume_name

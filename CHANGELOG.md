@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Optional `cast.local.json` project configuration for untracked,
+  machine-specific overrides of `cast.json`.
 - `env_passthrough` and `extra_env_passthrough` configuration keys in
   `cast.json` to allowlist host environment variable names for forwarding into
   containers without storing or leaking secret values to disk, approval
