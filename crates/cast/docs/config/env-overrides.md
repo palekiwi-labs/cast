@@ -78,6 +78,8 @@ rather than merge across config files.
   list entirely.
 - A project `cast.json` that sets `extra_env_passthrough` replaces the global
   extra list entirely.
+- A `cast.local.json` value replaces the same key from project and global
+  configuration.
 - The two keys replace independently: a project that sets only
   `extra_env_passthrough` leaves the global `env_passthrough` intact.
 
@@ -88,8 +90,8 @@ the failure mode is a missing variable rather than a silently inherited one, and
 the effective allowlist remains fully auditable.
 
 The allowlists are config fields, so `CAST_ENV_PASSTHROUGH` and
-`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank both
-`cast.json` files. Being lists, they require the bracketed form:
+`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank all
+configuration files. Being lists, they require the bracketed form:
 
 ```sh
 export CAST_ENV_PASSTHROUGH='[ANTHROPIC_API_KEY, OPENAI_API_KEY]'

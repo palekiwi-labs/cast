@@ -31,5 +31,6 @@ result
 .agents
 .direnv
 .envrc
+cast.local.json
 .mem
 tags

@@ -174,7 +174,7 @@ impl ApprovalStore {
             ApprovalStatus::Approved => Ok(ApprovedConfig(config)),
             ApprovalStatus::Changed => anyhow::bail!(
                 "Configuration has changed since last approval.\n\
-                 Note: env-var overrides (CAST_*) affect the hash.\n\
+                 Note: cast.local.json and env-var overrides (CAST_*) affect the hash.\n\
                  Run `cast config diff` to see what changed, then `cast config allow` to approve."
             ),
             ApprovalStatus::Unapproved => anyhow::bail!(
@@ -601,6 +601,11 @@ mod tests {
         assert!(
             msg.contains("config diff"),
             "should suggest config diff for changed config: {}",
+            msg
+        );
+        assert!(
+            msg.contains("cast.local.json"),
+            "should identify local config as affecting approval: {}",
             msg
         );
     }

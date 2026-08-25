@@ -1,7 +1,8 @@
 # Configuration Reference
 
-This page lists key configuration fields available in `cast.json`. For the full
-schema, see [src/config/schema.rs][schema-src].
+This page lists key configuration fields available in both `cast.json` and
+`cast.local.json`. For the full schema, see
+[src/config/schema.rs][schema-src].
 
 ## Sandbox Settings
 
