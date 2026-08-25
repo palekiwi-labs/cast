@@ -187,6 +187,16 @@ mod tests {
     }
 
     #[test]
+    fn test_malformed_local_config_fails_to_load() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("cast.local.json"), "{ invalid json }").unwrap();
+
+        let error = load_config_from(dir.path()).unwrap_err();
+
+        assert_eq!(error.to_string(), "Failed to load configuration");
+    }
+
+    #[test]
     fn test_mcp_config_overrides_local_mcp_settings() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(
