@@ -9,7 +9,7 @@ use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::run::{
-    RunOpts, SessionFlags, resolve_run_opts, run_in_container, scaffold_global_cast_json,
+    SessionFlags, resolve_run_opts, run_in_container, scaffold_global_cast_json,
     scaffold_global_flake,
 };
 use crate::dev::workspace::get_workspace;
@@ -23,17 +23,11 @@ use crate::user::get_user;
 /// When `raw` is true the user-supplied `cmd` is returned as-is (no Nix
 /// devshell wrapping).  When `raw` is false, `build_command` wraps `cmd[0]`
 /// with the Nix devshell layers exactly as it does for `cast run`.
-pub fn build_exec_cmd(
-    config: &Config,
-    opts: &RunOpts,
-    agent_name: &str,
-    raw: bool,
-    cmd: &[String],
-) -> Vec<String> {
+pub fn build_exec_cmd(config: &Config, raw: bool, cmd: &[String]) -> Vec<String> {
     if raw || cmd.is_empty() {
         return cmd.to_vec();
     }
-    build_command(config, opts, &cmd[0], agent_name, cmd[1..].to_vec())
+    build_command(config, &cmd[0], cmd[1..].to_vec())
 }
 
 /// Orchestrate and run a `cast exec` session inside a fresh agent container.
@@ -110,7 +104,7 @@ pub fn exec(
     scaffold_global_cast_json();
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
-    let exec_cmd = build_exec_cmd(config, &run_opts, agent.name(), raw, &cmd);
+    let exec_cmd = build_exec_cmd(config, raw, &cmd);
 
     run_in_container(
         &docker,
@@ -125,65 +119,31 @@ pub fn exec(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dev::run::TtyMode;
-    use crate::dev::workspace::ResolvedWorkspace;
-    use crate::user::ResolvedUser;
-    use std::path::PathBuf;
-
-    fn alice() -> ResolvedUser {
-        ResolvedUser {
-            username: "alice".to_string(),
-            uid: 1000,
-            gid: 1000,
-        }
-    }
-
-    fn base_opts() -> RunOpts {
-        RunOpts {
-            workspace: ResolvedWorkspace {
-                root: PathBuf::from("/home/alice/project"),
-                container_path: PathBuf::from("/home/alice/project"),
-            },
-            user: alice(),
-            port: 8080,
-            host_home_dir: Some(PathBuf::from("/home/alice")),
-            host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
-            tty_mode: TtyMode::Interactive,
-            publish: false,
-        }
-    }
 
     // ── build_exec_cmd: raw mode ─────────────────────────────────────────────
 
     #[test]
     fn test_build_exec_cmd_raw_passes_cmd_as_is() {
         let config = Config::default();
-        let opts = base_opts();
         let cmd = vec![
             "/bin/bash".to_string(),
             "-c".to_string(),
             "echo hi".to_string(),
         ];
-        let result = build_exec_cmd(&config, &opts, "test", true, &cmd);
+        let result = build_exec_cmd(&config, true, &cmd);
         assert_eq!(result, cmd, "raw mode must not wrap the command");
     }
 
     #[test]
-    fn test_build_exec_cmd_raw_no_nix_wrap_even_with_flake() {
+    fn test_build_exec_cmd_raw_no_nix_wrap_even_with_shell_refs() {
         let config = Config {
-            use_flake: true,
+            global_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#ai".to_string()),
             ..Config::default()
         };
-        let opts = RunOpts {
-            user_flake_present: true,
-            project_flake_present: true,
-            ..base_opts()
-        };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, &opts, "test", true, &cmd);
-        // raw=true must bypass Nix wrapping even when flakes are present
+        let result = build_exec_cmd(&config, true, &cmd);
+        // raw=true must bypass Nix wrapping even when both layers are active
         assert_eq!(result, cmd);
         assert!(
             !result.contains(&"nix".to_string()),
@@ -194,56 +154,50 @@ mod tests {
     // ── build_exec_cmd: non-raw mode ─────────────────────────────────────────
 
     #[test]
-    fn test_build_exec_cmd_non_raw_no_flake_is_bare() {
-        let config = Config::default(); // use_flake: false, no flake path
-        let opts = base_opts(); // user_flake_present: false
+    fn test_build_exec_cmd_non_raw_no_shell_ref_is_bare() {
+        let config = Config::default();
         let cmd = vec!["/bin/bash".to_string(), "-c".to_string(), "x".to_string()];
-        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
-        // No flakes active → result is the bare command
+        let result = build_exec_cmd(&config, false, &cmd);
+        // No layers active → result is the bare command
         assert_eq!(result, cmd);
     }
 
     #[test]
-    fn test_build_exec_cmd_non_raw_wraps_with_nix() {
+    fn test_build_exec_cmd_non_raw_wraps_with_project_ref() {
         let config = Config {
-            use_flake: true,
-            use_flake_path: None,
+            project_shell: Some(".#ai".to_string()),
             ..Config::default()
         };
-        let opts = RunOpts {
-            user_flake_present: false,
-            project_flake_present: true,
-            ..base_opts()
-        };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
-        // With project flake, command is wrapped: nix develop . -c /bin/bash
-        assert_eq!(result, vec!["nix", "develop", ".", "-c", "/bin/bash"]);
+        let result = build_exec_cmd(&config, false, &cmd);
+        assert_eq!(result, vec!["nix", "develop", ".#ai", "-c", "/bin/bash"]);
     }
 
     #[test]
     fn test_build_exec_cmd_non_raw_splits_cmd_args_with_flake() {
-        // Verify that with a project flake active, cmd[0] is used as the
-        // binary and cmd[1..] is forwarded as extra_args to build_command.
+        // With a project layer active, cmd[0] is used as the binary and
+        // cmd[1..] is forwarded as extra args to build_command.
         let config = Config {
-            use_flake: true,
-            use_flake_path: None,
+            project_shell: Some(".#ai".to_string()),
             ..Config::default()
-        };
-        let opts = RunOpts {
-            project_flake_present: true,
-            ..base_opts()
         };
         let cmd = vec![
             "/bin/bash".to_string(),
             "-c".to_string(),
             "echo hello".to_string(),
         ];
-        let result = build_exec_cmd(&config, &opts, "test", false, &cmd);
-        // nix develop . -c /bin/bash -c "echo hello"
+        let result = build_exec_cmd(&config, false, &cmd);
         assert_eq!(
             result,
-            vec!["nix", "develop", ".", "-c", "/bin/bash", "-c", "echo hello"]
+            vec![
+                "nix",
+                "develop",
+                ".#ai",
+                "-c",
+                "/bin/bash",
+                "-c",
+                "echo hello"
+            ]
         );
     }
 
@@ -325,10 +279,9 @@ mod tests {
         // The caller (exec()) bails before build_exec_cmd is reached, but
         // the function itself must not panic on empty input.
         let config = Config::default();
-        let opts = base_opts();
         let empty: Vec<String> = vec![];
-        assert_eq!(build_exec_cmd(&config, &opts, "test", false, &empty), empty);
-        assert_eq!(build_exec_cmd(&config, &opts, "test", true, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, false, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, true, &empty), empty);
     }
 
     #[test]

@@ -256,7 +256,7 @@ pub fn run_agent(
         eprintln!("Loading global nix devshell...");
     }
 
-    let cmd = agent.build_command(config, &run_opts, extra_args);
+    let cmd = agent.build_command(config, extra_args);
 
     run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
 }

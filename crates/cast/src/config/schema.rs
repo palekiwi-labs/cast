@@ -43,14 +43,6 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub use_project_flake: bool,
 
-    // Legacy pair, removed in a following commit together with the
-    // build_command rewrite that orphans them. serde defaults so the
-    // partial-JSON contract above holds without naming them.
-    #[serde(default)]
-    pub use_flake: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub use_flake_path: Option<String>,
-
     // Data Volumes
     pub volumes_namespace: String,
 
@@ -181,8 +173,6 @@ impl Default for Config {
             project_shell: None,
             use_global_flake: true,
             use_project_flake: true,
-            use_flake: false,
-            use_flake_path: None,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
             nix_volume_name: "cast-nix".to_string(),
@@ -408,6 +398,22 @@ mod tests {
         assert_eq!(config.project_shell.as_deref(), Some(".#ai"));
         assert!(!config.use_global_flake);
         assert!(!config.use_project_flake);
+    }
+
+    #[test]
+    fn test_legacy_use_flake_keys_are_silently_ignored() {
+        // use_flake/use_flake_path were removed at 0.2.0; existing JSON
+        // carrying them must still load without error (no
+        // deny_unknown_fields on Config).
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json["use_flake"] = serde_json::json!(true);
+        json["use_flake_path"] = serde_json::json!(".#shell");
+        let result: Result<Config, _> = serde_json::from_value(json);
+        assert!(
+            result.is_ok(),
+            "legacy use_flake keys should be silently ignored: {:?}",
+            result.err()
+        );
     }
 
     #[test]
