@@ -69,8 +69,6 @@ pub struct RunOpts {
     /// container for diagnostics grouping. Always non-empty (falls back to
     /// `"unknown"` when the hostname cannot be resolved).
     pub host_name: String,
-    pub user_flake_present: bool,
-    pub project_flake_present: bool,
     pub tty_mode: TtyMode,
     /// Whether to publish the container's port to the host. `false` means no publish.
     pub publish: bool,
@@ -238,20 +236,13 @@ pub fn run_agent(
 
     dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
 
-    // Scaffold the global flake (if absent) before detecting its presence so
-    // the first run on a clean host works with no manual setup.
-    scaffold_global_flake();
-    // Seed the global cast.json (if absent) so the numtide cache reaches the
-    // daemon server-side on the first run.
-    scaffold_global_cast_json();
-
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 
     // Announce nix devshell layers before handing off to docker, so the
     // user knows what environment is being loaded.  The global flake is
     // the outermost layer and is announced here; the project flake
     // announces itself via its own shellHook (echo ... >&2).
-    if run_opts.user_flake_present {
+    if should_announce_global_devshell(config) {
         info!("loading global nix devshell");
         eprintln!("Loading global nix devshell...");
     }
@@ -259,6 +250,10 @@ pub fn run_agent(
     let cmd = agent.build_command(config, extra_args);
 
     run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
+}
+
+fn should_announce_global_devshell(config: &Config) -> bool {
+    config.global_shell.is_some() && config.use_global_flake
 }
 
 /// Auto-scaffold the global cast flake on a new host so the first
@@ -314,11 +309,7 @@ pub fn scaffold_global_cast_json() {
     }
 }
 
-/// Resolve the generic options for a session, detecting flake presence.
-///
-/// Pure detection only: this reads the host home and workspace to determine
-/// flake presence and host identity. It performs no host mutation — global
-/// flake scaffolding is the caller's responsibility via [`scaffold_global_flake`].
+/// Resolve the generic options for a session.
 pub fn resolve_run_opts(
     user: ResolvedUser,
     workspace: ResolvedWorkspace,
@@ -326,13 +317,6 @@ pub fn resolve_run_opts(
     flags: &SessionFlags,
 ) -> RunOpts {
     let host_home_dir = dirs::home_dir();
-
-    let user_flake_present = host_home_dir
-        .as_ref()
-        .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
-        .is_some();
-
-    let project_flake_present = workspace.root.join("flake.nix").exists();
 
     // Soft-fail: the hostname is diagnostic metadata, not load-bearing for
     // the sandbox. A failed lookup degrades to "unknown" + a warning rather
@@ -348,8 +332,6 @@ pub fn resolve_run_opts(
         port,
         host_home_dir,
         host_name,
-        user_flake_present,
-        project_flake_present,
         tty_mode: TtyMode::from(&flags.mode),
         publish: flags.publish,
     }
@@ -523,6 +505,22 @@ mod tests {
         assert_eq!(TtyMode::from(&mode), TtyMode::Headless);
     }
 
+    #[test]
+    fn test_global_devshell_announcement_requires_enabled_ref() {
+        let enabled = Config {
+            global_shell: Some("github:org/repo#shell".to_string()),
+            ..Config::default()
+        };
+        assert!(should_announce_global_devshell(&enabled));
+
+        let disabled = Config {
+            use_global_flake: false,
+            ..enabled.clone()
+        };
+        assert!(!should_announce_global_devshell(&disabled));
+        assert!(!should_announce_global_devshell(&Config::default()));
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     fn make_interactive_opts(
@@ -536,8 +534,6 @@ mod tests {
             port,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
             tty_mode: TtyMode::Interactive,
             publish: false,
         }
@@ -560,8 +556,6 @@ mod tests {
             port,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
             tty_mode: TtyMode::Headless,
             publish: false,
         }
@@ -819,71 +813,6 @@ mod tests {
         assert!(run_args.contains(
             &"/home/alice/project/secrets:ro,noexec,nosuid,size=1k,mode=000".to_string()
         ));
-    }
-
-    #[test]
-    fn test_resolve_run_opts_detects_flakes() {
-        let temp = tempfile::TempDir::new().unwrap();
-        let root = temp.path().to_path_buf();
-
-        // Create a flake.nix in the workspace
-        std::fs::write(root.join("flake.nix"), "").unwrap();
-
-        let workspace = ResolvedWorkspace {
-            root: root.clone(),
-            container_path: PathBuf::from("/work"),
-        };
-
-        let flags = SessionFlags {
-            mode: RunMode::Interactive,
-            name: None,
-            publish: false,
-        };
-        let opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
-
-        assert!(opts.project_flake_present);
-        // user_flake_present depends on host home dir, which we can't easily mock here
-        // but we verified the logic is correct.
-    }
-
-    #[test]
-    fn test_resolve_run_opts_does_not_scaffold_global_flake() {
-        // resolve_run_opts is pure detection: it must never write the global
-        // flake to the host home. Point HOME at a fresh temp dir and assert
-        // nothing is created there. Scaffolding is run_agent/exec's job.
-        let home = tempfile::TempDir::new().unwrap();
-        let workspace = ResolvedWorkspace {
-            root: tempfile::TempDir::new().unwrap().path().to_path_buf(),
-            container_path: PathBuf::from("/work"),
-        };
-        let flags = SessionFlags {
-            mode: RunMode::Interactive,
-            name: None,
-            publish: false,
-        };
-
-        // Save/restore HOME around the call. Single-threaded assertion on our
-        // own temp dir; we do not assert on any global state.
-        let prev_home = std::env::var_os("HOME");
-        unsafe {
-            std::env::set_var("HOME", home.path());
-        }
-        let _opts = resolve_run_opts(alice_user(), workspace, 8080, &flags);
-        unsafe {
-            match prev_home {
-                Some(v) => std::env::set_var("HOME", v),
-                None => std::env::remove_var("HOME"),
-            }
-        }
-
-        assert!(
-            !home.path().join(".config/cast/nix/flake.nix").exists(),
-            "resolve_run_opts must not scaffold the global flake"
-        );
-        assert!(
-            !home.path().join(".config/cast/cast.json").exists(),
-            "resolve_run_opts must not scaffold the global cast.json"
-        );
     }
 
     #[test]

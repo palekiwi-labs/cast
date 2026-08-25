@@ -8,10 +8,7 @@ use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
-use crate::dev::run::{
-    SessionFlags, resolve_run_opts, run_in_container, scaffold_global_cast_json,
-    scaffold_global_flake,
-};
+use crate::dev::run::{SessionFlags, resolve_run_opts, run_in_container};
 use crate::dev::workspace::get_workspace;
 use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
@@ -95,13 +92,6 @@ pub fn exec(
     );
 
     dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
-
-    // Scaffold the global flake (if absent) before detecting its presence so
-    // the first exec on a clean host works with no manual setup.
-    scaffold_global_flake();
-    // Seed the global cast.json (if absent) so the numtide cache reaches the
-    // daemon server-side on the first exec.
-    scaffold_global_cast_json();
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
     let exec_cmd = build_exec_cmd(config, raw, &cmd);

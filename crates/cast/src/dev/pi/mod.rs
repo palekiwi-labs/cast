@@ -67,8 +67,6 @@ mod tests {
             port: 8080,
             host_home_dir: Some(std::path::PathBuf::from("/home/testuser")),
             host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
             tty_mode: crate::dev::run::TtyMode::Interactive,
             publish: false,
         };

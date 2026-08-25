@@ -122,8 +122,6 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
             tty_mode: TtyMode::Interactive,
             publish: false,
         }
