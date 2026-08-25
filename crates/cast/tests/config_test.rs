@@ -76,6 +76,38 @@ fn test_config_env_vars_override() {
 }
 
 #[test]
+fn test_config_local_file_overrides_project_but_not_env() {
+    let workspace = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    fs::write(
+        workspace.path().join("cast.json"),
+        json!({ "memory": "2g", "cpus": 1.5 }).to_string(),
+    )
+    .unwrap();
+    fs::write(
+        workspace.path().join("cast.local.json"),
+        json!({ "memory": "4g", "cpus": 2.5 }).to_string(),
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("cast")
+        .unwrap()
+        .current_dir(workspace.path())
+        .env("CAST_LOG_DIR", data_dir.path().join("logs"))
+        .env("CAST_DATA_DIR", data_dir.path())
+        .env("CAST_MEMORY", "8g")
+        .args(["config", "show"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["memory"], "8g");
+    assert_eq!(config["cpus"], 2.5);
+}
+
+#[test]
 fn test_config_serialize_to_json() {
     let config = cast::config::Config::default();
 
@@ -232,6 +264,48 @@ fn test_config_show_hints_diff_when_changed() {
     assert!(
         stderr.contains("cast config diff"),
         "stderr should mention cast config diff when config has changed, got: {}",
+        stderr
+    );
+}
+
+#[test]
+fn test_adding_local_config_requires_reapproval() {
+    let workspace = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    fs::write(
+        workspace.path().join("cast.json"),
+        json!({ "memory": "1024m" }).to_string(),
+    )
+    .unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .args(["config", "allow"])
+        .assert()
+        .success();
+
+    fs::write(
+        workspace.path().join("cast.local.json"),
+        json!({ "memory": "4096m" }).to_string(),
+    )
+    .unwrap();
+
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .args(["config", "show"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["memory"], "4096m");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("cast config diff"),
+        "adding cast.local.json should require reapproval, got: {}",
         stderr
     );
 }
