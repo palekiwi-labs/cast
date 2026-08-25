@@ -94,7 +94,7 @@ fn test_config_local_file_overrides_project_but_not_env() {
     let output = Command::cargo_bin("cast")
         .unwrap()
         .current_dir(workspace.path())
-        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
+        .env("CAST_LOG_DIR", data_dir.path().join("logs"))
         .env("CAST_DATA_DIR", data_dir.path())
         .env("CAST_MEMORY", "8g")
         .args(["config", "show"])

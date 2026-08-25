@@ -136,36 +136,45 @@ mod tests {
         assert_eq!(config.mcp.port, 4000);
     }
 
+    fn load_with_project_files(
+        project: Option<&str>,
+        local: Option<&str>,
+        mcp: Option<&str>,
+    ) -> Result<Config> {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, body) in [
+            ("cast.json", project),
+            ("cast.local.json", local),
+            ("cast-mcp.json", mcp),
+        ] {
+            if let Some(body) = body {
+                std::fs::write(dir.path().join(name), body).unwrap();
+            }
+        }
+
+        load_config_with_global(dir.path(), None)
+    }
+
     #[test]
     fn test_local_config_overrides_project_config() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("cast.json"), r#"{ "memory": "2048m" }"#).unwrap();
-        std::fs::write(
-            dir.path().join("cast.local.json"),
-            r#"{ "memory": "4096m" }"#,
+        let config = load_with_project_files(
+            Some(r#"{ "memory": "2048m" }"#),
+            Some(r#"{ "memory": "4096m" }"#),
+            None,
         )
         .unwrap();
-
-        let config = load_config_from(dir.path()).unwrap();
 
         assert_eq!(config.memory, "4096m");
     }
 
     #[test]
     fn test_local_config_falls_through_to_project_config() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("cast.json"),
-            r#"{ "memory": "2048m", "cpus": 2.0 }"#,
+        let config = load_with_project_files(
+            Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#),
+            Some(r#"{ "memory": "4096m" }"#),
+            None,
         )
         .unwrap();
-        std::fs::write(
-            dir.path().join("cast.local.json"),
-            r#"{ "memory": "4096m" }"#,
-        )
-        .unwrap();
-
-        let config = load_config_from(dir.path()).unwrap();
 
         assert_eq!(config.memory, "4096m");
         assert_eq!(config.cpus, 2.0);
@@ -173,14 +182,9 @@ mod tests {
 
     #[test]
     fn test_missing_local_config_does_not_change_project_config() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("cast.json"),
-            r#"{ "memory": "2048m", "cpus": 2.0 }"#,
-        )
-        .unwrap();
-
-        let config = load_config_from(dir.path()).unwrap();
+        let config =
+            load_with_project_files(Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#), None, None)
+                .unwrap();
 
         assert_eq!(config.memory, "2048m");
         assert_eq!(config.cpus, 2.0);
@@ -188,44 +192,31 @@ mod tests {
 
     #[test]
     fn test_malformed_local_config_fails_to_load() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(dir.path().join("cast.local.json"), "{ invalid json }").unwrap();
-
-        let error = load_config_from(dir.path()).unwrap_err();
+        let error = load_with_project_files(None, Some("{ invalid json }"), None).unwrap_err();
 
         assert_eq!(error.to_string(), "Failed to load configuration");
     }
 
     #[test]
     fn test_mcp_config_overrides_local_mcp_settings() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("cast.local.json"),
-            r#"{ "mcp": { "port": 3000 } }"#,
+        let config = load_with_project_files(
+            None,
+            Some(r#"{ "mcp": { "port": 3000 } }"#),
+            Some(r#"{ "port": 4000 }"#),
         )
         .unwrap();
-        std::fs::write(dir.path().join("cast-mcp.json"), r#"{ "port": 4000 }"#).unwrap();
-
-        let config = load_config_from(dir.path()).unwrap();
 
         assert_eq!(config.mcp.port, 4000);
     }
 
     #[test]
     fn test_local_config_replaces_project_arrays() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("cast.json"),
-            r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#,
+        let config = load_with_project_files(
+            Some(r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#),
+            Some(r#"{ "env_passthrough": ["LOCAL_TOKEN"] }"#),
+            None,
         )
         .unwrap();
-        std::fs::write(
-            dir.path().join("cast.local.json"),
-            r#"{ "env_passthrough": ["LOCAL_TOKEN"] }"#,
-        )
-        .unwrap();
-
-        let config = load_config_from(dir.path()).unwrap();
 
         assert_eq!(config.env_passthrough, vec!["LOCAL_TOKEN".to_string()]);
     }
