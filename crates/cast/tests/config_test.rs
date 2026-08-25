@@ -76,6 +76,38 @@ fn test_config_env_vars_override() {
 }
 
 #[test]
+fn test_config_local_file_overrides_project_but_not_env() {
+    let workspace = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    fs::write(
+        workspace.path().join("cast.json"),
+        json!({ "memory": "2g", "cpus": 1.5 }).to_string(),
+    )
+    .unwrap();
+    fs::write(
+        workspace.path().join("cast.local.json"),
+        json!({ "memory": "4g", "cpus": 2.5 }).to_string(),
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("cast")
+        .unwrap()
+        .current_dir(workspace.path())
+        .env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
+        .env("CAST_DATA_DIR", data_dir.path())
+        .env("CAST_MEMORY", "8g")
+        .args(["config", "show"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["memory"], "8g");
+    assert_eq!(config["cpus"], 2.5);
+}
+
+#[test]
 fn test_config_serialize_to_json() {
     let config = cast::config::Config::default();
 
