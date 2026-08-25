@@ -3,11 +3,6 @@ use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
-    /// Name of the global devShell to enter when running an agent.
-    /// Defaults to the agent name when absent.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub global_shell: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub container_name: Option<String>,
 
@@ -24,9 +19,36 @@ pub struct Config {
 
     pub add_host_docker_internal: bool,
 
-    // Paths & Files
+    // Nix devshells
+    /// Full nix flake ref for the global (outer) devshell, passed
+    /// verbatim to `nix develop` inside the container (e.g.
+    /// `~/.config/cast/nix#default`, `github:org/repo#shell`).
+    /// Unset = no global layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub global_shell: Option<String>,
+
+    /// Full nix flake ref for the project (inner) devshell, passed
+    /// verbatim to `nix develop`. Relative refs resolve against the
+    /// workspace inside the container. Unset = no project layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_shell: Option<String>,
+
+    /// Wrap sessions in the global devshell when `global_shell` is set.
+    /// A disabled layer is skipped silently.
+    #[serde(default = "default_true")]
+    pub use_global_flake: bool,
+
+    /// Wrap sessions in the project devshell when `project_shell` is set.
+    /// A disabled layer is skipped silently.
+    #[serde(default = "default_true")]
+    pub use_project_flake: bool,
+
+    // Legacy pair, removed in a following commit together with the
+    // build_command rewrite that orphans them. serde defaults so the
+    // partial-JSON contract above holds without naming them.
+    #[serde(default)]
     pub use_flake: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub use_flake_path: Option<String>,
 
     // Data Volumes
@@ -148,7 +170,6 @@ pub struct VolumeConfig {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            global_shell: None,
             container_name: None,
             memory: "1024m".to_string(),
             cpus: 1.0,
@@ -156,6 +177,10 @@ impl Default for Config {
             network: "bridge".to_string(),
             port: None,
             add_host_docker_internal: true,
+            global_shell: None,
+            project_shell: None,
+            use_global_flake: true,
+            use_project_flake: true,
             use_flake: false,
             use_flake_path: None,
             volumes_namespace: "cast".to_string(),
@@ -174,6 +199,10 @@ impl Default for Config {
 
 fn default_volume_mode() -> String {
     "rw".to_string()
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_volume_type() -> String {
@@ -305,6 +334,80 @@ mod tests {
             "agent_versions should be silently ignored: {:?}",
             result.err()
         );
+    }
+
+    #[test]
+    fn test_config_defaults_have_no_shell_refs_and_layers_enabled() {
+        let config = Config::default();
+
+        assert_eq!(config.global_shell, None);
+        assert_eq!(config.project_shell, None);
+        assert!(
+            config.use_global_flake,
+            "use_global_flake must default to true"
+        );
+        assert!(
+            config.use_project_flake,
+            "use_project_flake must default to true"
+        );
+    }
+
+    #[test]
+    fn test_partial_json_deserializes_with_shell_defaults() {
+        // A JSON object naming only the shell fields must deserialize:
+        // switches fall back to true and unset refs to None without the
+        // loader's Serialized::defaults merge underneath.
+        let json = json!({
+            "memory": "2048m",
+            "cpus": 2.0,
+            "pids_limit": 256,
+            "network": "host",
+            "add_host_docker_internal": true,
+            "volumes_namespace": "ns",
+            "extra_data_volumes": {},
+            "nix_volume_name": "v",
+            "nix_daemon_container_name": "d",
+            "nix_extra_substituters": [],
+            "nix_extra_trusted_public_keys": [],
+            "forbidden_paths": []
+        });
+        let config: Config = serde_json::from_value(json).unwrap();
+
+        assert_eq!(config.global_shell, None);
+        assert_eq!(config.project_shell, None);
+        assert!(config.use_global_flake);
+        assert!(config.use_project_flake);
+    }
+
+    #[test]
+    fn test_shell_refs_and_switches_load_from_json() {
+        let json = json!({
+            "memory": "2048m",
+            "cpus": 2.0,
+            "pids_limit": 256,
+            "network": "host",
+            "add_host_docker_internal": true,
+            "volumes_namespace": "ns",
+            "extra_data_volumes": {},
+            "nix_volume_name": "v",
+            "nix_daemon_container_name": "d",
+            "nix_extra_substituters": [],
+            "nix_extra_trusted_public_keys": [],
+            "forbidden_paths": [],
+            "global_shell": "~/.config/cast/nix#default",
+            "project_shell": ".#ai",
+            "use_global_flake": false,
+            "use_project_flake": false
+        });
+        let config: Config = serde_json::from_value(json).unwrap();
+
+        assert_eq!(
+            config.global_shell.as_deref(),
+            Some("~/.config/cast/nix#default")
+        );
+        assert_eq!(config.project_shell.as_deref(), Some(".#ai"));
+        assert!(!config.use_global_flake);
+        assert!(!config.use_project_flake);
     }
 
     #[test]

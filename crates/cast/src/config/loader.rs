@@ -239,6 +239,25 @@ mod tests {
     }
 
     #[test]
+    fn test_shell_fields_load_from_global_and_project_configs() {
+        // Global cast.json seeds the global shell ref; the project
+        // cast.json adds the project ref and disables one layer. Both
+        // must survive the figment merge stack with correct precedence.
+        let config = load_with_configs(
+            Some(r#"{ "global_shell": "~/.config/cast/nix#default" }"#),
+            Some(r#"{ "project_shell": ".#ai", "use_project_flake": false }"#),
+        );
+
+        assert_eq!(
+            config.global_shell.as_deref(),
+            Some("~/.config/cast/nix#default")
+        );
+        assert_eq!(config.project_shell.as_deref(), Some(".#ai"));
+        assert!(config.use_global_flake);
+        assert!(!config.use_project_flake);
+    }
+
+    #[test]
     fn test_load_config_without_mcp_json() {
         use std::fs::File;
         use std::io::Write;
