@@ -45,6 +45,7 @@ pub fn load_config_with_global(
 
     let config: Config = figment
         .merge(Json::file(base_dir.join("cast.json")))
+        .merge(Json::file(base_dir.join("cast.local.json")))
         .merge(Serialized::defaults(mcp_json).key("mcp"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
@@ -132,6 +133,21 @@ mod tests {
         assert_eq!(config.mcp.hostname, "0.0.0.0");
         // Should have port from cast-mcp.json (precedence)
         assert_eq!(config.mcp.port, 4000);
+    }
+
+    #[test]
+    fn test_local_config_overrides_project_config() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("cast.json"), r#"{ "memory": "2048m" }"#).unwrap();
+        std::fs::write(
+            dir.path().join("cast.local.json"),
+            r#"{ "memory": "4096m" }"#,
+        )
+        .unwrap();
+
+        let config = load_config_from(dir.path()).unwrap();
+
+        assert_eq!(config.memory, "4096m");
     }
 
     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
