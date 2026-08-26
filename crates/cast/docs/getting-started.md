@@ -18,18 +18,33 @@ nix profile add github:palekiwi-labs/cast#cast
 
 ## First Steps
 
-### 1. Initialize Configuration
+### 1. Initialize Global Configuration
 
-`cast` looks for a `cast.json` file in your project root.
-You can create a minimal one:
+Bootstrap the global configuration and Nix flake:
+
+```bash
+cast config init
+```
+
+This creates `~/.config/cast/cast.json` and
+`~/.config/cast/nix/flake.nix`. Existing files are never overwritten; if only
+one is missing, `cast` creates it and reports that it skipped the other.
+
+### 2. Configure the Project
+
+To add a project devshell, create `cast.json` in the project root with a full
+flake reference:
 
 ```json
 {
-  "use_flake": true
+  "project_shell": ".#default"
 }
 ```
 
-### 2. Approve Configuration
+The generated global configuration already selects
+`~/.config/cast/nix#default`, which provides all supported harnesses.
+
+### 3. Approve Configuration
 
 For security, `cast` requires you to approve the configuration for each workspace:
 
@@ -37,7 +52,7 @@ For security, `cast` requires you to approve the configuration for each workspac
 cast config allow
 ```
 
-### 3. Run an Agent
+### 4. Run an Agent
 
 Run the `opencode` agent:
 
@@ -47,9 +62,7 @@ cast run opencode
 
 The first time you run an agent, `cast` builds the single, shared dev image
 (`localhost/cast:{version}`) automatically. The agent harness is not baked into
-the image — it is provided by a global Nix devShell. If you have no global flake
-yet (`~/.config/cast/nix/flake.nix`), `cast` scaffolds one from a shipped
-template so the first run works with no manual setup. See
+the image; it must be provided by the configured sandbox Nix devshell. See
 [Flake Integration](nix/flake-integration.md) for details.
 
 ## Next Steps

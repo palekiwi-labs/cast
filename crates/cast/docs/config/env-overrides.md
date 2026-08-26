@@ -10,14 +10,18 @@ Every configuration field in `cast` can be overridden by environment variables.
 
 ## Examples
 
-| Config Field   | Env Variable         |
-| -------------- | -------------------- |
-| `memory`       | `CAST_MEMORY`        |
-| `cpus`         | `CAST_CPUS`          |
-| `mcp.port`     | `CAST_MCP__PORT`     |
-| `mcp.hostname` | `CAST_MCP__HOSTNAME` |
-| `use_flake`    | `CAST_USE_FLAKE`     |
-| `extra_data_volumes.cargo.target` | `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET` |
+- `memory` becomes `CAST_MEMORY`.
+- `cpus` becomes `CAST_CPUS`.
+- `mcp.port` becomes `CAST_MCP__PORT`.
+- `mcp.hostname` becomes `CAST_MCP__HOSTNAME`.
+- `sandbox_shell` becomes `CAST_SANDBOX_SHELL`.
+- `project_shell` becomes `CAST_PROJECT_SHELL`.
+- `use_sandbox_shell` becomes `CAST_USE_SANDBOX_SHELL`.
+- `use_project_shell` becomes `CAST_USE_PROJECT_SHELL`.
+- `extra_data_volumes.cargo.target` becomes
+  `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET`.
+
+The removed `CAST_USE_FLAKE` and `CAST_USE_FLAKE_PATH` overrides have no effect.
 
 ## Passing Host Variables Into the Sandbox (`env_passthrough` and `extra_env_passthrough`)
 

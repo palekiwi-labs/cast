@@ -16,7 +16,17 @@ Install `cast` to your Nix profile:
 nix profile add github:palekiwi-labs/cast#cast
 ```
 
-## 2. Run your first agent
+## 2. Initialize the global environment
+
+Create the default global configuration and Nix flake:
+
+```bash
+cast config init
+```
+
+Existing files are never overwritten.
+
+## 3. Run your first agent
 
 To run an agent, you first need to approve the project configuration.
 In your project directory, run:
@@ -34,9 +44,10 @@ cast run opencode
 This will:
 
 1. Build the shared, harness-free sandbox image (first run only).
-2. Scaffold a global Nix flake if none exists yet.
-3. Start a Docker container with the current directory mounted.
-4. Enter the `opencode` global devShell and launch the agent inside it.
+2. Start a Docker container with the current directory mounted.
+3. Enter the explicitly configured `default` sandbox devshell, which provides
+   the supported agent harnesses.
+4. Launch the `opencode` agent inside it.
 
 ## Next Steps
 

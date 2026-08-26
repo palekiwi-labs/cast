@@ -3,7 +3,7 @@ FROM debian:trixie-slim
 ARG TARGETARCH
 
 # Install essential tools for development (union of all agents' deps).
-# No harness binaries are baked in — harnesses are provided by the global
+# No harness binaries are baked in — harnesses are provided by the sandbox
 # Nix devShell selected at run time.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # user is non-trusted, so flake-forwarded substituters/keys are rejected
 # anyway. Setting it false deterministically suppresses the interactive prompt
 # path. Binary caches (e.g. cache.numtide.com) are provisioned daemon-side via
-# ~/.config/cast/cast.json (seeded on first run) -> generate_nix_conf.
+# ~/.config/cast/cast.json (created by `cast config init`) -> generate_nix_conf.
 # (Nix store itself is mounted read-only from the nix-daemon volume.)
 RUN mkdir -p /etc/nix && \
     printf 'experimental-features = nix-command flakes\naccept-flake-config = false\n' \

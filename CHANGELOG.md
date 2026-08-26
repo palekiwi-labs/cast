@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `cast config init`, a flagless global bootstrap command that creates the
+  default `~/.config/cast/cast.json` and `~/.config/cast/nix/flake.nix`. It
+  never overwrites existing files and can initialize either missing file
+  independently.
+- Explicit `sandbox_shell` and `project_shell` full flake references, with
+  `use_sandbox_shell` and `use_project_shell` switches. Environment overrides
+  are available as `CAST_SANDBOX_SHELL`, `CAST_PROJECT_SHELL`,
+  `CAST_USE_SANDBOX_SHELL`, and `CAST_USE_PROJECT_SHELL`.
 - Optional `cast.local.json` project configuration for untracked,
   machine-specific overrides of `cast.json`.
 - `env_passthrough` and `extra_env_passthrough` configuration keys in
@@ -18,13 +26,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CAST_ENV_PASSTHROUGH` and `CAST_EXTRA_ENV_PASSTHROUGH` environment variable
   overrides using bracketed list syntax (e.g. `'[GH_TOKEN]'`).
 - The nix daemon's binary caches are now provisioned daemon-side from
-  `~/.config/cast/cast.json`. The first `cast run`/`cast exec` on a fresh host
-  seeds a default `cast.json` with the numtide cache so harnesses fetch
-  prebuilt rather than building from source. An existing `cast.json` is never
-  overwritten.
+  `~/.config/cast/cast.json`. `cast config init` seeds the default with the
+  numtide cache so harnesses fetch prebuilt rather than building from source.
 
 ### Changed
 
+- **Breaking:** Shell selection is now fully explicit. `cast` passes configured
+  refs verbatim to `nix develop`; it no longer detects project or user flakes,
+  derives shell fragments from agent names, or assumes a global flake path.
+- The shipped global flake's `default` devshell now contains all supported
+  harnesses. The former `universal` shell name has been removed; per-harness
+  shells remain available.
+- `~/.config/cast/nix` is mounted whenever the directory exists, without
+  requiring a `flake.nix` file.
 - Adding `env_passthrough` and `extra_env_passthrough` to the configuration
   schema alters the serialized JSON hash of `Config`. Existing approved project
   configurations will report `ApprovalStatus::Changed` once on upgrade and
@@ -59,6 +73,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** `global_shell` and its `CAST_GLOBAL_SHELL` override. Legacy
+  keys are silently ignored. **Migration:** replace a bare shell name with a
+  complete `sandbox_shell` ref, such as `~/.config/cast/nix#default`.
+- **Breaking:** `use_flake` and `use_flake_path`, including the
+  `CAST_USE_FLAKE` and `CAST_USE_FLAKE_PATH` overrides. Legacy keys are
+  silently ignored. **Migration:** set `project_shell` to a complete ref such
+  as `.#default`; use `use_project_shell: false` only when a configured layer
+  must be temporarily disabled.
+- **Breaking:** Automatic global config and sandbox flake scaffolding from `cast run`
+  and `cast exec`. Run `cast config init` explicitly before using the shipped
+  sandbox harness environment.
 - **Breaking:** Hardcoded per-agent environment variable forwarding has been
   completely removed across all harnesses (OpenCode, ClaudeCode, Pi).
   Previously, `cast` automatically passed through common provider API keys

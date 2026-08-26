@@ -12,7 +12,8 @@ fn test_config_has_defaults() {
     assert_eq!(config.memory, "1024m");
     assert_eq!(config.cpus, 1.0);
     assert_eq!(config.pids_limit, 512);
-    assert!(!config.use_flake);
+    assert!(config.use_sandbox_shell);
+    assert!(config.use_project_shell);
 }
 
 #[test]
@@ -59,6 +60,10 @@ fn test_config_env_vars_override() {
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
+        .env("CAST_SANDBOX_SHELL", "github:org/global#ai")
+        .env("CAST_PROJECT_SHELL", ".#project")
+        .env("CAST_USE_SANDBOX_SHELL", "false")
+        .env("CAST_USE_PROJECT_SHELL", "false")
         .args(["config", "show"])
         .output()
         .unwrap();
@@ -73,6 +78,10 @@ fn test_config_env_vars_override() {
     assert_eq!(config["cpus"], 4.0);
     // Test that fields with underscores work correctly
     assert_eq!(config["nix_volume_name"], "from-env");
+    assert_eq!(config["sandbox_shell"], "github:org/global#ai");
+    assert_eq!(config["project_shell"], ".#project");
+    assert_eq!(config["use_sandbox_shell"], false);
+    assert_eq!(config["use_project_shell"], false);
 }
 
 #[test]
@@ -122,6 +131,145 @@ fn cast_with_data_dir(data_dir: &std::path::Path) -> Command {
     cmd.env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
         .env("CAST_DATA_DIR", data_dir);
     cmd
+}
+
+#[test]
+fn test_config_init_creates_global_config_and_flake() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    let config_path = home.path().join(".config/cast/cast.json");
+    let config: serde_json::Value =
+        serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
+    assert_eq!(config["sandbox_shell"], "~/.config/cast/nix#default");
+    assert_eq!(
+        config["nix_extra_substituters"],
+        json!(["https://cache.numtide.com"])
+    );
+    assert_eq!(
+        config["nix_extra_trusted_public_keys"],
+        json!(["niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="])
+    );
+
+    let flake = fs::read_to_string(home.path().join(".config/cast/nix/flake.nix")).unwrap();
+    assert!(flake.contains("llm-agents"));
+}
+
+#[test]
+fn test_config_init_flake_default_contains_all_harnesses() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    let flake = fs::read_to_string(home.path().join(".config/cast/nix/flake.nix")).unwrap();
+    assert!(flake.contains("default = mkShell \"default\" [ opencode pi claudecode ];"));
+    assert!(flake.contains("opencode = mkShell \"opencode\" [ opencode ];"));
+    assert!(flake.contains("pi = mkShell \"pi\" [ pi ];"));
+    assert!(flake.contains("claudecode = mkShell \"claudecode\" [ claudecode ];"));
+    assert!(!flake.contains("universal ="));
+    assert!(
+        !flake
+            .lines()
+            .any(|line| { !line.trim_start().starts_with('#') && line.contains("nixConfig") })
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_config_init_does_not_follow_dangling_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+    let cast_dir = home.path().join(".config/cast");
+    let target = home.path().join("must-not-be-created");
+    fs::create_dir_all(&cast_dir).unwrap();
+    symlink(&target, cast_dir.join("cast.json")).unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    assert!(!target.exists());
+    assert!(cast_dir.join("nix/flake.nix").exists());
+}
+
+#[test]
+fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+    let cast_dir = home.path().join(".config/cast");
+    fs::create_dir_all(&cast_dir).unwrap();
+    fs::write(cast_dir.join("cast.json"), "user-managed contents").unwrap();
+
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    assert_eq!(
+        fs::read_to_string(cast_dir.join("cast.json")).unwrap(),
+        "user-managed contents"
+    );
+    assert!(cast_dir.join("nix/flake.nix").exists());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Skipped existing global cast config"));
+    assert!(stderr.contains("Created sandbox nix flake"));
+}
+
+#[test]
+fn test_config_init_preserves_existing_flake_and_creates_missing_config() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+    let cast_dir = home.path().join(".config/cast");
+    let flake_path = cast_dir.join("nix/flake.nix");
+    fs::create_dir_all(flake_path.parent().unwrap()).unwrap();
+    fs::write(&flake_path, "user-managed flake").unwrap();
+
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    assert_eq!(
+        fs::read_to_string(&flake_path).unwrap(),
+        "user-managed flake"
+    );
+    assert!(cast_dir.join("cast.json").exists());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Created global cast config"));
+    assert!(stderr.contains("Skipped existing sandbox nix flake"));
 }
 
 #[test]

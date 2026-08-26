@@ -14,7 +14,7 @@ const IMAGE_BASE: &str = "localhost/cast";
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The single, harness-free dev image Dockerfile. Harnesses are provided by the
-/// global Nix devShell selected at run time, not baked into the image.
+/// sandbox Nix devShell selected at run time, not baked into the image.
 const DEV_DOCKERFILE: &str = include_str!("../../assets/Dockerfile.dev");
 
 /// Get the tag for the single dev image: `localhost/cast:{cast_version}`.
