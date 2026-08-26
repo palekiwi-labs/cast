@@ -1,10 +1,10 @@
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::process::ExitCode;
 
 use crate::config::{
-    compute_workspace_diff, get_approval_status, ApprovalStatus, Config, ConfigDiffOutput,
+    ApprovalStatus, Config, ConfigDiffOutput, compute_workspace_diff, get_approval_status,
 };
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
@@ -37,11 +37,6 @@ pub enum ConfigCommands {
 }
 
 pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result<ExitCode> {
-    if matches!(command, Some(ConfigCommands::Init)) {
-        init_global_config()?;
-        return Ok(ExitCode::SUCCESS);
-    }
-
     let user = get_user()?;
     let workspace = get_workspace(&user.username)?;
 
@@ -107,8 +102,9 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
 }
 
 pub(crate) fn init_global_config() -> Result<()> {
-    let home = dirs::home_dir().context("Failed to resolve user home directory")?;
-    let cast_dir = home.join(".config/cast");
+    let cast_dir = crate::paths::home_config_dir()
+        .context("Failed to resolve user config directory")?
+        .join("cast");
 
     write_if_missing(
         &cast_dir.join("cast.json"),
@@ -125,19 +121,24 @@ pub(crate) fn init_global_config() -> Result<()> {
 }
 
 fn write_if_missing(path: &Path, contents: &str, description: &str) -> Result<()> {
-    if path.exists() {
-        eprintln!("Skipped existing {description} at {}", path.display());
-        return Ok(());
-    }
-
     let parent = path
         .parent()
         .context("Global config path has no parent directory")?;
     fs::create_dir_all(parent)
         .with_context(|| format!("creating global config directory {}", parent.display()))?;
-    fs::write(path, contents)
-        .with_context(|| format!("writing {description} {}", path.display()))?;
-    eprintln!("Created {description} at {}", path.display());
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut file) => {
+            file.write_all(contents.as_bytes())
+                .with_context(|| format!("writing {description} {}", path.display()))?;
+            eprintln!("Created {description} at {}", path.display());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            eprintln!("Skipped existing {description} at {}", path.display());
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("writing {description} {}", path.display()));
+        }
+    }
 
     Ok(())
 }

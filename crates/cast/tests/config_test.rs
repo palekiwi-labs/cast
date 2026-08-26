@@ -182,6 +182,35 @@ fn test_config_init_flake_default_contains_all_harnesses() {
     assert!(flake.contains("pi = mkShell \"pi\" [ pi ];"));
     assert!(flake.contains("claudecode = mkShell \"claudecode\" [ claudecode ];"));
     assert!(!flake.contains("universal ="));
+    assert!(
+        !flake
+            .lines()
+            .any(|line| { !line.trim_start().starts_with('#') && line.contains("nixConfig") })
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn test_config_init_does_not_follow_dangling_symlink() {
+    use std::os::unix::fs::symlink;
+
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+    let cast_dir = home.path().join(".config/cast");
+    let target = home.path().join("must-not-be-created");
+    fs::create_dir_all(&cast_dir).unwrap();
+    symlink(&target, cast_dir.join("cast.json")).unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    assert!(!target.exists());
+    assert!(cast_dir.join("nix/flake.nix").exists());
 }
 
 #[test]

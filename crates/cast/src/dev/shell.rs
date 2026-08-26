@@ -35,7 +35,7 @@ pub fn shell(agent: &dyn Agent, config: &ApprovedConfig, raw: bool) -> Result<Ex
     let shell_cmd = if raw {
         vec!["/bin/bash".to_string()]
     } else {
-        build_command(config, "/bin/bash", vec![])
+        build_command(config, &user.username, "/bin/bash", vec![])
     };
 
     exec_args.extend(shell_cmd);

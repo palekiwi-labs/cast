@@ -36,7 +36,12 @@ pub trait Agent {
 
     /// Build the command vector that will be passed to `docker run` after all flags.
     /// Default implementation handles the nested Nix develop wrapping logic.
-    fn build_command(&self, config: &Config, extra_args: Vec<String>) -> Vec<String> {
-        build_command::build_command(config, self.base_command(), extra_args)
+    fn build_command(
+        &self,
+        config: &Config,
+        container_username: &str,
+        extra_args: Vec<String>,
+    ) -> Vec<String> {
+        build_command::build_command(config, container_username, self.base_command(), extra_args)
     }
 }

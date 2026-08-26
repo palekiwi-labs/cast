@@ -20,11 +20,16 @@ use crate::user::get_user;
 /// When `raw` is true the user-supplied `cmd` is returned as-is (no Nix
 /// devshell wrapping).  When `raw` is false, `build_command` wraps `cmd[0]`
 /// with the Nix devshell layers exactly as it does for `cast run`.
-pub fn build_exec_cmd(config: &Config, raw: bool, cmd: &[String]) -> Vec<String> {
+pub fn build_exec_cmd(
+    config: &Config,
+    container_username: &str,
+    raw: bool,
+    cmd: &[String],
+) -> Vec<String> {
     if raw || cmd.is_empty() {
         return cmd.to_vec();
     }
-    build_command(config, &cmd[0], cmd[1..].to_vec())
+    build_command(config, container_username, &cmd[0], cmd[1..].to_vec())
 }
 
 /// Orchestrate and run a `cast exec` session inside a fresh agent container.
@@ -94,7 +99,7 @@ pub fn exec(
     dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
 
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
-    let exec_cmd = build_exec_cmd(config, raw, &cmd);
+    let exec_cmd = build_exec_cmd(config, &run_opts.user.username, raw, &cmd);
 
     run_in_container(
         &docker,
@@ -120,7 +125,7 @@ mod tests {
             "-c".to_string(),
             "echo hi".to_string(),
         ];
-        let result = build_exec_cmd(&config, true, &cmd);
+        let result = build_exec_cmd(&config, "alice", true, &cmd);
         assert_eq!(result, cmd, "raw mode must not wrap the command");
     }
 
@@ -132,7 +137,7 @@ mod tests {
             ..Config::default()
         };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, true, &cmd);
+        let result = build_exec_cmd(&config, "alice", true, &cmd);
         // raw=true must bypass Nix wrapping even when both layers are active
         assert_eq!(result, cmd);
         assert!(
@@ -147,7 +152,7 @@ mod tests {
     fn test_build_exec_cmd_non_raw_no_shell_ref_is_bare() {
         let config = Config::default();
         let cmd = vec!["/bin/bash".to_string(), "-c".to_string(), "x".to_string()];
-        let result = build_exec_cmd(&config, false, &cmd);
+        let result = build_exec_cmd(&config, "alice", false, &cmd);
         // No layers active → result is the bare command
         assert_eq!(result, cmd);
     }
@@ -159,7 +164,7 @@ mod tests {
             ..Config::default()
         };
         let cmd = vec!["/bin/bash".to_string()];
-        let result = build_exec_cmd(&config, false, &cmd);
+        let result = build_exec_cmd(&config, "alice", false, &cmd);
         assert_eq!(result, vec!["nix", "develop", ".#ai", "-c", "/bin/bash"]);
     }
 
@@ -176,7 +181,7 @@ mod tests {
             "-c".to_string(),
             "echo hello".to_string(),
         ];
-        let result = build_exec_cmd(&config, false, &cmd);
+        let result = build_exec_cmd(&config, "alice", false, &cmd);
         assert_eq!(
             result,
             vec![
@@ -270,8 +275,8 @@ mod tests {
         // the function itself must not panic on empty input.
         let config = Config::default();
         let empty: Vec<String> = vec![];
-        assert_eq!(build_exec_cmd(&config, false, &empty), empty);
-        assert_eq!(build_exec_cmd(&config, true, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, "alice", false, &empty), empty);
+        assert_eq!(build_exec_cmd(&config, "alice", true, &empty), empty);
     }
 
     #[test]

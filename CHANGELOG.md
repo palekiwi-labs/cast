@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **Breaking:** `global_shell` and its `CAST_GLOBAL_SHELL` override. Legacy
+  keys are silently ignored. **Migration:** replace a bare shell name with a
+  complete `sandbox_shell` ref, such as `~/.config/cast/nix#default`.
 - **Breaking:** `use_flake` and `use_flake_path`, including the
   `CAST_USE_FLAKE` and `CAST_USE_FLAKE_PATH` overrides. Legacy keys are
   silently ignored. **Migration:** set `project_shell` to a complete ref such

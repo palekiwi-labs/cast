@@ -22,7 +22,8 @@ This page lists key configuration fields available in both `cast.json` and
 
 - `sandbox_shell`: Full flake reference for the outer harness layer, such as
   `~/.config/cast/nix#default`, `.#ai`, or `github:org/repo#shell`. Unset means
-  no sandbox layer. The ref is passed verbatim to `nix develop`.
+  no sandbox layer. A leading `~/` resolves against the container user's home;
+  other refs are passed verbatim to `nix develop`.
 - `project_shell`: Full flake reference for the inner project layer, such as
   `.#default`. Unset means no project layer. Relative refs resolve from the
   workspace inside the container.
@@ -32,8 +33,11 @@ This page lists key configuration fields available in both `cast.json` and
   `true`).
 - `nix_volume_name`: Name of the Docker volume for the Nix store.
 
-The removed `use_flake` and `use_flake_path` keys are silently ignored. Migrate
-them to `project_shell`; see [Flake Integration][flake-integration].
+The removed `global_shell`, `use_flake`, and `use_flake_path` keys are silently
+ignored. Replace a bare `global_shell` name with a complete `sandbox_shell` ref;
+migrate the other keys to `project_shell`. See
+[Flake Integration][flake-integration]. The corresponding
+`CAST_GLOBAL_SHELL` override was also removed.
 
 ## Data Volumes
 

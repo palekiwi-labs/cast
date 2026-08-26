@@ -247,13 +247,13 @@ pub fn run_agent(
         eprintln!("Loading sandbox nix devshell...");
     }
 
-    let cmd = agent.build_command(config, extra_args);
+    let cmd = agent.build_command(config, &run_opts.user.username, extra_args);
 
     run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
 }
 
 fn should_announce_sandbox_devshell(config: &Config) -> bool {
-    config.sandbox_shell.is_some() && config.use_sandbox_shell
+    crate::dev::build_command::sandbox_layer(config).is_some()
 }
 
 /// Resolve the generic options for a session.

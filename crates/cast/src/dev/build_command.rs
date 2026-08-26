@@ -5,34 +5,42 @@ use crate::config::Config;
 ///
 /// Each layer (sandbox outer, project inner) wraps the command in
 /// `nix develop <ref> -c` iff its ref is set AND its switch is true.
-/// Refs are passed verbatim; a disabled layer is skipped silently.
+/// Leading `~/` refs resolve against the container user's home; other refs
+/// are passed verbatim. A disabled layer is skipped silently.
 /// Unresolvable refs are not cast's problem: they fail inside the
 /// container.
-pub fn build_command(config: &Config, base_command: &str, extra_args: Vec<String>) -> Vec<String> {
+pub fn build_command(
+    config: &Config,
+    container_username: &str,
+    base_command: &str,
+    extra_args: Vec<String>,
+) -> Vec<String> {
+    let sandbox = sandbox_layer(config);
+    let project = project_layer(config);
     let mut capacity = 1 + extra_args.len();
-    if sandbox_layer(config).is_some() {
+    if sandbox.is_some() {
         capacity += 4;
     }
-    if project_layer(config).is_some() {
+    if project.is_some() {
         capacity += 4;
     }
 
     let mut cmd = Vec::with_capacity(capacity);
 
-    if let Some(ref_) = sandbox_layer(config) {
+    if let Some(ref_) = sandbox {
         cmd.extend([
             "nix".to_string(),
             "develop".to_string(),
-            ref_,
+            expand_container_home(ref_, container_username),
             "-c".to_string(),
         ]);
     }
 
-    if let Some(ref_) = project_layer(config) {
+    if let Some(ref_) = project {
         cmd.extend([
             "nix".to_string(),
             "develop".to_string(),
-            ref_,
+            expand_container_home(ref_, container_username),
             "-c".to_string(),
         ]);
     }
@@ -45,22 +53,28 @@ pub fn build_command(config: &Config, base_command: &str, extra_args: Vec<String
 
 /// The effective sandbox layer: the verbatim ref when `sandbox_shell` is
 /// set and `use_sandbox_shell` is true, else `None`.
-fn sandbox_layer(config: &Config) -> Option<String> {
-    if config.use_sandbox_shell {
-        config.sandbox_shell.clone()
-    } else {
-        None
-    }
+pub(crate) fn sandbox_layer(config: &Config) -> Option<&str> {
+    effective_layer(config.sandbox_shell.as_deref(), config.use_sandbox_shell)
 }
 
 /// The effective project layer: the verbatim ref when `project_shell`
 /// is set and `use_project_shell` is true, else `None`.
-fn project_layer(config: &Config) -> Option<String> {
-    if config.use_project_shell {
-        config.project_shell.clone()
-    } else {
-        None
-    }
+fn project_layer(config: &Config) -> Option<&str> {
+    effective_layer(config.project_shell.as_deref(), config.use_project_shell)
+}
+
+fn effective_layer(shell: Option<&str>, enabled: bool) -> Option<&str> {
+    enabled
+        .then_some(shell)
+        .flatten()
+        .filter(|shell| !shell.trim().is_empty())
+}
+
+fn expand_container_home(ref_: &str, username: &str) -> String {
+    ref_.strip_prefix("~/").map_or_else(
+        || ref_.to_string(),
+        |rest| format!("/home/{username}/{rest}"),
+    )
 }
 
 #[cfg(test)]
@@ -78,15 +92,15 @@ mod tests {
     // ── Sandbox layer ─────────────────────────────────────────────────────
 
     #[test]
-    fn sandbox_ref_set_wraps_verbatim() {
+    fn sandbox_home_ref_expands_inside_container() {
         let config = shell_config(Some("~/.config/cast/nix#default"), None);
-        let cmd = build_command(&config, "opencode", vec![]);
+        let cmd = build_command(&config, "alice", "opencode", vec![]);
         assert_eq!(
             cmd,
             vec![
                 "nix",
                 "develop",
-                "~/.config/cast/nix#default",
+                "/home/alice/.config/cast/nix#default",
                 "-c",
                 "opencode",
             ]
@@ -98,7 +112,7 @@ mod tests {
         // The agent name survives only as container identity key; it
         // never leaks into the ref.
         let config = shell_config(Some("github:org/repo#shell"), None);
-        let cmd = build_command(&config, "opencode", vec![]);
+        let cmd = build_command(&config, "alice", "opencode", vec![]);
         assert_eq!(
             cmd,
             vec!["nix", "develop", "github:org/repo#shell", "-c", "opencode"]
@@ -108,7 +122,7 @@ mod tests {
     #[test]
     fn sandbox_ref_unset_means_bare_command() {
         let config = shell_config(None, None);
-        let cmd = build_command(&config, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, "alice", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["test", "arg1"]);
     }
 
@@ -119,7 +133,7 @@ mod tests {
             use_sandbox_shell: false,
             ..Default::default()
         };
-        let cmd = build_command(&config, "test", vec![]);
+        let cmd = build_command(&config, "alice", "test", vec![]);
         assert_eq!(cmd, vec!["test"]);
     }
 
@@ -128,14 +142,14 @@ mod tests {
     #[test]
     fn project_ref_set_wraps_verbatim() {
         let config = shell_config(None, Some(".#ai"));
-        let cmd = build_command(&config, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, "alice", "test", vec!["arg1".to_string()]);
         assert_eq!(cmd, vec!["nix", "develop", ".#ai", "-c", "test", "arg1"]);
     }
 
     #[test]
     fn project_ref_unset_means_no_project_layer() {
         let config = shell_config(Some("/abs/path#shell"), None);
-        let cmd = build_command(&config, "test", vec![]);
+        let cmd = build_command(&config, "alice", "test", vec![]);
         assert_eq!(cmd, vec!["nix", "develop", "/abs/path#shell", "-c", "test"]);
     }
 
@@ -146,7 +160,7 @@ mod tests {
             use_project_shell: false,
             ..Default::default()
         };
-        let cmd = build_command(&config, "test", vec![]);
+        let cmd = build_command(&config, "alice", "test", vec![]);
         assert_eq!(cmd, vec!["test"]);
     }
 
@@ -155,13 +169,13 @@ mod tests {
     #[test]
     fn both_layers_nest_sandbox_outer_project_inner() {
         let config = shell_config(Some("~/.config/cast/nix#default"), Some(".#ai"));
-        let cmd = build_command(&config, "test", vec!["arg1".to_string()]);
+        let cmd = build_command(&config, "alice", "test", vec!["arg1".to_string()]);
         assert_eq!(
             cmd,
             vec![
                 "nix",
                 "develop",
-                "~/.config/cast/nix#default",
+                "/home/alice/.config/cast/nix#default",
                 "-c",
                 "nix",
                 "develop",
@@ -182,7 +196,14 @@ mod tests {
             use_sandbox_shell: false,
             ..Default::default()
         };
-        let cmd = build_command(&config, "test", vec![]);
+        let cmd = build_command(&config, "alice", "test", vec![]);
         assert_eq!(cmd, vec!["nix", "develop", ".#ai", "-c", "test"]);
+    }
+
+    #[test]
+    fn empty_shell_refs_are_ignored() {
+        let config = shell_config(Some("  "), Some(""));
+        let cmd = build_command(&config, "alice", "test", vec![]);
+        assert_eq!(cmd, vec!["test"]);
     }
 }
