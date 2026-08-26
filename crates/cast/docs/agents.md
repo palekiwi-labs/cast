@@ -12,12 +12,12 @@
 
 Harness binaries are **not** baked into the Docker image. There is a single,
 harness-free dev image (`localhost/cast:{version}`); every agent runs in it.
-The harness itself is provided by the devshell referenced by `global_shell`,
+The harness itself is provided by the devshell referenced by `sandbox_shell`,
 selected at run time.
 
-`global_shell` is a full Nix flake reference, such as
+`sandbox_shell` is a full Nix flake reference, such as
 `~/.config/cast/nix#default` or `.#ai`. There is no default based on the agent
-name: if the field is unset, no global devshell is entered. The template created
+name: if the field is unset, no sandbox devshell is entered. The template created
 by `cast config init` has a `default` shell containing all supported harnesses
 and optional per-harness shells. See
 [Flake Integration](nix/flake-integration.md) for the selection mechanics.
@@ -28,7 +28,7 @@ selected flake's `flake.lock`**, not by `cast.json`.
 ## The `Agent` Trait
 
 The system is extensible via the `Agent` trait. Since harnesses come from the
-global devShell, the trait defines only the program-specific layer on top of
+sandbox devShell, the trait defines only the program-specific layer on top of
 the shared image:
 1. Config-directory bind mounts (`config_mount_args`)
 2. Host preparation (creating directories) via `prepare_host`
@@ -41,7 +41,7 @@ gone with the nix-native model. For the full trait definition, see
 ## Adding New Agents
 
 Adding a new agent involves implementing the `Agent` trait and registering the
-harness in the CLI. Users must select a `global_shell` whose packages provide
+harness in the CLI. Users must select a `sandbox_shell` whose packages provide
 the corresponding binary; shell names do not need to match agent names. The
 source code for existing harnesses provides the best template:
 - OpenCode: [src/dev/opencode/mod.rs][opencode-harness]

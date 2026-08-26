@@ -17,14 +17,14 @@ how to run the agent binary with the correct flags and environment.
 
 Harnesses are provisioned by Nix, not baked into the image. A single,
 harness-free dev image is shared by every agent; the harness binary comes from
-the explicit flake reference in `global_shell`. See [Agents](agents.md) for the
+the explicit flake reference in `sandbox_shell`. See [Agents](agents.md) for the
 full model.
 
 ## Nix Integration
 
 `cast` leverages Nix in three ways:
 
-1. **Harness provisioning**: If configured and enabled, `global_shell` is the
+1. **Harness provisioning**: If configured and enabled, `sandbox_shell` is the
    outer devshell and provides the agent binary. The value is a full flake ref
    passed verbatim to Nix.
 2. **Project environment**: If configured and enabled, `project_shell` is an

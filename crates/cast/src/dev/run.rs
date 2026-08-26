@@ -239,12 +239,12 @@ pub fn run_agent(
     let run_opts = resolve_run_opts(user, workspace, port, &flags);
 
     // Announce nix devshell layers before handing off to docker, so the
-    // user knows what environment is being loaded.  The global flake is
+    // user knows what environment is being loaded.  The sandbox devshell is
     // the outermost layer and is announced here; the project flake
     // announces itself via its own shellHook (echo ... >&2).
-    if should_announce_global_devshell(config) {
-        info!("loading global nix devshell");
-        eprintln!("Loading global nix devshell...");
+    if should_announce_sandbox_devshell(config) {
+        info!("loading sandbox nix devshell");
+        eprintln!("Loading sandbox nix devshell...");
     }
 
     let cmd = agent.build_command(config, extra_args);
@@ -252,8 +252,8 @@ pub fn run_agent(
     run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
 }
 
-fn should_announce_global_devshell(config: &Config) -> bool {
-    config.global_shell.is_some() && config.use_global_flake
+fn should_announce_sandbox_devshell(config: &Config) -> bool {
+    config.sandbox_shell.is_some() && config.use_sandbox_shell
 }
 
 /// Resolve the generic options for a session.
@@ -453,19 +453,19 @@ mod tests {
     }
 
     #[test]
-    fn test_global_devshell_announcement_requires_enabled_ref() {
+    fn test_sandbox_devshell_announcement_requires_enabled_ref() {
         let enabled = Config {
-            global_shell: Some("github:org/repo#shell".to_string()),
+            sandbox_shell: Some("github:org/repo#shell".to_string()),
             ..Config::default()
         };
-        assert!(should_announce_global_devshell(&enabled));
+        assert!(should_announce_sandbox_devshell(&enabled));
 
         let disabled = Config {
-            use_global_flake: false,
+            use_sandbox_shell: false,
             ..enabled.clone()
         };
-        assert!(!should_announce_global_devshell(&disabled));
-        assert!(!should_announce_global_devshell(&Config::default()));
+        assert!(!should_announce_sandbox_devshell(&disabled));
+        assert!(!should_announce_sandbox_devshell(&Config::default()));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

@@ -62,7 +62,7 @@ cast run opencode
 
 The first time you run an agent, `cast` builds the single, shared dev image
 (`localhost/cast:{version}`) automatically. The agent harness is not baked into
-the image; it must be provided by the configured global Nix devshell. See
+the image; it must be provided by the configured sandbox Nix devshell. See
 [Flake Integration](nix/flake-integration.md) for details.
 
 ## Next Steps

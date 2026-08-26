@@ -20,12 +20,12 @@ pub struct Config {
     pub add_host_docker_internal: bool,
 
     // Nix devshells
-    /// Full nix flake ref for the global (outer) devshell, passed
+    /// Full nix flake ref for the sandbox (outer) devshell, passed
     /// verbatim to `nix develop` inside the container (e.g.
     /// `~/.config/cast/nix#default`, `github:org/repo#shell`).
-    /// Unset = no global layer.
+    /// Unset = no sandbox layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub global_shell: Option<String>,
+    pub sandbox_shell: Option<String>,
 
     /// Full nix flake ref for the project (inner) devshell, passed
     /// verbatim to `nix develop`. Relative refs resolve against the
@@ -33,15 +33,15 @@ pub struct Config {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_shell: Option<String>,
 
-    /// Wrap sessions in the global devshell when `global_shell` is set.
+    /// Wrap sessions in the sandbox devshell when `sandbox_shell` is set.
     /// A disabled layer is skipped silently.
     #[serde(default = "default_true")]
-    pub use_global_flake: bool,
+    pub use_sandbox_shell: bool,
 
     /// Wrap sessions in the project devshell when `project_shell` is set.
     /// A disabled layer is skipped silently.
     #[serde(default = "default_true")]
-    pub use_project_flake: bool,
+    pub use_project_shell: bool,
 
     // Data Volumes
     pub volumes_namespace: String,
@@ -169,10 +169,10 @@ impl Default for Config {
             network: "bridge".to_string(),
             port: None,
             add_host_docker_internal: true,
-            global_shell: None,
+            sandbox_shell: None,
             project_shell: None,
-            use_global_flake: true,
-            use_project_flake: true,
+            use_sandbox_shell: true,
+            use_project_shell: true,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
             nix_volume_name: "cast-nix".to_string(),
@@ -330,15 +330,15 @@ mod tests {
     fn test_config_defaults_have_no_shell_refs_and_layers_enabled() {
         let config = Config::default();
 
-        assert_eq!(config.global_shell, None);
+        assert_eq!(config.sandbox_shell, None);
         assert_eq!(config.project_shell, None);
         assert!(
-            config.use_global_flake,
-            "use_global_flake must default to true"
+            config.use_sandbox_shell,
+            "use_sandbox_shell must default to true"
         );
         assert!(
-            config.use_project_flake,
-            "use_project_flake must default to true"
+            config.use_project_shell,
+            "use_project_shell must default to true"
         );
     }
 
@@ -363,10 +363,10 @@ mod tests {
         });
         let config: Config = serde_json::from_value(json).unwrap();
 
-        assert_eq!(config.global_shell, None);
+        assert_eq!(config.sandbox_shell, None);
         assert_eq!(config.project_shell, None);
-        assert!(config.use_global_flake);
-        assert!(config.use_project_flake);
+        assert!(config.use_sandbox_shell);
+        assert!(config.use_project_shell);
     }
 
     #[test]
@@ -384,20 +384,20 @@ mod tests {
             "nix_extra_substituters": [],
             "nix_extra_trusted_public_keys": [],
             "forbidden_paths": [],
-            "global_shell": "~/.config/cast/nix#default",
+            "sandbox_shell": "~/.config/cast/nix#default",
             "project_shell": ".#ai",
-            "use_global_flake": false,
-            "use_project_flake": false
+            "use_sandbox_shell": false,
+            "use_project_shell": false
         });
         let config: Config = serde_json::from_value(json).unwrap();
 
         assert_eq!(
-            config.global_shell.as_deref(),
+            config.sandbox_shell.as_deref(),
             Some("~/.config/cast/nix#default")
         );
         assert_eq!(config.project_shell.as_deref(), Some(".#ai"));
-        assert!(!config.use_global_flake);
-        assert!(!config.use_project_flake);
+        assert!(!config.use_sandbox_shell);
+        assert!(!config.use_project_shell);
     }
 
     #[test]

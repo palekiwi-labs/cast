@@ -14,10 +14,10 @@ Every configuration field in `cast` can be overridden by environment variables.
 - `cpus` becomes `CAST_CPUS`.
 - `mcp.port` becomes `CAST_MCP__PORT`.
 - `mcp.hostname` becomes `CAST_MCP__HOSTNAME`.
-- `global_shell` becomes `CAST_GLOBAL_SHELL`.
+- `sandbox_shell` becomes `CAST_SANDBOX_SHELL`.
 - `project_shell` becomes `CAST_PROJECT_SHELL`.
-- `use_global_flake` becomes `CAST_USE_GLOBAL_FLAKE`.
-- `use_project_flake` becomes `CAST_USE_PROJECT_FLAKE`.
+- `use_sandbox_shell` becomes `CAST_USE_SANDBOX_SHELL`.
+- `use_project_shell` becomes `CAST_USE_PROJECT_SHELL`.
 - `extra_data_volumes.cargo.target` becomes
   `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET`.
 

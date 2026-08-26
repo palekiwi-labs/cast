@@ -12,8 +12,8 @@ fn test_config_has_defaults() {
     assert_eq!(config.memory, "1024m");
     assert_eq!(config.cpus, 1.0);
     assert_eq!(config.pids_limit, 512);
-    assert!(config.use_global_flake);
-    assert!(config.use_project_flake);
+    assert!(config.use_sandbox_shell);
+    assert!(config.use_project_shell);
 }
 
 #[test]
@@ -60,10 +60,10 @@ fn test_config_env_vars_override() {
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
-        .env("CAST_GLOBAL_SHELL", "github:org/global#ai")
+        .env("CAST_SANDBOX_SHELL", "github:org/global#ai")
         .env("CAST_PROJECT_SHELL", ".#project")
-        .env("CAST_USE_GLOBAL_FLAKE", "false")
-        .env("CAST_USE_PROJECT_FLAKE", "false")
+        .env("CAST_USE_SANDBOX_SHELL", "false")
+        .env("CAST_USE_PROJECT_SHELL", "false")
         .args(["config", "show"])
         .output()
         .unwrap();
@@ -78,10 +78,10 @@ fn test_config_env_vars_override() {
     assert_eq!(config["cpus"], 4.0);
     // Test that fields with underscores work correctly
     assert_eq!(config["nix_volume_name"], "from-env");
-    assert_eq!(config["global_shell"], "github:org/global#ai");
+    assert_eq!(config["sandbox_shell"], "github:org/global#ai");
     assert_eq!(config["project_shell"], ".#project");
-    assert_eq!(config["use_global_flake"], false);
-    assert_eq!(config["use_project_flake"], false);
+    assert_eq!(config["use_sandbox_shell"], false);
+    assert_eq!(config["use_project_shell"], false);
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn test_config_init_creates_global_config_and_flake() {
     let config_path = home.path().join(".config/cast/cast.json");
     let config: serde_json::Value =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
-    assert_eq!(config["global_shell"], "~/.config/cast/nix#default");
+    assert_eq!(config["sandbox_shell"], "~/.config/cast/nix#default");
     assert_eq!(
         config["nix_extra_substituters"],
         json!(["https://cache.numtide.com"])
@@ -210,7 +210,7 @@ fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Skipped existing global cast config"));
-    assert!(stderr.contains("Created global nix flake"));
+    assert!(stderr.contains("Created sandbox nix flake"));
 }
 
 #[test]
@@ -240,7 +240,7 @@ fn test_config_init_preserves_existing_flake_and_creates_missing_config() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("Created global cast config"));
-    assert!(stderr.contains("Skipped existing global nix flake"));
+    assert!(stderr.contains("Skipped existing sandbox nix flake"));
 }
 
 #[test]

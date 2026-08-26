@@ -45,7 +45,7 @@ This will:
 
 1. Build the shared, harness-free sandbox image (first run only).
 2. Start a Docker container with the current directory mounted.
-3. Enter the explicitly configured `default` global devshell, which provides
+3. Enter the explicitly configured `default` sandbox devshell, which provides
    the supported agent harnesses.
 4. Launch the `opencode` agent inside it.
 

@@ -1,6 +1,6 @@
 # Flake Integration
 
-`cast` can enter explicit global and project Nix devshells around an agent
+`cast` can enter explicit sandbox and project Nix devshells around an agent
 command. It does not detect flakes or choose shell fragments automatically.
 
 ## Enabling Integration
@@ -9,7 +9,7 @@ Set either or both shell refs in `cast.json`:
 
 ```json
 {
-  "global_shell": ".#ai",
+  "sandbox_shell": ".#ai",
   "project_shell": ".#default"
 }
 ```
@@ -19,15 +19,15 @@ Both values are full flake references and are passed verbatim to
 `/absolute/path#shell`, `~/.config/cast/nix#default`, and
 `github:org/repo#shell`. Relative refs resolve from the mounted workspace.
 
-`use_global_flake` and `use_project_flake` default to `true`. Set the
+`use_sandbox_shell` and `use_project_shell` default to `true`. Set the
 corresponding switch to `false` to skip a configured layer silently. An unset
 ref also means that layer is absent.
 
-## Global Flake
+## Sandbox Flake
 
 The outer shell serves two roles: it provides tools you want available in every
 agent session and, in the nix-native model, provides the **agent harnesses
-themselves**. Its location is entirely controlled by `global_shell`.
+themselves**. Its location is entirely controlled by `sandbox_shell`.
 
 ### Shell selection
 
@@ -35,7 +35,7 @@ For this configuration:
 
 ```json
 {
-  "global_shell": "~/.config/cast/nix#opencode"
+  "sandbox_shell": "~/.config/cast/nix#opencode"
 }
 ```
 
@@ -47,7 +47,7 @@ nix develop ~/.config/cast/nix#opencode -c ...
 
 There is no agent-name fallback or placeholder substitution. To use a minimal
 per-harness shell, select its complete ref explicitly. To use one shell for all
-agents, point `global_shell` at a devshell containing all harness packages. The
+agents, point `sandbox_shell` at a devshell containing all harness packages. The
 template's `default` shell does this.
 
 ### Bootstrap
@@ -135,7 +135,7 @@ will corrupt a JSON pipeline.
 For configured and enabled refs, `cast` constructs a "Russian Doll" of shell
 wrappers:
 
-1. `nix develop <global_shell> -c` (outer harness layer)
+1. `nix develop <sandbox_shell> -c` (outer harness layer)
 2. `nix develop <project_shell> -c` (inner project layer)
 3. `<agent_binary>`
 

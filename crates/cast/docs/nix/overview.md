@@ -5,17 +5,17 @@ access to the same reproducible environment as your host.
 
 ## Modes of Integration
 
-### 1. Harness Provisioning (global devshell)
+### 1. Harness Provisioning (sandbox devshell)
 
-The dev image ships with no agent binaries baked in. Set `global_shell` to a
+The dev image ships with no agent binaries baked in. Set `sandbox_shell` to a
 full flake reference whose devshell provides the requested harness. Running
-`cast config init` creates a global flake and configures
+`cast config init` creates a sandbox flake and configures
 `~/.config/cast/nix#default`, which provides all supported harnesses. Repositories
 can instead select any other ref, including a repository-defined shell.
 
 ### 2. Explicit Shell Layers
 
-`global_shell` and `project_shell` are symmetric, explicit flake references.
+`sandbox_shell` and `project_shell` are symmetric, explicit flake references.
 When set and enabled, `cast` passes each ref verbatim to `nix develop <ref> -c`.
 There is no flake-file detection or agent-name fallback. Relative project refs
 resolve from the mounted workspace inside the container.

@@ -4,7 +4,7 @@ use std::path::Path;
 use std::process::ExitCode;
 
 use crate::config::{
-    ApprovalStatus, Config, ConfigDiffOutput, compute_workspace_diff, get_approval_status,
+    compute_workspace_diff, get_approval_status, ApprovalStatus, Config, ConfigDiffOutput,
 };
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
 const DEFAULT_CAST_JSON: &str = r#"{
-  "global_shell": "~/.config/cast/nix#default",
+  "sandbox_shell": "~/.config/cast/nix#default",
   "nix_extra_substituters": ["https://cache.numtide.com"],
   "nix_extra_trusted_public_keys": [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
@@ -20,7 +20,7 @@ const DEFAULT_CAST_JSON: &str = r#"{
 }
 "#;
 
-const GLOBAL_FLAKE_TEMPLATE: &str = include_str!("../../assets/global-flake-template/flake.nix");
+const SANDBOX_FLAKE_TEMPLATE: &str = include_str!("../../assets/global-flake-template/flake.nix");
 
 #[derive(clap::Subcommand)]
 pub enum ConfigCommands {
@@ -117,8 +117,8 @@ pub(crate) fn init_global_config() -> Result<()> {
     )?;
     write_if_missing(
         &cast_dir.join("nix/flake.nix"),
-        GLOBAL_FLAKE_TEMPLATE,
-        "global nix flake",
+        SANDBOX_FLAKE_TEMPLATE,
+        "sandbox nix flake",
     )?;
 
     Ok(())

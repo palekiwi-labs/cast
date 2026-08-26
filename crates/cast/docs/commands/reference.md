@@ -12,7 +12,7 @@ Starts an agent session.
 
 Builds the single, shared dev image without running it. All agents share the
 same harness-free image (`localhost/cast:{version}`); harnesses come from the
-global Nix devShell, not the image, so the command takes no agent argument.
+sandbox Nix devShell, not the image, so the command takes no agent argument.
 
 - `--nix-daemon`: Also build the Nix daemon image.
 - `--force`, `-f`: Force rebuild even if image already exists.
@@ -21,7 +21,7 @@ global Nix devShell, not the image, so the command takes no agent argument.
 ## `shell [--raw] <agent>`
 
 Starts an interactive shell inside the agent's sandbox. By default, the
-shell uses the same explicitly configured global and project devshell layers
+shell uses the same explicitly configured sandbox and project devshell layers
 as `cast run`, so you have access to the harness and project's tools.
 
 - `--raw`: Skip Nix devshell wrapping and open a bare shell.

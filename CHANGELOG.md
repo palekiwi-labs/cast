@@ -13,10 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default `~/.config/cast/cast.json` and `~/.config/cast/nix/flake.nix`. It
   never overwrites existing files and can initialize either missing file
   independently.
-- Explicit `global_shell` and `project_shell` full flake references, with
-  `use_global_flake` and `use_project_flake` switches. Environment overrides
-  are available as `CAST_GLOBAL_SHELL`, `CAST_PROJECT_SHELL`,
-  `CAST_USE_GLOBAL_FLAKE`, and `CAST_USE_PROJECT_FLAKE`.
+- Explicit `sandbox_shell` and `project_shell` full flake references, with
+  `use_sandbox_shell` and `use_project_shell` switches. Environment overrides
+  are available as `CAST_SANDBOX_SHELL`, `CAST_PROJECT_SHELL`,
+  `CAST_USE_SANDBOX_SHELL`, and `CAST_USE_PROJECT_SHELL`.
 - Optional `cast.local.json` project configuration for untracked,
   machine-specific overrides of `cast.json`.
 - `env_passthrough` and `extra_env_passthrough` configuration keys in
@@ -76,11 +76,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Breaking:** `use_flake` and `use_flake_path`, including the
   `CAST_USE_FLAKE` and `CAST_USE_FLAKE_PATH` overrides. Legacy keys are
   silently ignored. **Migration:** set `project_shell` to a complete ref such
-  as `.#default`; use `use_project_flake: false` only when a configured layer
+  as `.#default`; use `use_project_shell: false` only when a configured layer
   must be temporarily disabled.
-- **Breaking:** Automatic global config and flake scaffolding from `cast run`
+- **Breaking:** Automatic global config and sandbox flake scaffolding from `cast run`
   and `cast exec`. Run `cast config init` explicitly before using the shipped
-  global harness environment.
+  sandbox harness environment.
 - **Breaking:** Hardcoded per-agent environment variable forwarding has been
   completely removed across all harnesses (OpenCode, ClaudeCode, Pi).
   Previously, `cast` automatically passed through common provider API keys

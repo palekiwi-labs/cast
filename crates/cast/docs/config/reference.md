@@ -20,15 +20,15 @@ This page lists key configuration fields available in both `cast.json` and
 
 ## Nix Settings
 
-- `global_shell`: Full flake reference for the outer harness layer, such as
+- `sandbox_shell`: Full flake reference for the outer harness layer, such as
   `~/.config/cast/nix#default`, `.#ai`, or `github:org/repo#shell`. Unset means
-  no global layer. The ref is passed verbatim to `nix develop`.
+  no sandbox layer. The ref is passed verbatim to `nix develop`.
 - `project_shell`: Full flake reference for the inner project layer, such as
   `.#default`. Unset means no project layer. Relative refs resolve from the
   workspace inside the container.
-- `use_global_flake`: Whether to enable the configured global layer (default:
+- `use_sandbox_shell`: Whether to enable the configured sandbox layer (default:
   `true`).
-- `use_project_flake`: Whether to enable the configured project layer (default:
+- `use_project_shell`: Whether to enable the configured project layer (default:
   `true`).
 - `nix_volume_name`: Name of the Docker volume for the Nix store.
 

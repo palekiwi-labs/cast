@@ -39,7 +39,7 @@
           # The default shell provides every harness plus the shared tooling.
           default = mkShell "default" [ opencode pi claudecode ];
 
-          # Per-harness shells selectable through `global_shell`.
+          # Per-harness shells selectable through `sandbox_shell`.
           opencode = mkShell "opencode" [ opencode ];
           pi = mkShell "pi" [ pi ];
           claudecode = mkShell "claudecode" [ claudecode ];

@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn test_build_exec_cmd_raw_no_nix_wrap_even_with_shell_refs() {
         let config = Config {
-            global_shell: Some("~/.config/cast/nix#default".to_string()),
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
             project_shell: Some(".#ai".to_string()),
             ..Config::default()
         };
