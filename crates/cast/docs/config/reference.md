@@ -20,14 +20,20 @@ This page lists key configuration fields available in both `cast.json` and
 
 ## Nix Settings
 
-- `global_shell`: Name of the global devShell to enter when running an agent.
-  Defaults to the agent name (e.g. `opencode`). Set to `universal` to route
-  every agent through a shell that exposes all harnesses. See
-  [Flake Integration][flake-integration].
-- `use_flake`: Whether to also wrap commands in the project's `nix develop`
-  (default: `false`).
-- `use_flake_path`: Specific project flake reference to use.
+- `global_shell`: Full flake reference for the outer harness layer, such as
+  `~/.config/cast/nix#default`, `.#ai`, or `github:org/repo#shell`. Unset means
+  no global layer. The ref is passed verbatim to `nix develop`.
+- `project_shell`: Full flake reference for the inner project layer, such as
+  `.#default`. Unset means no project layer. Relative refs resolve from the
+  workspace inside the container.
+- `use_global_flake`: Whether to enable the configured global layer (default:
+  `true`).
+- `use_project_flake`: Whether to enable the configured project layer (default:
+  `true`).
 - `nix_volume_name`: Name of the Docker volume for the Nix store.
+
+The removed `use_flake` and `use_flake_path` keys are silently ignored. Migrate
+them to `project_shell`; see [Flake Integration][flake-integration].
 
 ## Data Volumes
 
@@ -74,7 +80,7 @@ This page lists key configuration fields available in both `cast.json` and
 ## Agent Versions
 
 Harness versions are no longer configured in `cast.json`. They are pinned by
-the global flake's `flake.lock` (see [Flake Integration][flake-integration]).
+the selected flake's `flake.lock` (see [Flake Integration][flake-integration]).
 A legacy `agent_versions` key is silently ignored if present.
 
 [schema-src]: ../../src/config/schema.rs

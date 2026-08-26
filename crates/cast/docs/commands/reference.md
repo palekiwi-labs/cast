@@ -21,8 +21,8 @@ global Nix devShell, not the image, so the command takes no agent argument.
 ## `shell [--raw] <agent>`
 
 Starts an interactive shell inside the agent's sandbox. By default, the
-shell is wrapped in the Nix devshell (using the same flake detection as
-`cast run`) so you have access to the project's tools.
+shell uses the same explicitly configured global and project devshell layers
+as `cast run`, so you have access to the harness and project's tools.
 
 - `--raw`: Skip Nix devshell wrapping and open a bare shell.
 
@@ -36,6 +36,8 @@ cast shell --raw opencode  # bare shell
 Manages project configuration and approvals.
 
 - `config show`: Display the current merged configuration.
+- `config init`: Create missing global config and flake files without
+  overwriting existing files.
 - `config allow`: Approve the current project configuration.
 - `config deny`: Remove approval for the project configuration.
 - `config diff`: Show the diff between the current and approved configuration.

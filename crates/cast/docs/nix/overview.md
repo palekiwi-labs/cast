@@ -5,26 +5,25 @@ access to the same reproducible environment as your host.
 
 ## Modes of Integration
 
-### 0. Harness Provisioning (global devShell)
+### 1. Harness Provisioning (global devshell)
 
-The agent binary itself comes from a named devShell of the global cast flake
-at `~/.config/cast/nix/flake.nix`. `cast run <agent>` enters the devShell named
-after the agent by default; the `global_shell` config field overrides this
-(for example, to select a `universal` shell providing every harness). The dev
-image ships with no harness baked in. See [Flake Integration](flake-integration.md)
-for shell selection, the shipped template, and auto-scaffolding.
+The dev image ships with no agent binaries baked in. Set `global_shell` to a
+full flake reference whose devshell provides the requested harness. Running
+`cast config init` creates a global flake and configures
+`~/.config/cast/nix#default`, which provides all supported harnesses. Repositories
+can instead select any other ref, including a repository-defined shell.
 
-### 1. Flake Wrapping
+### 2. Explicit Shell Layers
 
-When `use_flake` is set to `true`, `cast` detects your project's `flake.nix`. It
-wraps the agent's entrypoint command in `nix develop -c`. This means the agent
-sees exactly the same `PATH` and environment variables as if you had run `nix
-develop` on your host.
+`global_shell` and `project_shell` are symmetric, explicit flake references.
+When set and enabled, `cast` passes each ref verbatim to `nix develop <ref> -c`.
+There is no flake-file detection or agent-name fallback. Relative project refs
+resolve from the mounted workspace inside the container.
 
 This wrapping also applies to `cast shell`, so an interactive shell starts
 inside the devshell by default. Use `cast shell --raw <agent>` to bypass it.
 
-### 2. Nix Daemon Volume
+### 3. Nix Daemon Volume
 
 `cast` can run a dedicated Nix daemon in a Docker container.
 
