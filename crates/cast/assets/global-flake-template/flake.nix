@@ -36,16 +36,13 @@
       in
       {
         devShells = {
-          # `default` provides the shared base tooling only (no harness).
-          default = mkShell "default" [ ];
+          # The default shell provides every harness plus the shared tooling.
+          default = mkShell "default" [ opencode pi claudecode ];
 
           # Per-harness shells (selected by `cast run <agent>`).
           opencode = mkShell "opencode" [ opencode ];
           pi = mkShell "pi" [ pi ];
           claudecode = mkShell "claudecode" [ claudecode ];
-
-          # Universal shell exposing every harness in one environment.
-          universal = mkShell "universal" [ opencode pi claudecode ];
         };
       });
 }

@@ -156,6 +156,27 @@ fn test_config_init_creates_global_config_and_flake() {
 }
 
 #[test]
+fn test_config_init_flake_default_contains_all_harnesses() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    let flake = fs::read_to_string(home.path().join(".config/cast/nix/flake.nix")).unwrap();
+    assert!(flake.contains("default = mkShell \"default\" [ opencode pi claudecode ];"));
+    assert!(flake.contains("opencode = mkShell \"opencode\" [ opencode ];"));
+    assert!(flake.contains("pi = mkShell \"pi\" [ pi ];"));
+    assert!(flake.contains("claudecode = mkShell \"claudecode\" [ claudecode ];"));
+    assert!(!flake.contains("universal ="));
+}
+
+#[test]
 fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
     let workspace = TempDir::new().unwrap();
     let home = TempDir::new().unwrap();
