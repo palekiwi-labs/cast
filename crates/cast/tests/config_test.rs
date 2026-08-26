@@ -60,6 +60,10 @@ fn test_config_env_vars_override() {
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
+        .env("CAST_GLOBAL_SHELL", "github:org/global#ai")
+        .env("CAST_PROJECT_SHELL", ".#project")
+        .env("CAST_USE_GLOBAL_FLAKE", "false")
+        .env("CAST_USE_PROJECT_FLAKE", "false")
         .args(["config", "show"])
         .output()
         .unwrap();
@@ -74,6 +78,10 @@ fn test_config_env_vars_override() {
     assert_eq!(config["cpus"], 4.0);
     // Test that fields with underscores work correctly
     assert_eq!(config["nix_volume_name"], "from-env");
+    assert_eq!(config["global_shell"], "github:org/global#ai");
+    assert_eq!(config["project_shell"], ".#project");
+    assert_eq!(config["use_global_flake"], false);
+    assert_eq!(config["use_project_flake"], false);
 }
 
 #[test]
