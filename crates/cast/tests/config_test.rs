@@ -185,6 +185,36 @@ fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
 }
 
 #[test]
+fn test_config_init_preserves_existing_flake_and_creates_missing_config() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+    let cast_dir = home.path().join(".config/cast");
+    let flake_path = cast_dir.join("nix/flake.nix");
+    fs::create_dir_all(flake_path.parent().unwrap()).unwrap();
+    fs::write(&flake_path, "user-managed flake").unwrap();
+
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    assert_eq!(
+        fs::read_to_string(&flake_path).unwrap(),
+        "user-managed flake"
+    );
+    assert!(cast_dir.join("cast.json").exists());
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Created global cast config"));
+    assert!(stderr.contains("Skipped existing global nix flake"));
+}
+
+#[test]
 fn test_config_diff_no_approval() {
     let workspace = TempDir::new().unwrap();
     let data_dir = TempDir::new().unwrap();
