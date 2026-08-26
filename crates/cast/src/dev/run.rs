@@ -256,59 +256,6 @@ fn should_announce_global_devshell(config: &Config) -> bool {
     config.global_shell.is_some() && config.use_global_flake
 }
 
-/// Auto-scaffold the global cast flake on a new host so the first
-/// `cast run`/`cast exec` works with no manual setup. A loud notice is emitted
-/// so the user knows a file was created on their behalf.
-///
-/// This is a side-effecting, host-mutating step and is deliberately kept OUT
-/// of [`resolve_run_opts`] (which is pure detection) so unit tests never write
-/// to the real `$HOME`. Callers must invoke this before `resolve_run_opts` so
-/// flake detection observes the scaffolded file on the first run.
-pub fn scaffold_global_flake() {
-    let Some(home) = dirs::home_dir() else {
-        return;
-    };
-    match crate::dev::global_flake::scaffold_if_missing(&home) {
-        Ok(true) => {
-            info!("scaffolded global nix flake");
-            eprintln!(
-                "Created global nix flake at {}",
-                home.join(".config/cast/nix/flake.nix").display()
-            );
-        }
-        Ok(false) => {}
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to scaffold global nix flake");
-        }
-    }
-}
-
-/// Auto-scaffold the global cast config (`cast.json`) on a new host so the
-/// first `cast run`/`cast exec` provisions the numtide binary cache
-/// daemon-side, avoiding a silent regression to multi-minute source builds.
-///
-/// Like [`scaffold_global_flake`] this is a side-effecting, host-mutating step
-/// kept OUT of [`resolve_run_opts`] so unit tests never write to the real
-/// `$HOME`.
-pub fn scaffold_global_cast_json() {
-    let Some(home) = dirs::home_dir() else {
-        return;
-    };
-    match crate::dev::global_config::scaffold_if_missing(&home) {
-        Ok(true) => {
-            info!("scaffolded global cast config");
-            eprintln!(
-                "Created global cast config at {}",
-                home.join(".config/cast/cast.json").display()
-            );
-        }
-        Ok(false) => {}
-        Err(e) => {
-            tracing::warn!(error = %e, "failed to scaffold global cast config");
-        }
-    }
-}
-
 /// Resolve the generic options for a session.
 pub fn resolve_run_opts(
     user: ResolvedUser,

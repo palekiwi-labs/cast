@@ -6,8 +6,6 @@ pub mod container_name;
 pub mod env_file;
 pub mod exec;
 pub mod extra_dirs;
-pub mod global_config;
-pub mod global_flake;
 pub mod image;
 pub mod opencode;
 pub mod pi;

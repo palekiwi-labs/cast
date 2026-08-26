@@ -126,6 +126,36 @@ fn cast_with_data_dir(data_dir: &std::path::Path) -> Command {
 }
 
 #[test]
+fn test_config_init_creates_global_config_and_flake() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .args(["config", "init"])
+        .assert()
+        .success();
+
+    let config_path = home.path().join(".config/cast/cast.json");
+    let config: serde_json::Value =
+        serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
+    assert_eq!(config["global_shell"], "~/.config/cast/nix#default");
+    assert_eq!(
+        config["nix_extra_substituters"],
+        json!(["https://cache.numtide.com"])
+    );
+    assert_eq!(
+        config["nix_extra_trusted_public_keys"],
+        json!(["niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="])
+    );
+
+    let flake = fs::read_to_string(home.path().join(".config/cast/nix/flake.nix")).unwrap();
+    assert!(flake.contains("llm-agents"));
+}
+
+#[test]
 fn test_config_diff_no_approval() {
     let workspace = TempDir::new().unwrap();
     let data_dir = TempDir::new().unwrap();
