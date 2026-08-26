@@ -20,8 +20,7 @@ const DEFAULT_CAST_JSON: &str = r#"{
 }
 "#;
 
-const GLOBAL_FLAKE_TEMPLATE: &str =
-    include_str!("../../assets/global-flake-template/flake.nix");
+const GLOBAL_FLAKE_TEMPLATE: &str = include_str!("../../assets/global-flake-template/flake.nix");
 
 #[derive(clap::Subcommand)]
 pub enum ConfigCommands {
@@ -107,7 +106,7 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
     }
 }
 
-fn init_global_config() -> Result<()> {
+pub(crate) fn init_global_config() -> Result<()> {
     let home = dirs::home_dir().context("Failed to resolve user home directory")?;
     let cast_dir = home.join(".config/cast");
 

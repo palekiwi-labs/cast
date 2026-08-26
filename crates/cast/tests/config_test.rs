@@ -162,7 +162,7 @@ fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
     let data_dir = TempDir::new().unwrap();
     let cast_dir = home.path().join(".config/cast");
     fs::create_dir_all(&cast_dir).unwrap();
-    fs::write(cast_dir.join("cast.json"), "{\"memory\":\"8g\"}").unwrap();
+    fs::write(cast_dir.join("cast.json"), "user-managed contents").unwrap();
 
     let output = cast_with_data_dir(data_dir.path())
         .current_dir(workspace.path())
@@ -175,7 +175,7 @@ fn test_config_init_preserves_existing_config_and_creates_missing_flake() {
 
     assert_eq!(
         fs::read_to_string(cast_dir.join("cast.json")).unwrap(),
-        "{\"memory\":\"8g\"}"
+        "user-managed contents"
     );
     assert!(cast_dir.join("nix/flake.nix").exists());
 

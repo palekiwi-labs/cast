@@ -50,6 +50,18 @@ fn verify_config(cfg: Config) -> Result<ApprovedConfig> {
 }
 
 pub fn run(cli: Cli) -> Result<ExitCode> {
+    // Initialization must work even when an existing global config is invalid:
+    // the command never overwrites it and can still create a missing flake.
+    if matches!(
+        &cli.command,
+        Some(Commands::Config {
+            command: Some(config::ConfigCommands::Init)
+        })
+    ) {
+        config::init_global_config()?;
+        return Ok(ExitCode::SUCCESS);
+    }
+
     // Load config once at startup for efficiency and consistency
     let cfg = load_config()?;
 
