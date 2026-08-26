@@ -910,7 +910,10 @@ async fn test_generate_saves_manifest() -> anyhow::Result<()> {
             cmd.assert().success();
 
             let manifest_path = out_path.join("manifest.json");
-            assert!(manifest_path.exists(), "manifest.json should exist in --dir");
+            assert!(
+                manifest_path.exists(),
+                "manifest.json should exist in --dir"
+            );
 
             let content = std::fs::read_to_string(&manifest_path).unwrap();
             let manifest: serde_json::Value =
@@ -936,8 +939,7 @@ async fn test_generate_saves_manifest() -> anyhow::Result<()> {
                 .expect("tools should be a JSON object");
             assert!(tools.contains_key("dummy_tool"), "dummy_tool in manifest");
             assert_eq!(
-                tools["dummy_tool"],
-                "cast-dummy-tool.sh",
+                tools["dummy_tool"], "cast-dummy-tool.sh",
                 "manifest tool maps to script filename"
             );
         }
@@ -1236,23 +1238,23 @@ async fn test_cast_config_headers_are_forwarded_when_url_from_config() -> anyhow
         Arc::new(LocalSessionManager::default()),
         StreamableHttpServerConfig::default().with_cancellation_token(ct.child_token()),
     );
-    let router = axum::Router::new()
-        .nest_service("/mcp", service)
-        .layer(axum::middleware::from_fn(
-            move |req: Request, next: Next| {
-                let captured = captured_clone.clone();
-                async move {
-                    if let Some(val) = req.headers().get("x-cast-secret") {
-                        let mut lock = captured.lock().unwrap();
-                        if lock.is_none() {
-                            *lock =
-                                Some(val.to_str().unwrap_or("").to_string());
+    let router =
+        axum::Router::new()
+            .nest_service("/mcp", service)
+            .layer(axum::middleware::from_fn(
+                move |req: Request, next: Next| {
+                    let captured = captured_clone.clone();
+                    async move {
+                        if let Some(val) = req.headers().get("x-cast-secret") {
+                            let mut lock = captured.lock().unwrap();
+                            if lock.is_none() {
+                                *lock = Some(val.to_str().unwrap_or("").to_string());
+                            }
                         }
+                        next.run(req).await
                     }
-                    next.run(req).await
-                }
-            },
-        ));
+                },
+            ));
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;
@@ -1260,9 +1262,7 @@ async fn test_cast_config_headers_are_forwarded_when_url_from_config() -> anyhow
         let ct = ct.clone();
         async move {
             let _ = axum::serve(listener, router)
-                .with_graceful_shutdown(async move {
-                    ct.cancelled_owned().await
-                })
+                .with_graceful_shutdown(async move { ct.cancelled_owned().await })
                 .await;
         }
     });

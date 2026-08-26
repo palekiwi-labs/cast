@@ -72,8 +72,7 @@ pub async fn generate_scripts_cmd(
 
     let mut script_entries: Vec<serde_json::Value> = Vec::new();
     // manifest: servers -> { url, tools: { tool_name -> filename } }
-    let mut manifest_servers: serde_json::Map<String, serde_json::Value> =
-        serde_json::Map::new();
+    let mut manifest_servers: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
     for (server_name, result) in results {
         let tools = match result {
@@ -90,8 +89,7 @@ pub async fn generate_scripts_cmd(
             .cloned()
             .unwrap_or_default();
 
-        let mut manifest_tools: serde_json::Map<String, serde_json::Value> =
-            serde_json::Map::new();
+        let mut manifest_tools: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
 
         for tool in &tools {
             let script_content = generate::generate_script(&server_name, tool);

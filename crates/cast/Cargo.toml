@@ -5,6 +5,7 @@ license = "MIT"
 name = "cast"
 version = "0.2.0"
 edition = "2024"
+rust-version = "1.98"
 
 [dependencies]
 anyhow = "1.0.102"
