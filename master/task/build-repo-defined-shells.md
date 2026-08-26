@@ -1,11 +1,13 @@
 ---
-title: Implement repo-defined agent and project shells (0.2.0)
-status: open
+title: Implement repo-defined agent and project shells
+status: complete
 priority: high
 refs: .cue/design-repo-defined-shells/spec/index.md
 kind: build
 parent: design-repo-defined-shells
+tag: 0.2.0
 ---
+
 Implement the repo-defined shells redesign settled in the design task
 (spec: .cue/design-repo-defined-shells/spec/index.md — the decisions
 there are final; read it first).
@@ -21,9 +23,9 @@ the agent shell and the project shell.
 ## Objectives
 
 1. Config schema (`crates/cast/src/config/schema.rs`): add
-   `global_shell: Option<String>` and `project_shell: Option<String>`
+   `sandbox_shell: Option<String>` and `project_shell: Option<String>`
    (full nix flake refs, verbatim pass-through) plus
-   `use_global_flake: bool` / `use_project_flake: bool` (default `true`,
+   `use_sandbox_shell: bool` / `use_project_shell: bool` (default `true`,
    normal config options). Remove `use_flake`, `use_flake_path`.
    A layer wraps iff its ref is set AND its switch is true; disabled
    layers skip silently.
@@ -35,7 +37,7 @@ the agent shell and the project shell.
    `RunOpts` fields; `scaffold_global_flake`/`scaffold_global_cast_json`
    call sites in `run.rs`/`exec.rs`.
 4. Add `cast config init` (flagless, global-only): writes
-   `~/.config/cast/cast.json` (numtide cache keys + `global_shell` =
+   `~/.config/cast/cast.json` (numtide cache keys + `sandbox_shell` =
    `~/.config/cast/nix#default`) and the flake template; never
    overwrites; partial success with notice on skipped files. Absorb
    `dev/global_flake.rs` and `dev/global_config.rs`.
@@ -45,14 +47,14 @@ the agent shell and the project shell.
 6. Mount (`dev/universal/volumes.rs:81-87`): keep the narrow
    `~/.config/cast/nix` subdir bind mount, drop the flake.nix presence
    gate — mount whenever the directory exists.
-7. Re-gate the "loading global nix devshell" stderr announcement on the
+7. Re-gate the "loading sandbox nix devshell" stderr announcement on the
    effective config (ref set AND switch true).
 8. Failure behavior: no cast-side ref validation; unresolvable refs and
    missing harnesses surface as container-side errors unchanged.
 9. Docs: getting-started (init-first flow), nix/overview,
    nix/flake-integration, config/reference, config/env-overrides
-   (CAST_GLOBAL_SHELL, CAST_PROJECT_SHELL, CAST_USE_GLOBAL_FLAKE,
-   CAST_USE_PROJECT_FLAKE), agents.md, concepts.md; 0.2.0 changelog
+   (CAST_SANDBOX_SHELL, CAST_PROJECT_SHELL, CAST_USE_SANDBOX_SHELL,
+   CAST_USE_PROJECT_SHELL), agents.md, concepts.md; 0.2.0 changelog
    entry calling out the clean break.
 
 ## Constraints

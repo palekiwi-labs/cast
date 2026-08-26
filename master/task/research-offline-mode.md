@@ -2,6 +2,7 @@
 status: inbox
 title: research offline mode
 priority: normal
+kind: research
 ---
 ## Context
 

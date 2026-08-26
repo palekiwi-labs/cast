@@ -1,0 +1,342 @@
+Base: master
+Branch: build-cast-local-json
+Head: 6c5e70d
+
+```diff
+diff --git a/.gitignore b/.gitignore
+index 2cb9afc..69d3d3c 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -31,5 +31,6 @@ result
+ .agents
+ .direnv
+ .envrc
++cast.local.json
+ .mem
+ tags
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 1973cae..5c13739 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
+ 
+ ### Added
+ 
++- Optional `cast.local.json` project configuration for untracked,
++  machine-specific overrides of `cast.json`.
+ - `env_passthrough` and `extra_env_passthrough` configuration keys in
+   `cast.json` to allowlist host environment variable names for forwarding into
+   containers without storing or leaking secret values to disk, approval
+diff --git a/crates/cast/docs/config/env-overrides.md b/crates/cast/docs/config/env-overrides.md
+index 618bd64..de6a32f 100644
+--- a/crates/cast/docs/config/env-overrides.md
++++ b/crates/cast/docs/config/env-overrides.md
+@@ -78,6 +78,8 @@ rather than merge across config files.
+   list entirely.
+ - A project `cast.json` that sets `extra_env_passthrough` replaces the global
+   extra list entirely.
++- A `cast.local.json` value replaces the same key from project and global
++  configuration.
+ - The two keys replace independently: a project that sets only
+   `extra_env_passthrough` leaves the global `env_passthrough` intact.
+ 
+@@ -88,8 +90,8 @@ the failure mode is a missing variable rather than a silently inherited one, and
+ the effective allowlist remains fully auditable.
+ 
+ The allowlists are config fields, so `CAST_ENV_PASSTHROUGH` and
+-`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank both
+-`cast.json` files. Being lists, they require the bracketed form:
++`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank all
++configuration files. Being lists, they require the bracketed form:
+ 
+ ```sh
+ export CAST_ENV_PASSTHROUGH='[ANTHROPIC_API_KEY, OPENAI_API_KEY]'
+diff --git a/crates/cast/docs/config/overview.md b/crates/cast/docs/config/overview.md
+index 584105a..9211916 100644
+--- a/crates/cast/docs/config/overview.md
++++ b/crates/cast/docs/config/overview.md
+@@ -6,7 +6,8 @@
+ 
+ 1. **Global Config**: `~/.config/cast/cast.json`
+ 2. **Project Config**: `./cast.json` (at the workspace root)
+-3. **Flat MCP Config**: `./cast-mcp.json` (merged into the `mcp` section)
++3. **Local Project Config**: `./cast.local.json` (personal overrides)
++4. **Flat MCP Config**: `./cast-mcp.json` (merged into the `mcp` section)
+ 
+ ## Loading Precedence
+ 
+@@ -14,9 +15,28 @@ Higher priority overrides lower priority:
+ 
+ 1. **Environment Variables** (`CAST_*`)
+ 2. **Flat MCP Config** (`./cast-mcp.json`)
+-3. **Project Config** (`./cast.json`)
+-4. **Global Config** (`~/.config/cast/cast.json`)
+-5. **Hardcoded Defaults**
++3. **Local Project Config** (`./cast.local.json`)
++4. **Project Config** (`./cast.json`)
++5. **Global Config** (`~/.config/cast/cast.json`)
++6. **Hardcoded Defaults**
++
++## Local Overrides
++
++`cast.local.json` uses the same schema as `cast.json`. Use it for settings that
++are specific to your machine, such as `extra_data_volumes` bind mounts that
++point to local directories. Keys omitted from the local file fall through to
++`cast.json`; arrays replace lower-precedence arrays rather than concatenate.
++
++Add the file to the project's `.gitignore` before creating it so personal
++settings are not committed:
++
++```gitignore
++cast.local.json
++```
++
++The approval hash covers the fully merged configuration. Adding or changing
++`cast.local.json` after running `cast config allow` therefore requires review
++with `cast config diff` and re-approval with `cast config allow`.
+ 
+ ## Environment Variables
+ 
+diff --git a/crates/cast/docs/config/reference.md b/crates/cast/docs/config/reference.md
+index 522349e..c476e37 100644
+--- a/crates/cast/docs/config/reference.md
++++ b/crates/cast/docs/config/reference.md
+@@ -1,7 +1,8 @@
+ # Configuration Reference
+ 
+-This page lists key configuration fields available in `cast.json`. For the full
+-schema, see [src/config/schema.rs][schema-src].
++This page lists key configuration fields available in both `cast.json` and
++`cast.local.json`. For the full schema, see
++[src/config/schema.rs][schema-src].
+ 
+ ## Sandbox Settings
+ 
+diff --git a/crates/cast/src/config/approval.rs b/crates/cast/src/config/approval.rs
+index 95787b5..ebc2d51 100644
+--- a/crates/cast/src/config/approval.rs
++++ b/crates/cast/src/config/approval.rs
+@@ -174,7 +174,7 @@ impl ApprovalStore {
+             ApprovalStatus::Approved => Ok(ApprovedConfig(config)),
+             ApprovalStatus::Changed => anyhow::bail!(
+                 "Configuration has changed since last approval.\n\
+-                 Note: env-var overrides (CAST_*) affect the hash.\n\
++                 Note: cast.local.json and env-var overrides (CAST_*) affect the hash.\n\
+                  Run `cast config diff` to see what changed, then `cast config allow` to approve."
+             ),
+             ApprovalStatus::Unapproved => anyhow::bail!(
+@@ -603,6 +603,11 @@ mod tests {
+             "should suggest config diff for changed config: {}",
+             msg
+         );
++        assert!(
++            msg.contains("cast.local.json"),
++            "should identify local config as affecting approval: {}",
++            msg
++        );
+     }
+ 
+     #[test]
+diff --git a/crates/cast/src/config/loader.rs b/crates/cast/src/config/loader.rs
+index a7b4403..772b866 100644
+--- a/crates/cast/src/config/loader.rs
++++ b/crates/cast/src/config/loader.rs
+@@ -11,9 +11,10 @@ use tracing::info;
+ /// Load configuration from all sources with proper precedence:
+ /// 1. Environment variables (CAST_*)
+ /// 2. MCP-specific project config (./cast-mcp.json)
+-/// 3. Project config (./cast.json)
+-/// 4. Global config (~/.config/cast/cast.json)
+-/// 5. Defaults
++/// 3. Local project config (./cast.local.json)
++/// 4. Project config (./cast.json)
++/// 5. Global config (~/.config/cast/cast.json)
++/// 6. Defaults
+@@ -45,6 +46,7 @@ pub fn load_config_with_global(
+ 
+     let config: Config = figment
+         .merge(Json::file(base_dir.join("cast.json")))
++        .merge(Json::file(base_dir.join("cast.local.json")))
+         .merge(Serialized::defaults(mcp_json).key("mcp"))
+         .merge(Env::prefixed("CAST_").split("__"))
+         .extract()
+@@ -134,6 +136,91 @@ mod tests {
+         assert_eq!(config.mcp.port, 4000);
+     }
++
++    fn load_with_project_files(
++        project: Option<&str>,
++        local: Option<&str>,
++        mcp: Option<&str>,
++    ) -> Result<Config> {
++        let dir = tempfile::tempdir().unwrap();
++        for (name, body) in [
++            ("cast.json", project),
++            ("cast.local.json", local),
++            ("cast-mcp.json", mcp),
++        ] {
++            if let Some(body) = body {
++                std::fs::write(dir.path().join(name), body).unwrap();
++            }
++        }
++
++        load_config_with_global(dir.path(), None)
++    }
++
++    #[test]
++    fn test_local_config_overrides_project_config() {
++        let config = load_with_project_files(
++            Some(r#"{ "memory": "2048m" }"#),
++            Some(r#"{ "memory": "4096m" }"#),
++            None,
++        )
++        .unwrap();
++
++        assert_eq!(config.memory, "4096m");
++    }
++
++    #[test]
++    fn test_local_config_falls_through_to_project_config() {
++        let config = load_with_project_files(
++            Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#),
++            Some(r#"{ "memory": "4096m" }"#),
++            None,
++        )
++        .unwrap();
++
++        assert_eq!(config.memory, "4096m");
++        assert_eq!(config.cpus, 2.0);
++    }
++
++    #[test]
++    fn test_missing_local_config_does_not_change_project_config() {
++        let config =
++            load_with_project_files(Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#), None, None)
++                .unwrap();
++
++        assert_eq!(config.memory, "2048m");
++        assert_eq!(config.cpus, 2.0);
++    }
++
++    #[test]
++    fn test_malformed_local_config_fails_to_load() {
++        let error = load_with_project_files(None, Some("{ invalid json }"), None).unwrap_err();
++
++        assert_eq!(error.to_string(), "Failed to load configuration");
++    }
++
++    #[test]
++    fn test_mcp_config_overrides_local_mcp_settings() {
++        let config = load_with_project_files(
++            None,
++            Some(r#"{ "mcp": { "port": 3000 } }"#),
++            Some(r#"{ "port": 4000 }"#),
++        )
++        .unwrap();
++
++        assert_eq!(config.mcp.port, 4000);
++    }
++
++    #[test]
++    fn test_local_config_replaces_project_arrays() {
++        let config = load_with_project_files(
++            Some(r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#),
++            Some(r#"{ "env_passthrough": ["LOCAL_TOKEN"] }"#),
++            None,
++        )
++        .unwrap();
++
++        assert_eq!(config.env_passthrough, vec!["LOCAL_TOKEN".to_string()]);
++    }
+ 
+     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
+         let dir = tempfile::tempdir().unwrap();
+diff --git a/crates/cast/tests/config_test.rs b/crates/cast/tests/config_test.rs
+index b741dce..752b765 100644
+--- a/crates/cast/tests/config_test.rs
++++ b/crates/cast/tests/config_test.rs
+@@ -75,6 +75,38 @@ fn test_config_env_vars_override() {
+     assert_eq!(config["nix_volume_name"], "from-env");
+ }
++
++#[test]
++fn test_config_local_file_overrides_project_but_not_env() {
++    let workspace = TempDir::new().unwrap();
++    let data_dir = TempDir::new().unwrap();
++
++    fs::write(
++        workspace.path().join("cast.json"),
++        json!({ "memory": "2g", "cpus": 1.5 }).to_string(),
++    )
++    .unwrap();
++    fs::write(
++        workspace.path().join("cast.local.json"),
++        json!({ "memory": "4g", "cpus": 2.5 }).to_string(),
++    )
++    .unwrap();
++
++    let output = Command::cargo_bin("cast")
++        .unwrap()
++        .current_dir(workspace.path())
++        .env("CAST_LOG_DIR", data_dir.path().join("logs"))
++        .env("CAST_DATA_DIR", data_dir.path())
++        .env("CAST_MEMORY", "8g")
++        .args(["config", "show"])
++        .output()
++        .unwrap();
++
++    assert!(output.status.success());
++    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
++    assert_eq!(config["memory"], "8g");
++    assert_eq!(config["cpus"], 2.5);
++}
+ 
+ #[test]
+ fn test_config_serialize_to_json() {
+@@ -235,3 +267,45 @@ fn test_config_show_hints_diff_when_changed() {
+         stderr
+     );
+ }
++
++#[test]
++fn test_adding_local_config_requires_reapproval() {
++    let workspace = TempDir::new().unwrap();
++    let data_dir = TempDir::new().unwrap();
++
++    fs::write(
++        workspace.path().join("cast.json"),
++        json!({ "memory": "1024m" }).to_string(),
++    )
++    .unwrap();
++
++    cast_with_data_dir(data_dir.path())
++        .current_dir(workspace.path())
++        .args(["config", "allow"])
++        .assert()
++        .success();
++
++    fs::write(
++        workspace.path().join("cast.local.json"),
++        json!({ "memory": "4096m" }).to_string(),
++    )
++    .unwrap();
++
++    let output = cast_with_data_dir(data_dir.path())
++        .current_dir(workspace.path())
++        .args(["config", "show"])
++        .assert()
++        .success()
++        .get_output()
++        .clone();
++
++    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
++    assert_eq!(config["memory"], "4096m");
++
++    let stderr = String::from_utf8_lossy(&output.stderr);
++    assert!(
++        stderr.contains("cast config diff"),
++        "adding cast.local.json should require reapproval, got: {}",
++        stderr
++    );
++}
+```

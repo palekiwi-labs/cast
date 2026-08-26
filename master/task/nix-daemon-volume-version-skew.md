@@ -1,8 +1,10 @@
 ---
-title: nix-daemon image / /nix volume version-skew migration
+title: nix-daemon image version skew
 status: open
 priority: normal
 refs: /home/pl/code/palekiwi-labs/cast/.cue/master/task/nix-native-harnesses.md
+kind: research
+tag: nix-daemon
 ---
 # nix-daemon image / /nix volume version-skew migration
 

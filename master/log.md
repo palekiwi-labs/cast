@@ -54,3 +54,13 @@ Review of the first-draft report corrected two overstated claims and produced a 
 - **Open:** How should cast detect a VM-backed container engine in order to refuse the flag on macOS?
 - **Open:** If disk duplication remains painful after this lands, what is the alternative - dedup pass, GC policy change, or accept it?
 
+## [3a07c81] 0.2.0 scope decisions: herdr out to 0.3.0, local-json in, tracker refreshed
+
+Coordination session with the operator (driven from the palekiwi workspace) settled release scoping decisions for cast 0.2.0.
+
+- **Decided:** herdr-service-pivot deferred to 0.3.0; tagged tag: 0.3.0 on the card, objective 4 resolved
+- **Decided:** cast-local-json-overrides confirmed in 0.2.0 scope (card already tagged); release-0.2.0 card and plan story tracker refreshed to current reality (env-var-passthrough merged via PR #64 and complete; design-repo-defined-shells complete with build child in-progress)
+- **Decided:** cast 0.2.0 and cue 0.2.0 run in parallel; cue-agent is not gated on cast
+- **Open:** Does improve-cast-docs (high, open) ride in 0.2.0? Filed in the release plan sequencing notes
+- **Open:** Month-old PR #61 (feat/cast-agent-mvp) still needs a merge/park decision
+
