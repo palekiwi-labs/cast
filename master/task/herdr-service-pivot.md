@@ -141,25 +141,37 @@ semantics. The service CMD becomes composed:
 Deferred as out of scope here: service devShell selection (config-driven;
 reworked on the build-repo-defined-shells branch).
 
-Open in discussion (operator input from session 4 and 5):
+Open in discussion (operator input from sessions 4-6):
 
-- `exec`/`shell`/`run` rework toward a generalized target model: `cast
-  exec` targets the running service container by default; drop `--fresh`
-  (operator dislikes it; ephemeral use case is not clear enough to bake
-  in yet); per-agent subcommands dissolve. `shell` survives (operator
-  values it). `run` deferred to spike evidence.
-- `cast attach` and passthrough verb: operator proposes `--mux` as a
-  FLAG on `cast exec` rather than a standalone verb. `cast attach` stays
-  as a top-level alias for discoverability. Pending: confirm flag name
-  (`--mux` vs `--session`).
-- Named services: `cast up --name <n>` for parallel isolated containers;
-  all service verbs accept `--name`. Agreed.
-- Container naming: drop agent slot; shift port from per-agent to
-  per-workspace (CRC32 of absolute path alone). Formula: default
-  `cast-{basename}-{workspace-port}`, named `cast-{basename}-{workspace-port}-{name}`.
-  Addresses org/repo subdirectory collision.
-- MCP: keep injecting CAST_MCP_URL only (no auto-start) for the spike;
-  revisit in design task.
+- Surface follows docker convention (operator): `cast up` starts the
+  project's default container; `cast exec <cmd>` runs a command in it,
+  with flags `--headless` (no TTY) and `--mux` (run inside the
+  multiplexer). `--raw` (skip devshell wrapping) carries over from the
+  existing exec.
+- `cast attach` REJECTED by operator — no convincing case. Consequence:
+  attaching the multiplexer UI is simply `cast exec <mux-binary>` (e.g.
+  `cast exec herdr`), which the user types themselves. cast never names
+  a multiplexer in its API.
+- `--session` flag REJECTED by operator: session navigation belongs
+  inside the container (enter it, use the mux there), not in cast's API.
+  Retracted.
+- `--mux` semantics to pin down: run the command inside a mux pane
+  (tracked, attachable, survives disconnect) vs bare docker exec (bound
+  to the caller's terminal, invisible to the mux). Spike question:
+  whether a generic `pane run` plus herdr's passive agent detection
+  gives lifecycle tracking for free, or whether explicit `agent start`
+  semantics are required (the latter risks reintroducing kind taxonomy
+  into cast).
+- `shell` survives as convenience (operator values it): effectively
+  `cast exec bash`, devshell-wrapped.
+- `run` deferred to spike evidence.
+- Container naming: drop agent slot; port shifts to per-workspace
+  (CRC32 of absolute path alone), addressing org/repo subdir collisions.
+  Open problem captured as todo `port-vs-identifier.md`: the number
+  still means a port, so two services in one workspace would collide —
+  options include seeding with the service name, explicit `--port` on
+  `cast up`, or decoupling identity from ports entirely.
+- MCP: keep injecting CAST_MCP_URL only (no auto-start) for the spike.
 
 
 

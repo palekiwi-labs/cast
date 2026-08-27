@@ -247,3 +247,82 @@ vs --session (completely technology-agnostic). Decision pending.
 - **Open:** Flag name for mux routing on exec: --mux vs --session (operator confirmation needed)
 - **Open:** Whether cast attach stays as top-level alias or folds into exec --mux entirely
 
+## [71a6343] Design session 6: attach and --session rejected, docker-conventional surface
+
+Session 6: operator rejected `cast attach` and the `--session` flag, and
+proposed a docker-conventional surface: `cast up` starts the project
+container, `cast exec <cmd>` runs commands in it with `--headless` and
+`--mux` flags.
+
+Agent analysis of the rejections (both accepted):
+- `--session` was wrong. Operator: "if there are different sessions in
+  the container and I want to navigate them, shouldn't I enter the shell
+  first?" Correct — session navigation is the multiplexer's domain, not
+  cast's. cast is the infrastructure plane; once you are inside the
+  container you are in the mux's world.
+- `attach` dies as a consequence, and the result is cleaner than the
+  abstraction it replaces: attaching the UI is just
+  `cast exec <mux-binary>` (e.g. `cast exec herdr`). The user names their
+  multiplexer with their own fingers; cast's API never does. This is
+  stronger agnosticism than the Multiplexer-abstraction-behind-a-verb
+  design from session 4 — that abstraction now only needs to cover the
+  container CMD (server command) and optionally the `--mux` flag.
+
+`--mux` retained (operator's own proposal) with semantics to pin down:
+run inside a mux pane (tracked, attachable, survives disconnect) vs bare
+docker exec (bound to caller's terminal, dies with it). Open spike
+question: herdr passively detects agents in panes, so a generic
+`pane run` may yield lifecycle tracking without cast ever calling
+`agent start` — which would keep kind taxonomy out of cast entirely.
+
+Port/identifier conflict captured as a todo per operator instruction
+(todo/port-vs-identifier.md) rather than resolved now: with named
+services, two containers in one workspace derive the same hash-based
+number, which is fine as an identifier but conflicts as a port. Options
+recorded: seed with service name, explicit --port on `cast up`, or
+decouple identity from ports (operator leans explicit).
+
+- **Decided:** cast attach dropped; attaching = cast exec <mux-binary>, cast never names a multiplexer in its API
+- **Decided:** --session flag retracted: session navigation belongs inside the container
+- **Decided:** Surface follows docker convention: cast up + cast exec [--headless] [--mux] [--raw] <cmd>
+- **Decided:** Port/identifier conflict deferred to todo/port-vs-identifier.md, not blocking the spike
+- **Open:** --mux semantics: does pane run + herdr passive detection give tracking for free, or is explicit agent start needed (taxonomy risk)?
+- **Open:** Whether --mux is needed for the spike at all, or deferrable like run
+
+## [71a6343] Spike specification written, pending operator review
+
+Operator called the checkpoint: specification before implementation.
+Wrote `spec/index.md` in the task context covering the spike surface
+(up/down/status/exec/shell), container model, constraints, and the six
+questions the spike must answer.
+
+Boundary kept explicit in the document: this is the SPIKE spec (what we
+build to learn), not the target spec for the redesigned cast. The latter
+belongs to the design task, per the research/design split agreed in
+session 2. Without that separation the research task silently becomes the
+design task.
+
+Decisions made while drafting that need operator review:
+- Leave `calculate_port` untouched so `cast run` keeps working exactly as
+  today; service naming gets its own workspace-level id derivation. Lets
+  old and new models run side by side for comparison.
+- Spike publishes no host ports at all, which sidesteps the
+  port-vs-identifier todo instead of pre-deciding it.
+- Container stop signal must be SIGINT: herdr's graceful shutdown is on
+  SIGINT while `docker stop` sends SIGTERM. Without this, every stop is
+  effectively a kill.
+- herdr session state may persist for free via the existing shared
+  `~/.local` volume (run.rs already mounts shared cache/local volumes);
+  spike question 4 verifies rather than assuming.
+- `cast up` specified as idempotent (report and succeed if already
+  running) because the mux server refuses to double-bind its socket.
+
+- **Found:** herdr graceful shutdown is SIGINT but docker stop sends SIGTERM - container needs --stop-signal SIGINT or every stop is a kill
+- **Found:** cast already mounts shared ~/.cache and ~/.local volumes, so herdr session state may persist without new volumes
+- **Decided:** Spike spec written at spec/index.md in the task context
+- **Decided:** Spec scope is the spike instrument only; target cast spec deferred to the design task
+- **Decided:** calculate_port untouched so cast run keeps working; service naming uses separate workspace-level derivation
+- **Decided:** Spike publishes no host ports, sidestepping the port-vs-identifier todo
+- **Open:** Operator review of the spike spec before implementation begins
+- **Open:** Executive plan with checkboxes to follow once spec is approved
+

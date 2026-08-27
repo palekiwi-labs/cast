@@ -1,6 +1,6 @@
 ---
 title: Set up Renovate bot
-status: in-progress
+status: open
 priority: normal
 kind: build
 parent: release-0.2.0
