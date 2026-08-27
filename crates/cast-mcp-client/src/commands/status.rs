@@ -13,9 +13,7 @@ use std::collections::HashMap;
 /// ```
 ///
 /// Exit code is always 0; individual server failures are reported inline.
-pub async fn status_cmd(
-    server_map: HashMap<String, RemoteServerConfig>,
-) -> anyhow::Result<()> {
+pub async fn status_cmd(server_map: HashMap<String, RemoteServerConfig>) -> anyhow::Result<()> {
     let futures: Vec<_> = server_map
         .into_iter()
         .map(|(name, server)| async move {
