@@ -4,51 +4,58 @@ status: open
 ---
 # Manual QA: Rust 1.98.0 toolchain pin (b985368)
 
-Verify the toolchain pin now living on master at the root checkout.
-All commands run from the repository root unless noted.
+Verify the toolchain pin on branch `chore/pin-rust-toolchain` (b985368),
+checked out at the repository root. All commands run from the repository
+root unless noted.
 
-## Toolchain resolution
+The canonical toolchain on this machine is Nix-managed (fenix via
+`fromToolchainFile` in `flake.nix`). Do NOT run rustup or bare rustup-shimmed
+cargo/rustc in this repo: `rust-toolchain.toml` would make rustup download a
+full duplicate 1.98.0 toolchain that is never used. Run all cargo/rustc
+commands inside the nix shell (`nix develop -c <cmd>`). The toolchain file
+still benefits rustup-only contributors on other machines automatically.
 
-- [ ] `rustup show` reports an active toolchain of 1.98.0 pulled from
-      `rust-toolchain.toml` (not the system default)
-- [ ] `rustc --version` and `cargo --version` both report 1.98.0
-- [ ] `rustup component list --installed` includes rustc, cargo, clippy,
-      rustfmt, and rust-src (matches `rust-toolchain.toml` components)
-- [ ] From a clean shell with no rustup overrides: `cd` into the repo and
-      confirm the toolchain file is honored automatically
+## Toolchain resolution (Nix)
+
+- [x] `nix develop -c rustc --version` reports 1.98.0
+- [x] `nix develop -c cargo --version` reports 1.98.0
+- [x] `nix develop -c cargo clippy --version` and
+      `nix develop -c rustfmt --version` resolve (components present in
+      the fenix derivation)
 
 ## Cargo workflows
 
-- [ ] `cargo build` succeeds at root
-- [ ] `cargo test` passes (expect 328 unit/integration tests)
-- [ ] `cargo clippy --all-targets` passes without warnings
-- [ ] `cargo fmt --check` is clean
-- [ ] `cargo build` succeeds inside `worktrees/feat-cast-agent-mvp` and
+Run inside the nix shell; prefix each with `nix develop -c ` or enter
+`nix develop` once.
+
+- [x] `cargo build` succeeds at root
+- [x] `cargo test` passes (expect 328 unit/integration tests)
+- [x] `cargo clippy --all-targets` passes without warnings
+- [x] `cargo fmt --check` is clean
+- [x] `cargo build` succeeds inside `worktrees/feat-cast-agent-mvp` and
       `worktrees/spike-herdr-service-pivot` (shared toolchain pin follows)
 
 ## Nix workflows
 
-- [ ] `nix build` succeeds for both package outputs (cast, cast-mcp-client)
-- [ ] `nix build` result binaries run: `./result/bin/cast --help` and the
+- [x] `nix build` succeeds for both package outputs (cast, cast-mcp-client)
+- [x] `nix build` result binaries run: `./result/bin/cast --help` and the
       cast-mcp-client binary respond correctly
-- [ ] `nix develop` enters a shell where `rustc --version` reports 1.98.0
-- [ ] `nix flake check` passes (or note if not part of the usual flow)
+- [x] `nix flake check` passes (or note if not part of the usual flow)
 
 ## Functional smoke tests (installed binaries)
 
-- [ ] `cast --help` renders usage
-- [ ] `cast --version` (or equivalent) runs without error
-- [ ] A basic sandbox/shell operation from the docs quickstart still works
-- [ ] `cast-mcp-client` help and a trivial subcommand run without error
+- [x] `cast --help` renders usage
+- [x] `cast --version` (or equivalent) runs without error
+- [x] A basic sandbox/shell operation from the docs quickstart still works
+- [x] `cast-mcp-client` help and a trivial subcommand run without error
 
 ## MSRV metadata
 
-- [ ] `cargo metadata` or a build on a machine with only the pinned
-      toolchain confirms `rust-version = "1.98"` in both crate manifests
-      does not block resolution
+- [ ] `nix develop -c cargo metadata` confirms `rust-version = "1.98"` in
+      both crate manifests does not block resolution
 
 ## Outcome
 
 - Record pass/fail per section and note any environment-specific issues.
-  On full pass: master (b985368) is ready to push and this todo can be
-  closed.
+  On full pass: the branch `chore/pin-rust-toolchain` (b985368) is ready to
+  push, and this todo can be closed.
