@@ -13,6 +13,9 @@
   "nix": {
     "enabled": true
   },
+  "rust-toolchain": {
+    "enabled": true
+  },
   "schedule": [
     "before 6am on monday"
   ],
@@ -50,6 +53,13 @@
         "nix"
       ],
       "groupName": "nix flake inputs"
+    },
+    {
+      "description": "Dedicated PR for Rust toolchain updates",
+      "matchManagers": [
+        "rust-toolchain"
+      ],
+      "groupName": "rust toolchain"
     },
     {
       "description": "Group all GitHub Actions updates",
