@@ -37,3 +37,11 @@ User corrected my earlier action: "move it from the worktree to the root" meant 
 - **Decided:** Local-only pointer corrections (branch -f to origin state) are acceptable recovery when nothing was pushed
 - **Open:** User to run the manual QA checklist on chore/pin-rust-toolchain at the root before deciding how to integrate (push branch, PR, or merge)
 
+## [4ff22c4] [4ff22c4] Bundle rust-analyzer in rust-toolchain.toml components
+
+Added rust-analyzer to the components list in rust-toolchain.toml and removed pkgs.rust-analyzer from devShells buildInputs in flake.nix. This bundles rust-analyzer directly into the pinned 1.98.0 Fenix toolchain, eliminating potential ABI and proc-macro version mismatches between nixpkgs rust-analyzer and the compiler. Verified with rust-analyzer --version, full test suite (328 tests), cargo fmt, cargo clippy, and nix build for both cast and cast-mcp-client.
+
+- **Found:** Fenix resolves rust-analyzer from the same toolchain manifest hash without requiring a sha256 update
+- **Found:** All 328 tests, clippy, and nix package builds pass cleanly with bundled rust-analyzer
+- **Decided:** Bundle rust-analyzer in rust-toolchain.toml components instead of importing pkgs.rust-analyzer from nixpkgs
+

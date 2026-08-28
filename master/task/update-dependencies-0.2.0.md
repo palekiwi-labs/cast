@@ -1,6 +1,6 @@
 ---
 title: Update dependencies for 0.2.0
-status: in-progress
+status: complete
 priority: normal
 refs: .cue/master/task/release-0.2.0.md
 kind: build

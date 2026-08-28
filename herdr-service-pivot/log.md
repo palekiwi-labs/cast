@@ -326,3 +326,43 @@ Decisions made while drafting that need operator review:
 - **Open:** Operator review of the spike spec before implementation begins
 - **Open:** Executive plan with checkboxes to follow once spec is approved
 
+## [79e8960] Service-Pivot Research Completed
+
+Completed research on service-pivot UX. Analyzed path discovery, Docker mounts, and naming logic. Proposed a Git-aware pivot strategy to stabilize project containers across worktrees and subdirectories. Identified risks related to zombie processes and Git dependency.
+
+- **Found:** Current discovery is purely based on std::env::current_dir(), causing fragmentation.
+- **Found:** Linked worktrees lack access to the main .git folder in the container.
+- **Found:** opencode leaks zombies which makes long-lived containers risky without --init.
+- **Decided:** Pivot project root using git rev-parse --git-common-dir.
+- **Decided:** Stabilize port and container name on the main project root.
+- **Decided:** Always mount the main project root to ensure Git common directory availability.
+- **Open:** How to handle non-Git projects gracefully? (Fallback to current behavior planned).
+
+## [79e8960] Analyzed worktree-compatible service UX
+
+Synthesized the requested worktree analysis in doc/worktree-service-ux.md. The recommended design separates stable repository service identity from the invoking worktree cwd, so root and linked worktrees share one service but commands operate in their selected checkout.
+
+- **Found:** Current workspace resolution is the literal cwd, so subdirectories and linked worktrees receive distinct names, ports, approvals, and mounts.
+- **Found:** A linked worktree's .git file references the primary checkout's common Git directory; mounting only that worktree breaks Git.
+- **Found:** The existing home-relative container path mapping can break absolute gitdir pointers for repositories outside the host home directory.
+- **Found:** Configuration loading and approval are cwd-scoped today and require an explicit service-scoping decision.
+- **Decided:** No implementation decision recorded; report recommends repository-scoped service identity and invocation-scoped cwd.
+- **Open:** Whether service-shaping configuration is repository-root-only or branch-local configurations must be conflict-checked.
+- **Open:** How to expose external worktrees created after the service starts without silently operating on an unmounted checkout.
+- **Open:** Whether a service name should be a canonical-path digest independent of optional ports.
+
+## [79e8960] Examined worktree-scoped services
+
+Re-evaluated the earlier repository-scoped worktree recommendation after the operator identified configuration scope as a decisive concern. Updated doc/worktree-service-ux.md with a worktree-service alternative and its mount/state requirements.
+
+- **Found:** One service per worktree preserves branch-local cast configuration, local overrides, project flakes, and existing approval scope without cross-worktree conflicts.
+- **Found:** Git works with a narrow topology: mount the selected worktree and its git common directory; mounting the full primary checkout is sufficient but exposes sibling worktrees unnecessarily.
+- **Found:** Existing shared ~/.local data volumes cannot safely host two herdr services because XDG/socket/session state could collide; mux state must be worktree-keyed and isolated.
+- **Found:** The existing port decision is documented in todo/port-vs-identifier.md: the spike has no published ports, and identity/port separation remains deliberately unresolved.
+- **Decided:** No final service-boundary decision recorded. Worktree-scoped services are recommended for evaluation as the direct solution to branch-specific configuration.
+- **Decided:** Non-Git fallback recommendation withdrawn: cast should reject non-Git directories clearly.
+- **Open:** Whether the pivot's stated one-container-per-project norm should become one-container-per-worktree.
+- **Open:** Whether worktree services mount only their checkout plus the common Git directory, or the full primary checkout tree.
+- **Open:** Exact per-service herdr XDG state-volume topology.
+- **Open:** Port allocation policy when a worktree service eventually publishes host ports.
+
