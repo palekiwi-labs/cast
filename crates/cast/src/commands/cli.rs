@@ -15,6 +15,14 @@ use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use tracing::info_span;
 
+/// Selects a service within the current Git worktree.
+#[derive(clap::Args, Clone, Debug)]
+pub struct ServiceFlags {
+    /// Select a named service instead of the default service
+    #[arg(long)]
+    pub name: Option<String>,
+}
+
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
 #[command(name = "cast")]
@@ -59,7 +67,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             nix_daemon::handle_nix_daemon(&approved, command)
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
-        Some(Commands::Up) => anyhow::bail!("cast up is not implemented yet"),
+        Some(Commands::Up { flags: _ }) => anyhow::bail!("cast up is not implemented yet"),
         Some(Commands::Exec { flags, agent }) => {
             let approved = verify_config(cfg)?;
             // TTY mode is determined by --headless, independent of naming.
@@ -267,7 +275,10 @@ pub enum Commands {
         agent: RunAgent,
     },
     /// Start the service container
-    Up,
+    Up {
+        #[command(flatten)]
+        flags: ServiceFlags,
+    },
     /// Execute an arbitrary command in a fresh agent container
     Exec {
         #[command(flatten)]
