@@ -76,6 +76,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             nix_daemon::handle_nix_daemon(&approved, command)
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
+        Some(Commands::Up) => anyhow::bail!("cast up is not implemented yet"),
         Some(Commands::Run { flags, agent }) => {
             let approved = verify_config(cfg)?;
             let mode = if flags.headless {
@@ -304,6 +305,8 @@ pub enum Commands {
         #[command(subcommand)]
         agent: RunAgent,
     },
+    /// Start the service container
+    Up,
     /// Run an agent
     Run {
         #[command(flatten)]

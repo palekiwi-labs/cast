@@ -111,6 +111,15 @@ fn test_cast_run_help() {
 }
 
 #[test]
+fn test_cast_up_help() {
+    cast()
+        .args(["up", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast up"));
+}
+
+#[test]
 fn test_cast_build_help() {
     // `cast build` takes no agent subcommand: there is one shared dev image.
     cast()
