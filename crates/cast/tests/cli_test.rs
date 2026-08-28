@@ -128,6 +128,16 @@ fn test_cast_up_accepts_service_name() {
 }
 
 #[test]
+fn test_cast_down_accepts_service_name() {
+    cast()
+        .args(["down", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast down"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
 fn test_cast_build_help() {
     // `cast build` takes no agent subcommand: there is one shared dev image.
     cast()

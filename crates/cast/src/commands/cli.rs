@@ -68,6 +68,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
         Some(Commands::Up { flags: _ }) => anyhow::bail!("cast up is not implemented yet"),
+        Some(Commands::Down { flags: _ }) => anyhow::bail!("cast down is not implemented yet"),
         Some(Commands::Exec { flags, agent }) => {
             let approved = verify_config(cfg)?;
             // TTY mode is determined by --headless, independent of naming.
@@ -276,6 +277,11 @@ pub enum Commands {
     },
     /// Start the service container
     Up {
+        #[command(flatten)]
+        flags: ServiceFlags,
+    },
+    /// Stop and remove the service container
+    Down {
         #[command(flatten)]
         flags: ServiceFlags,
     },
