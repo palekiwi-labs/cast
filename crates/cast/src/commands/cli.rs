@@ -15,23 +15,6 @@ use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use tracing::info_span;
 
-/// Flags that control the execution mode of `cast run`.
-#[derive(clap::Args, Clone, Debug)]
-pub struct RunFlags {
-    /// Run without a TTY (for CI, systemd, and piped output)
-    #[arg(long)]
-    pub headless: bool,
-
-    /// Override the container name (default: auto-generated)
-    #[arg(long)]
-    pub name: Option<String>,
-
-    /// Publish the agent's port to the host (uses the calculated port).
-    /// To use a specific host port, set `port` in cast.json instead.
-    #[arg(short = 'p', long)]
-    pub publish: bool,
-}
-
 /// cast - coding agent sandbox tool
 #[derive(Parser)]
 #[command(name = "cast")]
@@ -77,28 +60,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
         Some(Commands::Up) => anyhow::bail!("cast up is not implemented yet"),
-        Some(Commands::Run { flags, agent }) => {
-            let approved = verify_config(cfg)?;
-            let mode = if flags.headless {
-                RunMode::Headless {
-                    token: invocation_id.clone(),
-                }
-            } else {
-                RunMode::Interactive
-            };
-            let session_flags = SessionFlags {
-                mode,
-                name: flags.name.clone(),
-                publish: flags.publish,
-            };
-            let extra_args = match &agent {
-                RunAgent::Opencode { extra_args } => extra_args.clone(),
-                RunAgent::Pi { extra_args } => extra_args.clone(),
-                RunAgent::Claudecode { extra_args } => extra_args.clone(),
-            };
-            let status = dev::run_agent(agent.as_agent(), &approved, session_flags, extra_args)?;
-            Ok(to_exit_code(status))
-        }
         Some(Commands::Exec { flags, agent }) => {
             let approved = verify_config(cfg)?;
             // TTY mode is determined by --headless, independent of naming.
@@ -307,13 +268,6 @@ pub enum Commands {
     },
     /// Start the service container
     Up,
-    /// Run an agent
-    Run {
-        #[command(flatten)]
-        flags: RunFlags,
-        #[command(subcommand)]
-        agent: RunAgent,
-    },
     /// Execute an arbitrary command in a fresh agent container
     Exec {
         #[command(flatten)]
@@ -441,19 +395,6 @@ mod tests {
             .expect("should parse");
         let Commands::Exec { flags, .. } = cli.command.unwrap() else {
             panic!("expected Exec command");
-        };
-        assert!(
-            flags.publish,
-            "--publish bare flag must set publish to true"
-        );
-    }
-
-    #[test]
-    fn test_run_publish_flag_sets_true() {
-        let cli =
-            Cli::try_parse_from(["cast", "run", "--publish", "opencode"]).expect("should parse");
-        let Commands::Run { flags, .. } = cli.command.unwrap() else {
-            panic!("expected Run command");
         };
         assert!(
             flags.publish,

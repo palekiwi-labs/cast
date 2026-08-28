@@ -101,13 +101,12 @@ fn test_cast_port_ignores_extra_args() {
 }
 
 #[test]
-fn test_cast_run_help() {
+fn test_cast_run_is_not_available() {
     cast()
         .args(["run", "--help"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Usage: cast run"))
-        .stdout(predicate::str::contains("opencode"));
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'run'"));
 }
 
 #[test]
@@ -176,42 +175,6 @@ fn test_cast_shell_claudecode_help() {
         .args(["shell", "claudecode", "--help"])
         .assert()
         .success();
-}
-
-// ── Phase 6: --headless flag parsing ────────────────────────────────────────
-
-#[test]
-fn test_cast_run_headless_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--headless"));
-}
-
-#[test]
-fn test_cast_run_headless_name_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--name"));
-}
-
-/// `--headless` before the agent subcommand is consumed by RunFlags, not
-/// rejected as an unknown flag. Verified by confirming clap's only complaint
-/// is the missing subcommand, not an unrecognised argument.
-#[test]
-fn test_cast_run_headless_before_agent_is_consumed() {
-    cast()
-        .args(["run", "--headless"])
-        .assert()
-        .failure()
-        .stderr(
-            predicate::str::contains("subcommand is required")
-                .or(predicate::str::contains("requires a subcommand")),
-        )
-        .stderr(predicate::str::contains("unexpected argument").not());
 }
 
 /// `cast port opencode --headless` — extra flag is forwarded to port
