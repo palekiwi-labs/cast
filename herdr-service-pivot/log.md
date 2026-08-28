@@ -366,3 +366,54 @@ Re-evaluated the earlier repository-scoped worktree recommendation after the ope
 - **Open:** Exact per-service herdr XDG state-volume topology.
 - **Open:** Port allocation policy when a worktree service eventually publishes host ports.
 
+## [9840046] Worktree scope and spike plan approved
+
+Operator confirmed one service per Git worktree and requested an implementation plan before code. Reconciled the spike specification with the latest decisions: worktree-scoped identity and isolated mux state, Git-only operation, removal of cast run from the spike CLI, and explicit mount/state questions for empirical validation. Added the root execution plan with vertical TDD slices and operator-run Docker checkpoints.
+
+- **Decided:** Use one service per Git worktree, with commands from subdirectories targeting that worktree service
+- **Decided:** Remove cast run from the spike CLI because its ephemeral per-agent lifecycle contradicts the model under evaluation
+- **Decided:** Reject non-Git directories during the spike rather than falling back to cwd identity
+- **Decided:** Isolate multiplexer runtime and persistent state per worktree service
+- **Decided:** Execute the spike in six phases, beginning with the CLI boundary and worktree-scoped service context
+- **Open:** Exact minimal mount topology for a linked worktree plus Git common directory
+- **Open:** Exact isolated XDG/runtime/persistent paths required by herdr
+- **Open:** Operator review and approval of plan/index.md before implementation
+
+## [9840046] Added first service CLI tracer
+
+Committed the first vertical TDD slice on spike/herdr-service-pivot. An integration test first demonstrated that `cast up --help` was rejected, then the minimal `Up` command and dispatch placeholder made the public command parse successfully. Docker behavior remains intentionally unimplemented.
+
+- **Found:** The existing CLI is centralized in commands/cli.rs and exhaustive dispatch requires a placeholder when introducing a command
+- **Found:** Running workspace-wide cargo fmt rewrites unrelated files under the current formatter; those unrelated changes were restored before commit
+- **Decided:** Commit 2d09244 adds the first green tracer for cast up
+- **Decided:** Establish the new service command surface one public behavior at a time
+- **Decided:** Keep the first slice limited to cast up parsing and help; do not anticipate lifecycle implementation
+- **Open:** Next TDD slice: remove cast run from the public CLI or add shared --name behavior to cast up
+
+## [9840046] Removed the legacy run command
+
+Committed the second TDD slice. The integration test now proves `cast run` is rejected, and the public Run variant, flags, dispatch, and obsolete run-specific CLI tests were removed. Underlying agent and container machinery remains available for later reuse or evidence-driven cleanup.
+
+- **Found:** Removing the command surface required deleting one unit parsing test and three integration tests tied specifically to run flags
+- **Found:** The cast crate remains green with 263 unit tests, 16 CLI tests, and 9 config tests
+- **Decided:** Commit d2caad9 removes cast run from the spike CLI
+- **Decided:** Do not speculatively delete underlying agent abstractions in this slice
+- **Open:** Continue Phase 1 by defining shared --name parsing for service commands and reshaping exec away from agent subcommands
+
+## [9840046] Added named-service selection to up
+
+Committed a TDD slice proving `cast up --name <name>` is accepted. Introduced a reusable ServiceFlags type scoped to a Git worktree; lifecycle commands can share it as they are added.
+
+- **Found:** The public CLI test verifies the named option without triggering Docker or configuration side effects
+- **Decided:** Commit 19c2f38 adds named-service selection to cast up
+- **Decided:** Represent service selection with a shared ServiceFlags type
+- **Open:** Add cast down with the same service selector
+
+## [9840046] Added service down command boundary
+
+Committed a TDD slice adding `cast down [--name <name>]` to the public CLI. It reuses the worktree-scoped ServiceFlags selector and intentionally dispatches to a not-yet-implemented placeholder until lifecycle logic is built.
+
+- **Found:** Up and down now share one service-selection representation
+- **Decided:** Commit 83abccf adds the down command boundary with named-service selection
+- **Open:** Add the status command boundary, then reshape exec and shell around services
+

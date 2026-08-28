@@ -1,0 +1,20 @@
+---
+title: Audit and update documentation for 0.2.0
+status: open
+priority: high
+refs: .cue/master/task/release-0.2.0.md
+kind: review
+---
+Audit all repository documentation for accuracy and completeness ahead of the 0.2.0 release, and update anything stale or missing. This gates the release tag.
+
+## Context & Scope
+
+- Docs are organized for progressive discovery: each README is a table of contents (project `docs/README.md`, `crates/cast/docs/README.md`, `crates/cast-mcp-client/docs/README.md`).
+- Verify documentation against the 0.2.0 story set merged since v0.1.0:
+  - `env-var-passthrough` (PR #64)
+  - `cast-local-json-overrides` (PR #65)
+  - `build-repo-defined-shells` (merged to master)
+  - plus anything landing from `setup-renovate` and `update-dependencies-0.2.0`
+- 0.2.0 is a breaking release with no backward compatibility; docs must not reference superseded 0.1.0 behaviour. Migration-relevant changes should be surfaced for the changelog/migration notes owned by the release gate.
+- Update stale entries, add missing entries for new behaviour, and confirm each README index links to entries that actually exist.
+- Complete before tagging `v0.2.0`.

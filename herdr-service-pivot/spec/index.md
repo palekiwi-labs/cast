@@ -30,13 +30,19 @@ if the pivot graduates.
 
 - `--mux` flag — deferred until spike evidence shows how the
   multiplexer's passive agent detection behaves
-- `cast run` — fate deferred; left untouched and working as today
 - Port model changes — see `todo/port-vs-identifier.md`; the spike
   publishes no host ports at all
 - MCP auto-start — keep injecting `CAST_MCP_URL` only, as today
-- Migration or deprecation of existing commands
+- Production migration and backwards-compatibility guarantees
 - Multiplexer plurality — herdr only, via a config default
 - `Agent` trait rework, config-directory union rework (derived issues)
+
+### Removed from the spike surface
+
+- `cast run` — removed because its per-agent, ephemeral-container model
+  contradicts the service model being evaluated. Retaining it would produce
+  ambiguous evidence about the intended lifecycle. Removing the command does
+  not require speculative cleanup of every underlying agent abstraction.
 
 ## Command surface
 
@@ -91,13 +97,24 @@ interactive.
 
 - Name: `cast-{basename}-{workspace-id}` for the default service and
   `cast-{basename}-{workspace-id}-{name}` for named services. The
-  workspace id is derived from the absolute workspace path, so distinct
-  paths sharing a basename (different org or parent directory) never
-  collide.
+  workspace id is derived from the canonical Git worktree path, so linked
+  worktrees of the same repository receive distinct service identities and
+  state.
 - Named services exist for interference isolation: long-running work
   that must not be disrupted by unrelated activity in another container.
-- One service per workspace is the expected norm; multiple named
+- One service per Git worktree is the expected norm; multiple named
   services must coexist without interfering.
+- Commands invoked from a worktree subdirectory target that worktree's
+  service and preserve the corresponding relative working directory inside
+  the container.
+- Non-Git directories are rejected with a clear error; the spike does not
+  silently fall back to cwd-based identity.
+- Each worktree service has isolated multiplexer runtime and persistent state
+  so simultaneous services cannot collide through shared XDG paths, sockets,
+  or session data.
+- The selected worktree and the Git common directory must both be available
+  inside the container. The spike will determine the narrowest reliable mount
+  topology without exposing unrelated sibling worktrees by default.
 - Service state (multiplexer sessions and workspaces) should survive
   container restarts.
 
@@ -108,10 +125,10 @@ interactive.
   `cast exec herdr`.
 - No agent taxonomy enters cast. cast must not learn agent kinds; the
   multiplexer owns agent identity and detection.
-- `cast run` and existing per-agent container naming keep working
-  unchanged on this branch, so the old and new models can be compared
-  side by side. In particular, the existing port derivation stays
-  untouched; service naming uses its own workspace-level derivation.
+- `cast run` is not exposed on this branch. The spike tests one coherent
+  service lifecycle rather than preserving the old ephemeral lifecycle for
+  side-by-side use. Existing port derivation need not be redesigned because
+  the service publishes no host ports.
 - The multiplexer's graceful shutdown is on SIGINT, but `docker stop`
   sends SIGTERM. The container must set its stop signal to SIGINT so
   shutdown is graceful.
@@ -134,6 +151,10 @@ interactive.
 5. Do alternate-screen harnesses lose scrollback in a way that breaks
    reading agent output?
 6. What is the resource profile of a long-lived service container?
+7. What minimal worktree-plus-Git-common-directory mount topology keeps Git
+   functional without exposing unrelated sibling worktrees?
+8. Which isolated XDG/runtime/persistent paths does each worktree service need
+   for collision-free multiplexer operation and restart persistence?
 
 ## Non-goals
 

@@ -9,6 +9,7 @@ refs:
 - .cue/master/task/cast-local-json-overrides.md
 - .cue/master/task/setup-renovate.md
 - .cue/master/task/update-dependencies-0.2.0.md
+- .cue/master/task/audit-documentation-0.2.0.md
 kind: coord
 tag: 0.2.0 
 ---
@@ -34,6 +35,7 @@ Coordinate scope, stories, and release mechanics for the 0.2.0 tag.
 - `task/build-repo-defined-shells` — complete, merged to master.
 - `task/setup-renovate` — in progress.
 - `task/update-dependencies-0.2.0` — in progress.
+- `task/audit-documentation-0.2.0` — open; gates the release tag.
 
 ## Purpose
 

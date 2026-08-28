@@ -34,3 +34,12 @@ Updated the release master plan and task card to reflect build-repo-defined-shel
 - **Open:** cast-mcp-client versioning decision
 - **Open:** Release gate execution (changelog, formatting/clippy/tests, tagging)
 
+## [9840046] Documentation audit task added as 0.2.0 release gate
+
+Created the audit-documentation-0.2.0 task (kind review, priority high, parent release-0.2.0, tag 0.2.0) and wired it into the release plan (refs, scope checkbox, explicit release-gate checkbox) and the release task card (refs + scope story line) per user instruction that documentation must be audited and fully updated before the 0.2.0 tag.
+
+- **Found:** The release plan was concurrently updated: setup-renovate and update-dependencies-0.2.0 are now marked landed on master in the plan, while the release task card still lists both as in progress
+- **Decided:** Documentation audit is an explicit 0.2.0 release gate, tracked as audit-documentation-0.2.0
+- **Decided:** Task created with status open (operator-requested scope, not inbox triage) and priority high since it gates the tag
+- **Open:** Release task card story statuses (setup-renovate, update-dependencies-0.2.0 listed as in progress) drift from the plan's landed checkboxes; confirm and reconcile
+
