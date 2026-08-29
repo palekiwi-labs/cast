@@ -12,7 +12,7 @@ use crate::dev::container_name::resolve_container_name;
 use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args, reserved_names_in};
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
-use crate::dev::universal::volumes::build_universal_run_args;
+use crate::dev::universal::volumes::{build_cast_nix_mount_args, build_universal_run_args};
 use crate::dev::volumes::build_extra_volume_args;
 use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
@@ -459,6 +459,7 @@ pub fn build_service_run_flags(
             ),
         ]);
     }
+    run_args.extend(build_cast_nix_mount_args(opts));
     run_args.splice(
         0..0,
         ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
@@ -658,6 +659,29 @@ mod tests {
         );
 
         assert!(run_args.contains(&"/home/alice/main/.git:/home/alice/main/.git:rw".to_string()));
+    }
+
+    #[test]
+    fn service_run_mounts_the_global_cast_nix_directory() {
+        let config = Config::default();
+        let home = tempfile::tempdir().expect("create temporary home");
+        let nix_dir = home.path().join(".config/cast/nix");
+        std::fs::create_dir_all(&nix_dir).expect("create global cast Nix directory");
+        let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        opts.host_home_dir = Some(home.path().to_path_buf());
+
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/project/.git"),
+        );
+
+        assert!(run_args.contains(&format!(
+            "{}:/home/alice/.config/cast/nix:rw",
+            nix_dir.display()
+        )));
     }
 
     #[test]

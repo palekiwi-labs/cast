@@ -50,6 +50,27 @@ pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
     ])
 }
 
+/// Build the global cast Nix directory bind-mount arguments when it exists.
+pub fn build_cast_nix_mount_args(opts: &RunOpts) -> Vec<String> {
+    let Some(nix_dir) = opts
+        .host_home_dir
+        .as_ref()
+        .map(|home| home.join(".config/cast/nix"))
+        .filter(|path| path.is_dir())
+    else {
+        return vec![];
+    };
+
+    vec![
+        "-v".to_string(),
+        format!(
+            "{}:/home/{}/.config/cast/nix:rw",
+            nix_dir.display(),
+            opts.user.username
+        ),
+    ]
+}
+
 /// Build the complete set of agent-specific `docker run` arguments for the
 /// universal container.
 ///
@@ -75,21 +96,7 @@ pub fn build_universal_run_args(
     }
 
     // 3. Cast Nix directory mount (~/.config/cast/nix), if present.
-    let cast_nix_host_dir = opts
-        .host_home_dir
-        .as_ref()
-        .filter(|h| h.join(".config/cast/nix").is_dir())
-        .map(|h| h.join(".config/cast/nix"));
-    if let Some(nix_dir) = &cast_nix_host_dir {
-        args.extend([
-            "-v".to_string(),
-            format!(
-                "{}:/home/{}/.config/cast/nix:rw",
-                nix_dir.display(),
-                opts.user.username
-            ),
-        ]);
-    }
+    args.extend(build_cast_nix_mount_args(opts));
 
     Ok(args)
 }
