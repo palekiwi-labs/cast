@@ -14,12 +14,12 @@ use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
 use crate::dev::universal::registry::all_agents;
 use crate::dev::universal::volumes::build_universal_run_args;
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
+use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::user::{get_user, ResolvedUser};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -440,6 +440,9 @@ pub fn build_service_run_flags(
 ) -> Vec<String> {
     let mut run_args = build_docker_run_flags(config, opts, host_env_names);
     run_args.retain(|arg| arg != "--rm");
+    if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
+        run_args.drain(position..=position + 1);
+    }
     run_args.splice(
         0..0,
         ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
@@ -568,9 +571,7 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
         // MCP URL injection
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
     }
 
     #[test]
@@ -585,6 +586,18 @@ mod tests {
             ["--detach", "--init", "--stop-signal", "SIGINT"]
         );
         assert!(!run_args.iter().any(|arg| arg == "--rm"));
+    }
+
+    #[test]
+    fn service_run_never_publishes_agent_ports() {
+        let config = Config::default();
+        let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        opts.publish = true;
+
+        let run_args = build_service_run_flags(&config, &opts, &no_host_env());
+
+        assert!(!run_args.iter().any(|arg| arg == "-p"));
+        assert!(!run_args.iter().any(|arg| arg == "32768:80"));
     }
 
     #[test]
@@ -728,9 +741,7 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
-        assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
-        );
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
     }
 
     #[test]
