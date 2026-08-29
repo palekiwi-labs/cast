@@ -7,6 +7,7 @@ use std::process::Command;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceContext {
     pub worktree_root: PathBuf,
+    pub git_common_dir: PathBuf,
     pub relative_cwd: PathBuf,
     pub workspace_id: String,
 }
@@ -42,11 +43,33 @@ impl ServiceContext {
             .strip_prefix(&worktree_root)
             .context("Current directory is outside the resolved Git worktree")?
             .to_path_buf();
+        let common_dir_output = Command::new("git")
+            .arg("-C")
+            .arg(&cwd)
+            .args(["rev-parse", "--git-common-dir"])
+            .output()
+            .context("Failed to run git while resolving the common directory")?;
+        if !common_dir_output.status.success() {
+            bail!("Failed to resolve the Git common directory");
+        }
+        let git_common_dir = PathBuf::from(
+            String::from_utf8(common_dir_output.stdout)
+                .context("Git returned a non-UTF-8 common directory path")?
+                .trim(),
+        );
+        let git_common_dir = if git_common_dir.is_absolute() {
+            git_common_dir
+        } else {
+            cwd.join(git_common_dir)
+        }
+        .canonicalize()
+        .context("Failed to resolve the Git common directory")?;
         let digest = Sha256::digest(worktree_root.as_os_str().as_encoded_bytes());
         let workspace_id = hex::encode(&digest[..6]);
 
         Ok(Self {
             worktree_root,
+            git_common_dir,
             relative_cwd,
             workspace_id,
         })
@@ -163,12 +186,15 @@ mod tests {
 
         assert_ne!(primary.worktree_root, linked.worktree_root);
         assert_ne!(primary.workspace_id, linked.workspace_id);
+        assert_eq!(primary.git_common_dir, linked.git_common_dir);
+        assert!(linked.git_common_dir.is_absolute());
     }
 
     #[test]
     fn service_container_names_include_worktree_identity_and_optional_name() {
         let context = ServiceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
             workspace_id: "a1b2c3d4e5f6".to_string(),
         };
@@ -196,6 +222,7 @@ mod tests {
     fn multiplexer_sessions_are_isolated_by_worktree_and_service_name() {
         let context = ServiceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
             workspace_id: "a1b2c3d4e5f6".to_string(),
         };
