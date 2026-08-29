@@ -1,5 +1,5 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use anyhow::Result;
@@ -438,6 +438,7 @@ pub fn build_service_run_flags(
     opts: &RunOpts,
     host_env_names: &BTreeSet<String>,
     multiplexer_session: &str,
+    git_common_dir: &Path,
 ) -> Vec<String> {
     let mut run_args = build_docker_run_flags(config, opts, host_env_names);
     run_args.retain(|arg| arg != "--rm");
@@ -448,6 +449,16 @@ pub fn build_service_run_flags(
         "-e".to_string(),
         format!("HERDR_SESSION={multiplexer_session}"),
     ]);
+    if !git_common_dir.starts_with(&opts.workspace.root) {
+        run_args.extend([
+            "-v".to_string(),
+            format!(
+                "{}:{}:rw",
+                git_common_dir.display(),
+                git_common_dir.display()
+            ),
+        ]);
+    }
     run_args.splice(
         0..0,
         ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
@@ -584,7 +595,13 @@ mod tests {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/project/.git"),
+        );
 
         assert_eq!(
             &run_args[..4],
@@ -599,7 +616,13 @@ mod tests {
         let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         opts.publish = true;
 
-        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/project/.git"),
+        );
 
         assert!(!run_args.iter().any(|arg| arg == "-p"));
         assert!(!run_args.iter().any(|arg| arg == "32768:80"));
@@ -610,9 +633,31 @@ mod tests {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/project/.git"),
+        );
 
         assert!(run_args.contains(&"HERDR_SESSION=cast-a1b2c3d4e5f6".to_string()));
+    }
+
+    #[test]
+    fn service_run_mounts_an_external_git_common_directory() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/main/.git"),
+        );
+
+        assert!(run_args.contains(&"/home/alice/main/.git:/home/alice/main/.git:rw".to_string()));
     }
 
     #[test]
