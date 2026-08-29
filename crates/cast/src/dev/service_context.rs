@@ -170,4 +170,16 @@ mod tests {
             "cast-my-app-a1b2c3d4e5f6-isolated"
         );
     }
+
+    #[test]
+    fn non_git_directories_are_rejected() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+
+        let error = ServiceContext::resolve(directory.path())
+            .expect_err("non-Git directory should be rejected");
+
+        assert!(error
+            .to_string()
+            .contains("Current directory is not in a Git worktree"));
+    }
 }
