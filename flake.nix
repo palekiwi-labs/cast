@@ -50,6 +50,7 @@
             pname = "cast";
             cargoBuildFlags = [ "-p" "cast" ];
             cargoTestFlags = [ "-p" "cast" ];
+            nativeCheckInputs = [ pkgs.git ];
             meta = with pkgs.lib; {
               description = "cast - coding agent sandbox tool";
               homepage = "https://github.com/palekiwi-labs/cast";
