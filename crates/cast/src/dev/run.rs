@@ -441,8 +441,12 @@ pub fn build_service_run_flags(
     host_env_names: &BTreeSet<String>,
     multiplexer_session: &str,
     git_common_dir: &Path,
+    container_workdir: &Path,
 ) -> Vec<String> {
     let mut run_args = build_docker_run_flags(config, opts, host_env_names);
+    if let Some(workdir) = run_args.iter().position(|arg| arg == "--workdir") {
+        run_args[workdir + 1] = container_workdir.to_string_lossy().into_owned();
+    }
     run_args.retain(|arg| arg != "--rm");
     if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
         run_args.drain(position..=position + 1);
@@ -605,6 +609,7 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert_eq!(
@@ -626,6 +631,7 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert!(!run_args.iter().any(|arg| arg == "-p"));
@@ -643,6 +649,7 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert!(run_args.contains(&"HERDR_SESSION=cast-a1b2c3d4e5f6".to_string()));
@@ -659,6 +666,7 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/main/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert!(run_args.contains(&"/home/alice/main/.git:/home/alice/main/.git:rw".to_string()));
@@ -679,6 +687,7 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert!(run_args.contains(&format!(
@@ -701,10 +710,32 @@ mod tests {
             &no_host_env(),
             "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
         );
 
         assert!(run_args.contains(&"spike-cache:/home/alice/.cache:rw".to_string()));
         assert!(run_args.contains(&"spike-local:/home/alice/.local:rw".to_string()));
+    }
+
+    #[test]
+    fn service_run_uses_the_invocation_directory_as_workdir() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            "cast-a1b2c3d4e5f6",
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project/crates/app"),
+        );
+        let workdir = run_args
+            .iter()
+            .position(|arg| arg == "--workdir")
+            .expect("service flags should set a workdir");
+
+        assert_eq!(run_args[workdir + 1], "/home/alice/project/crates/app");
     }
 
     #[test]
