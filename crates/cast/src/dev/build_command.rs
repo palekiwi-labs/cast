@@ -15,8 +15,38 @@ pub fn build_command(
     base_command: &str,
     extra_args: Vec<String>,
 ) -> Vec<String> {
-    let sandbox = sandbox_layer(config);
-    let project = project_layer(config);
+    build_wrapped_command(
+        sandbox_layer(config),
+        project_layer(config),
+        container_username,
+        base_command,
+        extra_args,
+    )
+}
+
+/// Build a command wrapped only in the configured sandbox layer.
+pub(crate) fn build_sandbox_command(
+    config: &Config,
+    container_username: &str,
+    base_command: &str,
+    extra_args: Vec<String>,
+) -> Vec<String> {
+    build_wrapped_command(
+        sandbox_layer(config),
+        None,
+        container_username,
+        base_command,
+        extra_args,
+    )
+}
+
+fn build_wrapped_command(
+    sandbox: Option<&str>,
+    project: Option<&str>,
+    container_username: &str,
+    base_command: &str,
+    extra_args: Vec<String>,
+) -> Vec<String> {
     let mut capacity = 1 + extra_args.len();
     if sandbox.is_some() {
         capacity += 4;
