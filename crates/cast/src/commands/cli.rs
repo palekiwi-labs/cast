@@ -7,7 +7,6 @@ use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
-use crate::dev::run::{RunMode, SessionFlags};
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -70,40 +69,8 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Some(Commands::Up { flags: _ }) => anyhow::bail!("cast up is not implemented yet"),
         Some(Commands::Down { flags: _ }) => anyhow::bail!("cast down is not implemented yet"),
         Some(Commands::Status { flags: _ }) => anyhow::bail!("cast status is not implemented yet"),
-        Some(Commands::Exec { flags, agent }) => {
-            let approved = verify_config(cfg)?;
-            // TTY mode is determined by --headless, independent of naming.
-            let mode = if flags.headless {
-                RunMode::Headless {
-                    token: invocation_id.clone(),
-                }
-            } else {
-                RunMode::Interactive
-            };
-            // Container name token is always set for exec sessions so that
-            // exec containers never collide with interactive `cast run`:
-            //   interactive exec → "exec-{id}"
-            //   headless exec    → "{id}"
-            let name_token = if flags.headless {
-                invocation_id.clone()
-            } else {
-                format!("exec-{}", invocation_id)
-            };
-            let session_flags = SessionFlags {
-                mode,
-                name: flags.name.clone(),
-                publish: flags.publish,
-            };
-            let cmd = agent.cmd().to_vec();
-            let status = dev::exec(
-                agent.as_agent(),
-                &approved,
-                session_flags,
-                flags.raw,
-                name_token,
-                cmd,
-            )?;
-            Ok(to_exit_code(status))
+        Some(Commands::Exec { flags: _, cmd: _ }) => {
+            anyhow::bail!("cast exec is not implemented yet")
         }
         Some(Commands::Shell { agent, raw }) => {
             let approved = verify_config(cfg)?;
@@ -183,67 +150,14 @@ pub struct ExecFlags {
     #[arg(long)]
     pub headless: bool,
 
-    /// Override the container name (default: auto-generated)
+    /// Select a named service instead of the default service
     #[arg(long)]
     pub name: Option<String>,
-
-    /// Publish the agent's port to the host (uses the calculated port).
-    /// To use a specific host port, set `port` in cast.json instead.
-    #[arg(short = 'p', long)]
-    pub publish: bool,
 
     /// Skip Nix devshell wrapping; command wrapping is skipped but /nix is
     /// still mounted and the Nix daemon is still started.
     #[arg(long)]
     pub raw: bool,
-}
-
-/// Agent subcommands for `cast exec`.
-#[derive(Subcommand)]
-#[command(subcommand_required = true)]
-pub enum ExecAgent {
-    /// Execute a command in a fresh OpenCode container
-    #[command(alias = "o", disable_help_flag = true)]
-    Opencode {
-        /// Command and arguments to run inside the container.
-        /// An empty command is rejected at dispatch time (not by clap).
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        cmd: Vec<String>,
-    },
-    /// Execute a command in a fresh Pi container
-    #[command(alias = "p", disable_help_flag = true)]
-    Pi {
-        /// Command and arguments to run inside the container.
-        /// An empty command is rejected at dispatch time (not by clap).
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        cmd: Vec<String>,
-    },
-    /// Execute a command in a fresh ClaudeCode container
-    #[command(alias = "c", disable_help_flag = true)]
-    Claudecode {
-        /// Command and arguments to run inside the container.
-        /// An empty command is rejected at dispatch time (not by clap).
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
-        cmd: Vec<String>,
-    },
-}
-
-impl ExecAgent {
-    pub fn as_agent(&self) -> &'static dyn Agent {
-        match self {
-            ExecAgent::Opencode { .. } => &OpenCode,
-            ExecAgent::Pi { .. } => &Pi,
-            ExecAgent::Claudecode { .. } => &ClaudeCode,
-        }
-    }
-
-    pub fn cmd(&self) -> &[String] {
-        match self {
-            ExecAgent::Opencode { cmd } => cmd,
-            ExecAgent::Pi { cmd } => cmd,
-            ExecAgent::Claudecode { cmd } => cmd,
-        }
-    }
 }
 
 #[derive(Subcommand)]
@@ -291,12 +205,13 @@ pub enum Commands {
         #[command(flatten)]
         flags: ServiceFlags,
     },
-    /// Execute an arbitrary command in a fresh agent container
+    /// Execute an arbitrary command in the service container
     Exec {
         #[command(flatten)]
         flags: ExecFlags,
-        #[command(subcommand)]
-        agent: ExecAgent,
+        /// Command and arguments to execute
+        #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
+        cmd: Vec<String>,
     },
     /// Drop into an interactive shell in an agent's container
     Shell {
@@ -344,124 +259,4 @@ pub fn to_exit_code(status: ExitStatus) -> ExitCode {
     });
 
     ExitCode::from(code as u8)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // ── cast exec clap parsing ───────────────────────────────────────────────
-
-    #[test]
-    fn test_exec_opencode_parses_cmd() {
-        let cli =
-            Cli::try_parse_from(["cast", "exec", "opencode", "/bin/bash"]).expect("should parse");
-        let Commands::Exec { agent, flags } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        let ExecAgent::Opencode { cmd } = agent else {
-            panic!("expected Opencode agent");
-        };
-        assert_eq!(cmd, vec!["/bin/bash"]);
-        assert!(!flags.headless);
-        assert!(!flags.raw); // off by default
-    }
-
-    #[test]
-    fn test_exec_requires_cmd_arg() {
-        // `cast exec opencode` with no cmd: clap's trailing_var_arg does not
-        // enforce num_args minimum at parse time; the empty Vec is caught at
-        // dispatch time. Verify the parse succeeds but cmd is empty.
-        let cli = Cli::try_parse_from(["cast", "exec", "opencode"]).expect("parses ok");
-        let Commands::Exec { agent, .. } = cli.command.unwrap() else {
-            panic!("expected Exec");
-        };
-        assert!(agent.cmd().is_empty(), "cmd should be empty with no args");
-    }
-
-    #[test]
-    fn test_exec_raw_flag_parsed() {
-        let cli = Cli::try_parse_from([
-            "cast",
-            "exec",
-            "--raw",
-            "opencode",
-            "/bin/bash",
-            "-c",
-            "echo hi",
-        ])
-        .expect("should parse");
-        let Commands::Exec { agent, flags } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        let ExecAgent::Opencode { cmd } = agent else {
-            panic!("expected Opencode");
-        };
-        assert!(flags.raw);
-        assert_eq!(cmd, vec!["/bin/bash", "-c", "echo hi"]);
-    }
-
-    #[test]
-    fn test_exec_headless_flag_parsed() {
-        let cli = Cli::try_parse_from(["cast", "exec", "--headless", "opencode", "/bin/bash"])
-            .expect("should parse");
-        let Commands::Exec { flags, .. } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        assert!(flags.headless);
-    }
-
-    #[test]
-    fn test_exec_publish_flag_sets_true() {
-        // Bare --publish flag (no value) sets publish to true.
-        let cli = Cli::try_parse_from(["cast", "exec", "--publish", "opencode", "/bin/bash"])
-            .expect("should parse");
-        let Commands::Exec { flags, .. } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        assert!(
-            flags.publish,
-            "--publish bare flag must set publish to true"
-        );
-    }
-
-    #[test]
-    fn test_publish_absent_is_false() {
-        let cli =
-            Cli::try_parse_from(["cast", "exec", "opencode", "/bin/bash"]).expect("should parse");
-        let Commands::Exec { flags, .. } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        assert!(!flags.publish, "publish absent should be false");
-    }
-
-    #[test]
-    fn test_exec_pi_alias_parses() {
-        let cli =
-            Cli::try_parse_from(["cast", "exec", "p", "/bin/bash"]).expect("alias p should parse");
-        let Commands::Exec { agent, .. } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        assert!(matches!(agent, ExecAgent::Pi { .. }));
-    }
-
-    #[test]
-    fn test_exec_flags_precede_agent() {
-        // Flags MUST come before the agent subcommand; after the agent they
-        // are part of cmd and are not parsed as flags.
-        let cli = Cli::try_parse_from(["cast", "exec", "opencode", "--raw", "/bin/bash"])
-            .expect("should parse");
-        let Commands::Exec { agent, flags } = cli.command.unwrap() else {
-            panic!("expected Exec command");
-        };
-        // --raw appearing after the agent subcommand is captured as part of cmd
-        let ExecAgent::Opencode { cmd } = agent else {
-            panic!("expected Opencode");
-        };
-        assert!(
-            !flags.raw,
-            "raw flag after agent should NOT be parsed as flag"
-        );
-        assert_eq!(cmd[0], "--raw", "raw after agent should be in cmd");
-    }
 }

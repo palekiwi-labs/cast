@@ -148,6 +148,16 @@ fn test_cast_status_accepts_service_name() {
 }
 
 #[test]
+fn test_cast_exec_accepts_arbitrary_command() {
+    cast()
+        .args(["exec", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("<CMD>..."))
+        .stdout(predicate::str::contains("opencode").not());
+}
+
+#[test]
 fn test_cast_build_help() {
     // `cast build` takes no agent subcommand: there is one shared dev image.
     cast()
