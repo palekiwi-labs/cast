@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "deps",
+  "timezone": "UTC",
+  "nix": {
+    "enabled": true
+  },
+  "rust-toolchain": {
+    "enabled": true
+  },
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Group all minor and patch Cargo dependencies",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "cargo non-major dependencies"
+    },
+    {
+      "description": "Separate major Cargo dependencies with feat prefix",
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "commitMessagePrefix": "feat(deps):"
+    },
+    {
+      "description": "Group all Nix flake inputs",
+      "matchManagers": [
+        "nix"
+      ],
+      "groupName": "nix flake inputs"
+    },
+    {
+      "description": "Dedicated PR for Rust toolchain updates",
+      "matchManagers": [
+        "rust-toolchain"
+      ],
+      "groupName": "rust toolchain"
+    },
+    {
+      "description": "Group all GitHub Actions updates",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github-actions dependencies"
+    }
+  ]
+}

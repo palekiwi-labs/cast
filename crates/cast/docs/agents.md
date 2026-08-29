@@ -12,22 +12,23 @@
 
 Harness binaries are **not** baked into the Docker image. There is a single,
 harness-free dev image (`localhost/cast:{version}`); every agent runs in it.
-The harness itself is provided by a named devShell of the global cast flake
-(`~/.config/cast/nix/flake.nix`), selected at run time.
+The harness itself is provided by the devshell referenced by `sandbox_shell`,
+selected at run time.
 
-`cast run <agent>` enters the devShell named after the agent by default
-(e.g. `opencode`). Override the shell with the `global_shell` config field —
-for example, point every agent at a `universal` shell that exposes all
-harnesses at once. See [Flake Integration](nix/flake-integration.md) for the
-shell-selection mechanics and the shipped template.
+`sandbox_shell` is a full Nix flake reference, such as
+`~/.config/cast/nix#default` or `.#ai`. There is no default based on the agent
+name: if the field is unset, no sandbox devshell is entered. The template created
+by `cast config init` has a `default` shell containing all supported harnesses
+and optional per-harness shells. See
+[Flake Integration](nix/flake-integration.md) for the selection mechanics.
 
 Because provisioning lives in the flake, harness **versions are pinned by the
-global flake's `flake.lock`**, not by `cast.json`.
+selected flake's `flake.lock`**, not by `cast.json`.
 
 ## The `Agent` Trait
 
 The system is extensible via the `Agent` trait. Since harnesses come from the
-global devShell, the trait defines only the program-specific layer on top of
+sandbox devShell, the trait defines only the program-specific layer on top of
 the shared image:
 1. Config-directory bind mounts (`config_mount_args`)
 2. Host preparation (creating directories) via `prepare_host`
@@ -39,9 +40,10 @@ gone with the nix-native model. For the full trait definition, see
 
 ## Adding New Agents
 
-Adding a new agent involves implementing the `Agent` trait, registering the
-harness in the CLI, and adding a devShell of the same name to the global flake
-template. The source code for existing harnesses provides the best template:
+Adding a new agent involves implementing the `Agent` trait and registering the
+harness in the CLI. Users must select a `sandbox_shell` whose packages provide
+the corresponding binary; shell names do not need to match agent names. The
+source code for existing harnesses provides the best template:
 - OpenCode: [src/dev/opencode/mod.rs][opencode-harness]
 - ClaudeCode: [src/dev/claudecode/mod.rs][claudecode-harness]
 - Pi: [src/dev/pi/mod.rs][pi-harness]

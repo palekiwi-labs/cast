@@ -10,14 +10,18 @@ Every configuration field in `cast` can be overridden by environment variables.
 
 ## Examples
 
-| Config Field   | Env Variable         |
-| -------------- | -------------------- |
-| `memory`       | `CAST_MEMORY`        |
-| `cpus`         | `CAST_CPUS`          |
-| `mcp.port`     | `CAST_MCP__PORT`     |
-| `mcp.hostname` | `CAST_MCP__HOSTNAME` |
-| `use_flake`    | `CAST_USE_FLAKE`     |
-| `extra_data_volumes.cargo.target` | `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET` |
+- `memory` becomes `CAST_MEMORY`.
+- `cpus` becomes `CAST_CPUS`.
+- `mcp.port` becomes `CAST_MCP__PORT`.
+- `mcp.hostname` becomes `CAST_MCP__HOSTNAME`.
+- `sandbox_shell` becomes `CAST_SANDBOX_SHELL`.
+- `project_shell` becomes `CAST_PROJECT_SHELL`.
+- `use_sandbox_shell` becomes `CAST_USE_SANDBOX_SHELL`.
+- `use_project_shell` becomes `CAST_USE_PROJECT_SHELL`.
+- `extra_data_volumes.cargo.target` becomes
+  `CAST_EXTRA_DATA_VOLUMES__CARGO__TARGET`.
+
+The removed `CAST_USE_FLAKE` and `CAST_USE_FLAKE_PATH` overrides have no effect.
 
 ## Passing Host Variables Into the Sandbox (`env_passthrough` and `extra_env_passthrough`)
 
@@ -78,6 +82,8 @@ rather than merge across config files.
   list entirely.
 - A project `cast.json` that sets `extra_env_passthrough` replaces the global
   extra list entirely.
+- A `cast.local.json` value replaces the same key from project and global
+  configuration.
 - The two keys replace independently: a project that sets only
   `extra_env_passthrough` leaves the global `env_passthrough` intact.
 
@@ -88,8 +94,8 @@ the failure mode is a missing variable rather than a silently inherited one, and
 the effective allowlist remains fully auditable.
 
 The allowlists are config fields, so `CAST_ENV_PASSTHROUGH` and
-`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank both
-`cast.json` files. Being lists, they require the bracketed form:
+`CAST_EXTRA_ENV_PASSTHROUGH` in `cast`'s own environment outrank all
+configuration files. Being lists, they require the bracketed form:
 
 ```sh
 export CAST_ENV_PASSTHROUGH='[ANTHROPIC_API_KEY, OPENAI_API_KEY]'

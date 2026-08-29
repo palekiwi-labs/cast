@@ -57,7 +57,7 @@ pub fn build_agents_config_args(opts: &RunOpts) -> Result<Vec<String>> {
 /// 1. Shared data volumes (`-cache` / `-local`) plus the cross-harness
 ///    `.agents` bind mount (all universal — present for every session).
 /// 2. Union of config-directory bind mounts from **every** included agent.
-/// 3. User flake mount (`~/.config/cast/nix`) if present on the host.
+/// 3. Cast Nix directory mount (`~/.config/cast/nix`) if present on the host.
 pub fn build_universal_run_args(
     included_agents: &[&dyn Agent],
     config: &Config,
@@ -74,18 +74,18 @@ pub fn build_universal_run_args(
         args.extend(agent.config_mount_args(config, opts)?);
     }
 
-    // 3. User flake mount (~/.config/cast/nix), if present.
-    let user_flake_host_dir = opts
+    // 3. Cast Nix directory mount (~/.config/cast/nix), if present.
+    let cast_nix_host_dir = opts
         .host_home_dir
         .as_ref()
-        .filter(|h| h.join(".config/cast/nix/flake.nix").exists())
+        .filter(|h| h.join(".config/cast/nix").is_dir())
         .map(|h| h.join(".config/cast/nix"));
-    if let Some(flake_dir) = &user_flake_host_dir {
+    if let Some(nix_dir) = &cast_nix_host_dir {
         args.extend([
             "-v".to_string(),
             format!(
                 "{}:/home/{}/.config/cast/nix:rw",
-                flake_dir.display(),
+                nix_dir.display(),
                 opts.user.username
             ),
         ]);
@@ -122,8 +122,6 @@ mod tests {
             port: 32768,
             host_home_dir: Some(PathBuf::from("/home/alice")),
             host_name: "test-host".to_string(),
-            user_flake_present: false,
-            project_flake_present: false,
             tty_mode: TtyMode::Interactive,
             publish: false,
         }
@@ -230,6 +228,24 @@ mod tests {
             args.contains(&"/home/alice/.agents:/home/alice/.agents:rw".to_string()),
             "cross-harness .agents mount missing: {args:?}"
         );
+    }
+
+    #[test]
+    fn universal_run_args_mounts_cast_nix_dir_without_flake_file() {
+        let home = tempfile::tempdir().unwrap();
+        let nix_dir = home.path().join(".config/cast/nix");
+        std::fs::create_dir_all(&nix_dir).unwrap();
+        let opts = RunOpts {
+            host_home_dir: Some(home.path().to_path_buf()),
+            ..basic_opts()
+        };
+
+        let args = build_universal_run_args(&[], &Config::default(), &opts).unwrap();
+
+        assert!(args.contains(&format!(
+            "{}:/home/alice/.config/cast/nix:rw",
+            nix_dir.display()
+        )));
     }
 
     #[test]

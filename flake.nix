@@ -25,7 +25,14 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        rustToolchain = fenix.packages.${system}.stable.toolchain;
+        rustToolchain = fenix.packages.${system}.fromToolchainFile {
+          file = ./rust-toolchain.toml;
+          sha256 = "sha256-P30Tm3O7vQAE725YtDCDHGjNrSsfZO4us11UwJGZSJo=";
+        };
+        rustPlatform = pkgs.makeRustPlatform {
+          cargo = rustToolchain;
+          rustc = rustToolchain;
+        };
         common = {
           version = "0.2.0";
           src = pkgs.lib.cleanSourceWith {
@@ -46,7 +53,7 @@
       in
       {
         packages = {
-          cast = pkgs.rustPlatform.buildRustPackage (common // {
+          cast = rustPlatform.buildRustPackage (common // {
             pname = "cast";
             cargoBuildFlags = [ "-p" "cast" ];
             cargoTestFlags = [ "-p" "cast" ];
@@ -58,7 +65,7 @@
             };
           });
 
-          cast-mcp-client = pkgs.rustPlatform.buildRustPackage (common // {
+          cast-mcp-client = rustPlatform.buildRustPackage (common // {
             pname = "cast-mcp-client";
             cargoBuildFlags = [ "-p" "cast-mcp-client" ];
             cargoTestFlags = [ "-p" "cast-mcp-client" ];
@@ -78,7 +85,6 @@
             name = "cast";
             buildInputs = [
               rustToolchain
-              pkgs.rust-analyzer
               pkgs.cargo-expand
               pkgs.cargo-watch
               pkgs.cargo-edit

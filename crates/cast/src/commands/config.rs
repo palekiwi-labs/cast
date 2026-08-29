@@ -1,4 +1,6 @@
+use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 use std::process::ExitCode;
 
 use crate::config::{
@@ -6,11 +8,24 @@ use crate::config::{
 };
 use crate::dev::workspace::get_workspace;
 use crate::user::get_user;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
+
+const DEFAULT_CAST_JSON: &str = r#"{
+  "sandbox_shell": "~/.config/cast/nix#default",
+  "nix_extra_substituters": ["https://cache.numtide.com"],
+  "nix_extra_trusted_public_keys": [
+    "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
+  ]
+}
+"#;
+
+const SANDBOX_FLAKE_TEMPLATE: &str = include_str!("../../assets/global-flake-template/flake.nix");
 
 #[derive(clap::Subcommand)]
 pub enum ConfigCommands {
+    /// Create the global cast configuration and Nix flake
+    Init,
     /// Show the current configuration
     Show,
     /// Approve the current configuration for this project
@@ -82,5 +97,48 @@ pub fn handle_config(config: &Config, command: Option<ConfigCommands>) -> Result
 
             Ok(ExitCode::SUCCESS)
         }
+        Some(ConfigCommands::Init) => unreachable!("config init handled before workspace lookup"),
     }
+}
+
+pub(crate) fn init_global_config() -> Result<()> {
+    let cast_dir = crate::paths::home_config_dir()
+        .context("Failed to resolve user config directory")?
+        .join("cast");
+
+    write_if_missing(
+        &cast_dir.join("cast.json"),
+        DEFAULT_CAST_JSON,
+        "global cast config",
+    )?;
+    write_if_missing(
+        &cast_dir.join("nix/flake.nix"),
+        SANDBOX_FLAKE_TEMPLATE,
+        "sandbox nix flake",
+    )?;
+
+    Ok(())
+}
+
+fn write_if_missing(path: &Path, contents: &str, description: &str) -> Result<()> {
+    let parent = path
+        .parent()
+        .context("Global config path has no parent directory")?;
+    fs::create_dir_all(parent)
+        .with_context(|| format!("creating global config directory {}", parent.display()))?;
+    match OpenOptions::new().write(true).create_new(true).open(path) {
+        Ok(mut file) => {
+            file.write_all(contents.as_bytes())
+                .with_context(|| format!("writing {description} {}", path.display()))?;
+            eprintln!("Created {description} at {}", path.display());
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            eprintln!("Skipped existing {description} at {}", path.display());
+        }
+        Err(error) => {
+            return Err(error).with_context(|| format!("writing {description} {}", path.display()));
+        }
+    }
+
+    Ok(())
 }

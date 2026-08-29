@@ -12,7 +12,7 @@ use crate::dev::run::RunOpts;
 /// only for the program-specific layer on top.
 ///
 /// The dev image itself is shared and harness-free (see [`crate::dev::image`]);
-/// harnesses are provided by the selected global Nix devShell.
+/// harnesses are provided by the configured sandbox Nix devShell.
 pub trait Agent {
     /// Short identifier used in container names and CLI subcommands (e.g. `"opencode"`).
     fn name(&self) -> &'static str;
@@ -39,9 +39,9 @@ pub trait Agent {
     fn build_command(
         &self,
         config: &Config,
-        opts: &RunOpts,
+        container_username: &str,
         extra_args: Vec<String>,
     ) -> Vec<String> {
-        build_command::build_command(config, opts, self.base_command(), self.name(), extra_args)
+        build_command::build_command(config, container_username, self.base_command(), extra_args)
     }
 }

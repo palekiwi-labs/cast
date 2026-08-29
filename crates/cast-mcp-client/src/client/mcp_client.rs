@@ -7,9 +7,8 @@ use rmcp::{Peer, RoleClient, ServiceExt};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-use crate::config::RemoteServerConfig;
 use super::handler::McpClientHandler;
-
+use crate::config::RemoteServerConfig;
 
 /// A clean, stateless wrapper around an rmcp client.
 pub struct McpClient {

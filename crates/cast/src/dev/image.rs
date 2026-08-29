@@ -3,9 +3,9 @@ use tempfile::TempDir;
 
 use crate::config::Config;
 use crate::dev::extra_dirs::resolve_extra_dirs;
+use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::ResolvedUser;
 use anyhow::Result;
 use tracing::info;
@@ -14,7 +14,7 @@ const IMAGE_BASE: &str = "localhost/cast";
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// The single, harness-free dev image Dockerfile. Harnesses are provided by the
-/// global Nix devShell selected at run time, not baked into the image.
+/// sandbox Nix devShell selected at run time, not baked into the image.
 const DEV_DOCKERFILE: &str = include_str!("../../assets/Dockerfile.dev");
 
 /// Get the tag for the single dev image: `localhost/cast:{cast_version}`.

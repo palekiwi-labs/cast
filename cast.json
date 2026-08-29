@@ -1,0 +1,10 @@
+{
+  "project_shell": ".#default",
+  "extra_data_volumes": {
+    "cargo": {
+      "source": "~/.cargo/",
+      "target": "~/.cargo/",
+      "type": "bind"
+    }
+  }
+}

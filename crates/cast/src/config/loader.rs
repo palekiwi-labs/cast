@@ -11,9 +11,10 @@ use tracing::info;
 /// Load configuration from all sources with proper precedence:
 /// 1. Environment variables (CAST_*)
 /// 2. MCP-specific project config (./cast-mcp.json)
-/// 3. Project config (./cast.json)
-/// 4. Global config (~/.config/cast/cast.json)
-/// 5. Defaults
+/// 3. Local project config (./cast.local.json)
+/// 4. Project config (./cast.json)
+/// 5. Global config (~/.config/cast/cast.json)
+/// 6. Defaults
 ///
 /// Environment variable format:
 /// - Use single underscore for field names: CAST_NIX_VOLUME_NAME → nix_volume_name
@@ -45,6 +46,7 @@ pub fn load_config_with_global(
 
     let config: Config = figment
         .merge(Json::file(base_dir.join("cast.json")))
+        .merge(Json::file(base_dir.join("cast.local.json")))
         .merge(Serialized::defaults(mcp_json).key("mcp"))
         .merge(Env::prefixed("CAST_").split("__"))
         .extract()
@@ -132,6 +134,91 @@ mod tests {
         assert_eq!(config.mcp.hostname, "0.0.0.0");
         // Should have port from cast-mcp.json (precedence)
         assert_eq!(config.mcp.port, 4000);
+    }
+
+    fn load_with_project_files(
+        project: Option<&str>,
+        local: Option<&str>,
+        mcp: Option<&str>,
+    ) -> Result<Config> {
+        let dir = tempfile::tempdir().unwrap();
+        for (name, body) in [
+            ("cast.json", project),
+            ("cast.local.json", local),
+            ("cast-mcp.json", mcp),
+        ] {
+            if let Some(body) = body {
+                std::fs::write(dir.path().join(name), body).unwrap();
+            }
+        }
+
+        load_config_with_global(dir.path(), None)
+    }
+
+    #[test]
+    fn test_local_config_overrides_project_config() {
+        let config = load_with_project_files(
+            Some(r#"{ "memory": "2048m" }"#),
+            Some(r#"{ "memory": "4096m" }"#),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(config.memory, "4096m");
+    }
+
+    #[test]
+    fn test_local_config_falls_through_to_project_config() {
+        let config = load_with_project_files(
+            Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#),
+            Some(r#"{ "memory": "4096m" }"#),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(config.memory, "4096m");
+        assert_eq!(config.cpus, 2.0);
+    }
+
+    #[test]
+    fn test_missing_local_config_does_not_change_project_config() {
+        let config =
+            load_with_project_files(Some(r#"{ "memory": "2048m", "cpus": 2.0 }"#), None, None)
+                .unwrap();
+
+        assert_eq!(config.memory, "2048m");
+        assert_eq!(config.cpus, 2.0);
+    }
+
+    #[test]
+    fn test_malformed_local_config_fails_to_load() {
+        let error = load_with_project_files(None, Some("{ invalid json }"), None).unwrap_err();
+
+        assert_eq!(error.to_string(), "Failed to load configuration");
+    }
+
+    #[test]
+    fn test_mcp_config_overrides_local_mcp_settings() {
+        let config = load_with_project_files(
+            None,
+            Some(r#"{ "mcp": { "port": 3000 } }"#),
+            Some(r#"{ "port": 4000 }"#),
+        )
+        .unwrap();
+
+        assert_eq!(config.mcp.port, 4000);
+    }
+
+    #[test]
+    fn test_local_config_replaces_project_arrays() {
+        let config = load_with_project_files(
+            Some(r#"{ "env_passthrough": ["PROJECT_TOKEN"] }"#),
+            Some(r#"{ "env_passthrough": ["LOCAL_TOKEN"] }"#),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(config.env_passthrough, vec!["LOCAL_TOKEN".to_string()]);
     }
 
     fn load_with_configs(global: Option<&str>, project: Option<&str>) -> Config {
@@ -236,6 +323,25 @@ mod tests {
             config.extra_env_passthrough,
             vec!["PROJECT_EXTRA".to_string()]
         );
+    }
+
+    #[test]
+    fn test_shell_fields_load_from_global_and_project_configs() {
+        // Global cast.json seeds the sandbox shell ref; the project
+        // cast.json adds the project ref and disables one layer. Both
+        // must survive the figment merge stack with correct precedence.
+        let config = load_with_configs(
+            Some(r#"{ "sandbox_shell": "~/.config/cast/nix#default" }"#),
+            Some(r#"{ "project_shell": ".#ai", "use_project_shell": false }"#),
+        );
+
+        assert_eq!(
+            config.sandbox_shell.as_deref(),
+            Some("~/.config/cast/nix#default")
+        );
+        assert_eq!(config.project_shell.as_deref(), Some(".#ai"));
+        assert!(config.use_sandbox_shell);
+        assert!(!config.use_project_shell);
     }
 
     #[test]

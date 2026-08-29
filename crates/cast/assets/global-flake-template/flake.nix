@@ -2,7 +2,7 @@
   description = "cast global harness devShells";
 
   # Binary caches are not declared here: `cast` provisions them daemon-side
-  # from `~/.config/cast/cast.json`, seeded on first run.
+  # from `~/.config/cast/cast.json`, created by `cast config init`.
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -36,16 +36,13 @@
       in
       {
         devShells = {
-          # `default` provides the shared base tooling only (no harness).
-          default = mkShell "default" [ ];
+          # The default shell provides every harness plus the shared tooling.
+          default = mkShell "default" [ opencode pi claudecode ];
 
-          # Per-harness shells (selected by `cast run <agent>`).
+          # Per-harness shells selectable through `sandbox_shell`.
           opencode = mkShell "opencode" [ opencode ];
           pi = mkShell "pi" [ pi ];
           claudecode = mkShell "claudecode" [ claudecode ];
-
-          # Universal shell exposing every harness in one environment.
-          universal = mkShell "universal" [ opencode pi claudecode ];
         };
       });
 }
