@@ -40,6 +40,24 @@ pub fn build_service_docker_args(
     build_run_args(&container_name, image_tag, flags, Some(command))
 }
 
+pub fn build_service_healthcheck_args(
+    context: &ServiceContext,
+    service_name: Option<&str>,
+) -> Vec<String> {
+    vec![
+        "exec".to_string(),
+        "-e".to_string(),
+        format!(
+            "HERDR_SESSION={}",
+            context.multiplexer_session_name(service_name)
+        ),
+        context.container_name(service_name),
+        "herdr".to_string(),
+        "api".to_string(),
+        "snapshot".to_string(),
+    ]
+}
+
 pub fn up(
     config: &ApprovedConfig,
     context: &ServiceContext,
@@ -180,5 +198,28 @@ mod tests {
             "herdr".to_string(),
             "server".to_string()
         ]));
+    }
+
+    #[test]
+    fn service_healthcheck_targets_the_isolated_mux_session() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_healthcheck_args(&context, Some("isolated")),
+            vec![
+                "exec",
+                "-e",
+                "HERDR_SESSION=cast-a1b2c3d4e5f6-isolated",
+                "cast-my-app-a1b2c3d4e5f6-isolated",
+                "herdr",
+                "api",
+                "snapshot",
+            ]
+        );
     }
 }
