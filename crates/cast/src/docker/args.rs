@@ -33,6 +33,18 @@ pub fn build_ps_args(name: &str) -> Vec<String> {
     ]
 }
 
+/// Build arguments for `docker ps --all` to check whether a container exists.
+pub fn build_ps_all_args(name: &str) -> Vec<String> {
+    vec![
+        "ps".to_string(),
+        "--all".to_string(),
+        "--filter".to_string(),
+        format!("name=^{}$", name),
+        "--format".to_string(),
+        "{{.Names}}".to_string(),
+    ]
+}
+
 /// Build arguments for `docker images` command to check if an image exists
 pub fn build_image_exists_args(tag: &str) -> Vec<String> {
     vec![
@@ -151,6 +163,21 @@ mod tests {
                 "name=^my-container$",
                 "--format",
                 "{{.Names}}"
+            ]
+        );
+    }
+
+    #[test]
+    fn build_ps_all_args_includes_stopped_containers() {
+        assert_eq!(
+            build_ps_all_args("cast-project-a1b2c3d4e5f6"),
+            vec![
+                "ps",
+                "--all",
+                "--filter",
+                "name=^cast-project-a1b2c3d4e5f6$",
+                "--format",
+                "{{.Names}}",
             ]
         );
     }
