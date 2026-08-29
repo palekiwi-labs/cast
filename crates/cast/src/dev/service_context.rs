@@ -51,6 +51,20 @@ impl ServiceContext {
             workspace_id,
         })
     }
+
+    pub fn container_name(&self, service_name: Option<&str>) -> String {
+        let basename = self
+            .worktree_root
+            .file_name()
+            .expect("Git worktree root should have a basename")
+            .to_string_lossy();
+        let base = format!("cast-{basename}-{}", self.workspace_id);
+
+        match service_name {
+            Some(name) => format!("{base}-{name}"),
+            None => base,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -140,5 +154,20 @@ mod tests {
 
         assert_ne!(primary.worktree_root, linked.worktree_root);
         assert_ne!(primary.workspace_id, linked.workspace_id);
+    }
+
+    #[test]
+    fn service_container_names_include_worktree_identity_and_optional_name() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(context.container_name(None), "cast-my-app-a1b2c3d4e5f6");
+        assert_eq!(
+            context.container_name(Some("isolated")),
+            "cast-my-app-a1b2c3d4e5f6-isolated"
+        );
     }
 }
