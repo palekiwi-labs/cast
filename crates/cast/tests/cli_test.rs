@@ -154,6 +154,9 @@ fn test_cast_exec_accepts_arbitrary_command() {
         .assert()
         .success()
         .stdout(predicate::str::contains("<CMD>..."))
+        .stdout(predicate::str::contains("--name <NAME>"))
+        .stdout(predicate::str::contains("--headless"))
+        .stdout(predicate::str::contains("--raw"))
         .stdout(predicate::str::contains("opencode").not());
 }
 
