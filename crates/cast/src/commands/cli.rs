@@ -104,7 +104,17 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Down { flags: _ }) => anyhow::bail!("cast down is not implemented yet"),
-        Some(Commands::Status { flags: _ }) => anyhow::bail!("cast status is not implemented yet"),
+        Some(Commands::Status { flags }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = ServiceContext::resolve(&cwd)?;
+            let service_status = dev::service::status(&context, flags.name.as_deref())?;
+            println!(
+                "{}: {}",
+                context.container_name(flags.name.as_deref()),
+                service_status
+            );
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Exec { flags: _, cmd: _ }) => {
             anyhow::bail!("cast exec is not implemented yet")
         }

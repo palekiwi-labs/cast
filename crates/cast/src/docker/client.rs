@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -78,6 +78,12 @@ impl Drop for HeadlessSignalGuard {
 }
 
 impl DockerClient {
+    pub fn container_exists(&self, name: &str) -> Result<bool> {
+        let ps_args = args::build_ps_all_args(name);
+        let output = self.query_command(ps_args)?;
+        Ok(!output.trim().is_empty())
+    }
+
     pub fn is_container_running(&self, name: &str) -> Result<bool> {
         let ps_args = args::build_ps_args(name);
         let output = self.query_command(ps_args)?;
@@ -108,6 +114,18 @@ impl DockerClient {
         }
 
         Ok(())
+    }
+
+    pub fn command_succeeds(&self, args: Vec<String>) -> Result<bool> {
+        debug!(command = "docker", args = ?args, "checking command status");
+        let status = Command::new("docker")
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+        Ok(status.success())
     }
 
     pub fn query_command(&self, args: Vec<String>) -> Result<String> {

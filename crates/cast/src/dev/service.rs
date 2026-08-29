@@ -12,6 +12,34 @@ use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceStatus {
+    Absent,
+    Stopped,
+    Running,
+    MuxUnhealthy,
+}
+
+fn classify_service_status(exists: bool, running: bool, mux_healthy: bool) -> ServiceStatus {
+    match (exists, running, mux_healthy) {
+        (false, _, _) => ServiceStatus::Absent,
+        (true, false, _) => ServiceStatus::Stopped,
+        (true, true, false) => ServiceStatus::MuxUnhealthy,
+        (true, true, true) => ServiceStatus::Running,
+    }
+}
+
+impl std::fmt::Display for ServiceStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ServiceStatus::Absent => "absent",
+            ServiceStatus::Stopped => "stopped",
+            ServiceStatus::Running => "running",
+            ServiceStatus::MuxUnhealthy => "running (multiplexer unhealthy)",
+        })
+    }
+}
+
 pub fn build_service_command(config: &Config, username: &str) -> Vec<String> {
     build_sandbox_command(config, username, "herdr", vec!["server".to_string()])
 }
@@ -105,6 +133,24 @@ pub fn up(
     eprintln!("service started: {container_name}");
 
     Ok(())
+}
+
+pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<ServiceStatus> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    let exists = docker.container_exists(&container_name)?;
+    if !exists {
+        return Ok(classify_service_status(false, false, false));
+    }
+
+    let running = docker.is_container_running(&container_name)?;
+    if !running {
+        return Ok(classify_service_status(true, false, false));
+    }
+
+    let mux_healthy =
+        docker.command_succeeds(build_service_healthcheck_args(context, service_name))?;
+    Ok(classify_service_status(true, true, mux_healthy))
 }
 
 #[cfg(test)]
@@ -220,6 +266,26 @@ mod tests {
                 "api",
                 "snapshot",
             ]
+        );
+    }
+
+    #[test]
+    fn service_status_distinguishes_lifecycle_and_mux_health() {
+        assert_eq!(
+            classify_service_status(false, false, false),
+            ServiceStatus::Absent
+        );
+        assert_eq!(
+            classify_service_status(true, false, false),
+            ServiceStatus::Stopped
+        );
+        assert_eq!(
+            classify_service_status(true, true, false),
+            ServiceStatus::MuxUnhealthy
+        );
+        assert_eq!(
+            classify_service_status(true, true, true),
+            ServiceStatus::Running
         );
     }
 }
