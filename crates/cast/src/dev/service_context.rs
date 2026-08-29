@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -7,6 +8,7 @@ use std::process::Command;
 pub struct ServiceContext {
     pub worktree_root: PathBuf,
     pub relative_cwd: PathBuf,
+    pub workspace_id: String,
 }
 
 impl ServiceContext {
@@ -40,10 +42,13 @@ impl ServiceContext {
             .strip_prefix(&worktree_root)
             .context("Current directory is outside the resolved Git worktree")?
             .to_path_buf();
+        let digest = Sha256::digest(worktree_root.as_os_str().as_encoded_bytes());
+        let workspace_id = hex::encode(&digest[..6]);
 
         Ok(Self {
             worktree_root,
             relative_cwd,
+            workspace_id,
         })
     }
 }
@@ -76,5 +81,64 @@ mod tests {
             from_subdirectory.relative_cwd,
             std::path::Path::new("crates/app")
         );
+    }
+
+    #[test]
+    fn linked_worktrees_have_distinct_service_identities() {
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let primary = temp.path().join("primary");
+        let linked = temp.path().join("linked");
+        fs::create_dir_all(&primary).expect("create primary worktree");
+        let init = Command::new("git")
+            .args(["init", "--quiet"])
+            .arg(&primary)
+            .status()
+            .expect("run git init");
+        assert!(init.success(), "git init should succeed");
+        fs::write(primary.join("README.md"), "service context test").expect("write tracked file");
+        let commit = Command::new("git")
+            .arg("-C")
+            .arg(&primary)
+            .args([
+                "-c",
+                "user.name=Cast Test",
+                "-c",
+                "user.email=cast@example.invalid",
+                "add",
+                ".",
+            ])
+            .status()
+            .expect("stage initial file");
+        assert!(commit.success(), "git add should succeed");
+        let commit = Command::new("git")
+            .arg("-C")
+            .arg(&primary)
+            .args([
+                "-c",
+                "user.name=Cast Test",
+                "-c",
+                "user.email=cast@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "initial",
+            ])
+            .status()
+            .expect("create initial commit");
+        assert!(commit.success(), "git commit should succeed");
+        let add_worktree = Command::new("git")
+            .arg("-C")
+            .arg(&primary)
+            .args(["worktree", "add", "--quiet", "-b", "linked"])
+            .arg(&linked)
+            .status()
+            .expect("create linked worktree");
+        assert!(add_worktree.success(), "git worktree add should succeed");
+
+        let primary = ServiceContext::resolve(&primary).expect("resolve primary worktree");
+        let linked = ServiceContext::resolve(&linked).expect("resolve linked worktree");
+
+        assert_ne!(primary.worktree_root, linked.worktree_root);
+        assert_ne!(primary.workspace_id, linked.workspace_id);
     }
 }
