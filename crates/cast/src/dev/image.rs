@@ -77,8 +77,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn image_tag_is_plain_versioned() {
-        assert_eq!(image_tag(), format!("localhost/cast:{}", CAST_VERSION));
+    fn spike_image_tag_is_isolated_from_releases() {
+        assert_eq!(image_tag(), "localhost/cast:0.3.0-herdr-spike");
     }
 
     #[test]
