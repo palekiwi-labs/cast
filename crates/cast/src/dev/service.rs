@@ -1,10 +1,16 @@
 use std::collections::BTreeSet;
 
-use crate::config::Config;
+use anyhow::Result;
+
+use crate::config::{ApprovedConfig, Config};
 use crate::dev::build_command::build_sandbox_command;
-use crate::dev::run::{build_service_run_flags, RunOpts};
+use crate::dev::run::{build_service_run_flags, resolve_run_opts, RunMode, RunOpts, SessionFlags};
 use crate::dev::service_context::ServiceContext;
 use crate::docker::args::build_run_args;
+use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
+use crate::user::get_user;
+use crate::{dev, nix_daemon};
 
 pub fn build_service_command(config: &Config, username: &str) -> Vec<String> {
     build_sandbox_command(config, username, "herdr", vec!["server".to_string()])
@@ -32,6 +38,55 @@ pub fn build_service_docker_args(
     let command = build_service_command(config, &opts.user.username);
 
     build_run_args(&container_name, image_tag, flags, Some(command))
+}
+
+pub fn up(
+    config: &ApprovedConfig,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+) -> Result<()> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    if docker.is_container_running(&container_name)? {
+        eprintln!("service is already running: {container_name}");
+        return Ok(());
+    }
+
+    let user = get_user()?;
+    let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
+    let run_opts = resolve_run_opts(
+        user,
+        workspace,
+        0,
+        &SessionFlags {
+            mode: RunMode::Headless {
+                token: "service".to_string(),
+            },
+            name: service_name.map(str::to_string),
+            publish: false,
+        },
+    );
+
+    nix_daemon::ensure_running(&docker, config)?;
+    dev::image::ensure_dev_image(&docker, config, &run_opts.user, BuildOptions::default())?;
+
+    let host_env_names = std::env::vars()
+        .filter(|(_, value)| !value.is_empty())
+        .map(|(name, _)| name)
+        .collect::<BTreeSet<_>>();
+    let image_tag = dev::image::image_tag();
+    let args = build_service_docker_args(
+        config,
+        &run_opts,
+        context,
+        service_name,
+        &image_tag,
+        &host_env_names,
+    );
+    docker.run_command(args)?;
+    eprintln!("service started: {container_name}");
+
+    Ok(())
 }
 
 #[cfg(test)]

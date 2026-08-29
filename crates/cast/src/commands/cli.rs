@@ -1,12 +1,13 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{ApprovedConfig, Config, load_config};
+use crate::config::{load_config, load_config_from, ApprovedConfig, Config};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
 use crate::dev::opencode::OpenCode;
 use crate::dev::pi::Pi;
+use crate::dev::service_context::ServiceContext;
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -52,8 +53,25 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    // Load config once at startup for efficiency and consistency
-    let cfg = load_config()?;
+    // Service commands are scoped to the Git worktree, even when invoked from
+    // one of its subdirectories. Other commands retain their existing cwd
+    // configuration scope.
+    let cfg = if matches!(
+        &cli.command,
+        Some(
+            Commands::Up { .. }
+                | Commands::Down { .. }
+                | Commands::Status { .. }
+                | Commands::Exec { .. }
+                | Commands::Shell { .. }
+        )
+    ) {
+        let cwd = std::env::current_dir().context("Failed to get current directory")?;
+        let context = ServiceContext::resolve(&cwd)?;
+        load_config_from(&context.worktree_root)?
+    } else {
+        load_config()?
+    };
 
     // Initialize file logger
     init_file_logger()?;
@@ -78,7 +96,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             nix_daemon::handle_nix_daemon(&approved, command)
         }
         Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
-        Some(Commands::Up { flags: _ }) => anyhow::bail!("cast up is not implemented yet"),
+        Some(Commands::Up { flags }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = ServiceContext::resolve(&cwd)?;
+            let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
+            dev::service::up(&approved, &context, flags.name.as_deref())?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Down { flags: _ }) => anyhow::bail!("cast down is not implemented yet"),
         Some(Commands::Status { flags: _ }) => anyhow::bail!("cast status is not implemented yet"),
         Some(Commands::Exec { flags: _, cmd: _ }) => {
