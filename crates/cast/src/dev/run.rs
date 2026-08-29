@@ -437,12 +437,17 @@ pub fn build_service_run_flags(
     config: &Config,
     opts: &RunOpts,
     host_env_names: &BTreeSet<String>,
+    multiplexer_session: &str,
 ) -> Vec<String> {
     let mut run_args = build_docker_run_flags(config, opts, host_env_names);
     run_args.retain(|arg| arg != "--rm");
     if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
         run_args.drain(position..=position + 1);
     }
+    run_args.extend([
+        "-e".to_string(),
+        format!("HERDR_SESSION={multiplexer_session}"),
+    ]);
     run_args.splice(
         0..0,
         ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
@@ -579,7 +584,7 @@ mod tests {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(&config, &opts, &no_host_env());
+        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
 
         assert_eq!(
             &run_args[..4],
@@ -594,10 +599,20 @@ mod tests {
         let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         opts.publish = true;
 
-        let run_args = build_service_run_flags(&config, &opts, &no_host_env());
+        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
 
         assert!(!run_args.iter().any(|arg| arg == "-p"));
         assert!(!run_args.iter().any(|arg| arg == "32768:80"));
+    }
+
+    #[test]
+    fn service_run_injects_the_isolated_multiplexer_session() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_service_run_flags(&config, &opts, &no_host_env(), "cast-a1b2c3d4e5f6");
+
+        assert!(run_args.contains(&"HERDR_SESSION=cast-a1b2c3d4e5f6".to_string()));
     }
 
     #[test]
