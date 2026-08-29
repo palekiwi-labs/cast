@@ -432,6 +432,21 @@ pub fn build_docker_run_flags(
     run_args
 }
 
+/// Build Docker flags for a detached, long-lived service container.
+pub fn build_service_run_flags(
+    config: &Config,
+    opts: &RunOpts,
+    host_env_names: &BTreeSet<String>,
+) -> Vec<String> {
+    let mut run_args = build_docker_run_flags(config, opts, host_env_names);
+    run_args.retain(|arg| arg != "--rm");
+    run_args.splice(
+        0..0,
+        ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
+    );
+    run_args
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,6 +571,20 @@ mod tests {
         assert!(
             run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
         );
+    }
+
+    #[test]
+    fn service_run_is_detached_and_stops_with_sigint() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_service_run_flags(&config, &opts, &no_host_env());
+
+        assert_eq!(
+            &run_args[..4],
+            ["--detach", "--init", "--stop-signal", "SIGINT"]
+        );
+        assert!(!run_args.iter().any(|arg| arg == "--rm"));
     }
 
     #[test]
