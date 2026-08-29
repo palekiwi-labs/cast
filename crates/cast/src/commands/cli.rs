@@ -72,10 +72,8 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Some(Commands::Exec { flags: _, cmd: _ }) => {
             anyhow::bail!("cast exec is not implemented yet")
         }
-        Some(Commands::Shell { agent, raw }) => {
-            let approved = verify_config(cfg)?;
-            let status = dev::shell(agent.as_agent(), &approved, raw)?;
-            Ok(to_exit_code(status))
+        Some(Commands::Shell { flags: _, raw: _ }) => {
+            anyhow::bail!("cast shell is not implemented yet")
         }
         #[cfg(feature = "mcp")]
         Some(Commands::Mcp { command }) => {
@@ -115,17 +113,6 @@ pub enum RunAgent {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
         extra_args: Vec<String>,
     },
-}
-
-#[derive(Subcommand)]
-#[command(subcommand_required = true)]
-pub enum ShellAgent {
-    /// Drop into an interactive shell in the OpenCode container
-    Opencode,
-    /// Drop into an interactive shell in the Pi container
-    Pi,
-    /// Drop into an interactive shell in the ClaudeCode container
-    Claudecode,
 }
 
 #[cfg(feature = "mcp")]
@@ -213,13 +200,13 @@ pub enum Commands {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
-    /// Drop into an interactive shell in an agent's container
+    /// Drop into an interactive shell in the service container
     Shell {
+        #[command(flatten)]
+        flags: ServiceFlags,
         /// Skip Nix devshell wrapping and open a bare shell
         #[arg(long)]
         raw: bool,
-        #[command(subcommand)]
-        agent: ShellAgent,
     },
     #[cfg(feature = "mcp")]
     /// Start the MCP server to expose tools to coding agents
@@ -235,16 +222,6 @@ impl RunAgent {
             RunAgent::Opencode { .. } => &OpenCode,
             RunAgent::Pi { .. } => &Pi,
             RunAgent::Claudecode { .. } => &ClaudeCode,
-        }
-    }
-}
-
-impl ShellAgent {
-    pub fn as_agent(&self) -> &'static dyn Agent {
-        match self {
-            ShellAgent::Opencode => &OpenCode,
-            ShellAgent::Pi => &Pi,
-            ShellAgent::Claudecode => &ClaudeCode,
         }
     }
 }
