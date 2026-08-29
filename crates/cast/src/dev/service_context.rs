@@ -3,6 +3,8 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::dev::workspace::ResolvedWorkspace;
+
 /// Worktree-scoped context for a service command invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServiceContext {
@@ -13,6 +15,14 @@ pub struct ServiceContext {
 }
 
 impl ServiceContext {
+    pub fn workspace(&self, host_home: Option<&Path>, username: &str) -> ResolvedWorkspace {
+        ResolvedWorkspace::from_host_root(self.worktree_root.clone(), host_home, username)
+    }
+
+    pub fn container_workdir(&self, workspace: &ResolvedWorkspace) -> PathBuf {
+        workspace.container_path.join(&self.relative_cwd)
+    }
+
     pub fn resolve(cwd: &Path) -> Result<Self> {
         let cwd = cwd
             .canonicalize()
@@ -231,6 +241,28 @@ mod tests {
         assert_eq!(
             context.multiplexer_session_name(Some("isolated")),
             "cast-a1b2c3d4e5f6-isolated"
+        );
+    }
+
+    #[test]
+    fn service_workspace_mounts_the_worktree_and_preserves_invocation_cwd() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::from("crates/app"),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        let workspace = context.workspace(Some(Path::new("/home/alice")), "alice");
+
+        assert_eq!(workspace.root, context.worktree_root);
+        assert_eq!(
+            workspace.container_path,
+            PathBuf::from("/home/alice/projects/my-app")
+        );
+        assert_eq!(
+            context.container_workdir(&workspace),
+            PathBuf::from("/home/alice/projects/my-app/crates/app")
         );
     }
 }
