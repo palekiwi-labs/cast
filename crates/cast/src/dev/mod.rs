@@ -13,6 +13,7 @@ pub mod opencode;
 pub mod pi;
 pub mod port;
 pub mod run;
+pub mod service;
 pub mod service_context;
 pub mod shadow_mounts;
 pub mod shell;
