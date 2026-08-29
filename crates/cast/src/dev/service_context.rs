@@ -65,6 +65,15 @@ impl ServiceContext {
             None => base,
         }
     }
+
+    pub fn multiplexer_session_name(&self, service_name: Option<&str>) -> String {
+        let base = format!("cast-{}", self.workspace_id);
+
+        match service_name {
+            Some(name) => format!("{base}-{name}"),
+            None => base,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -181,5 +190,20 @@ mod tests {
         assert!(error
             .to_string()
             .contains("Current directory is not in a Git worktree"));
+    }
+
+    #[test]
+    fn multiplexer_sessions_are_isolated_by_worktree_and_service_name() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(context.multiplexer_session_name(None), "cast-a1b2c3d4e5f6");
+        assert_eq!(
+            context.multiplexer_session_name(Some("isolated")),
+            "cast-a1b2c3d4e5f6-isolated"
+        );
     }
 }
