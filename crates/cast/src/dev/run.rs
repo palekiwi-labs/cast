@@ -314,7 +314,12 @@ pub fn build_docker_run_flags(
         TtyMode::Headless => vec![],
     };
 
-    let mut run_args: Vec<String> = vec!["--rm".to_string()];
+    // `--init` runs docker-init (tini) as PID 1. Agents and shells spawn deep
+    // process trees whose children are frequently orphaned; without a reaping
+    // init they linger as zombies and accumulate against `--pids-limit` until
+    // the container can no longer fork. tini also forwards signals, so Ctrl+C
+    // still reaches nested processes.
+    let mut run_args: Vec<String> = vec!["--rm".to_string(), "--init".to_string()];
     run_args.extend(tty_flags);
     run_args.extend([
         // Security hardening
@@ -535,6 +540,15 @@ mod tests {
         // Generic flags present
         assert!(run_args.contains(&"--rm".to_string()));
         assert!(run_args.contains(&"-it".to_string()));
+
+        // An init supervisor must run as PID 1 so orphaned children are
+        // reaped instead of accumulating against --pids-limit.
+        assert_eq!(
+            run_args.iter().filter(|a| *a == "--init").count(),
+            1,
+            "expected exactly one --init flag: {run_args:?}"
+        );
+
         assert!(run_args.contains(&"no-new-privileges".to_string()));
         assert!(run_args.contains(&"USER=alice".to_string()));
         assert!(run_args.contains(&"/home/alice/project:/home/alice/project:rw".to_string()));
@@ -870,6 +884,21 @@ mod tests {
         assert!(
             !run_args.contains(&"-t".to_string()),
             "Should NOT contain -t in headless mode"
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_headless_includes_init() {
+        // Headless runs orphan the most subprocesses (fire-and-forget agent
+        // invocations), so the init supervisor matters here too.
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert_eq!(
+            run_args.iter().filter(|a| *a == "--init").count(),
+            1,
+            "expected exactly one --init flag: {run_args:?}"
         );
     }
 

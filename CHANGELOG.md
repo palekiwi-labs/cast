@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Development and execution containers now run with `--init`, so `docker-init`
+  (tini) is PID 1 and reaps orphaned children. Agents and shells spawn deep
+  process trees whose orphans previously lingered as zombies and accumulated
+  against `--pids-limit` until the container could no longer fork. tini also
+  forwards signals, so Ctrl+C still reaches nested processes.
 - The global flake template no longer declares a `nixConfig` cache block. It
   made nix prompt for approval on every devshell entry, a prompt the
   non-trusted dev user cannot usefully answer since the daemon rejects the
