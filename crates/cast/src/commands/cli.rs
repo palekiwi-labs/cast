@@ -1,7 +1,7 @@
 use std::process::{ExitCode, ExitStatus};
 
 use super::{config, nix_daemon, port};
-use crate::config::{load_config, load_config_from, ApprovedConfig, Config};
+use crate::config::{ApprovedConfig, Config, load_config, load_config_from};
 use crate::dev;
 use crate::dev::agent::Agent;
 use crate::dev::claudecode::ClaudeCode;
@@ -103,7 +103,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             dev::service::up(&approved, &context, flags.name.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
-        Some(Commands::Down { flags: _ }) => anyhow::bail!("cast down is not implemented yet"),
+        Some(Commands::Down { flags }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = ServiceContext::resolve(&cwd)?;
+            dev::service::down(&context, flags.name.as_deref())?;
+            Ok(ExitCode::SUCCESS)
+        }
         Some(Commands::Status { flags }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
             let context = ServiceContext::resolve(&cwd)?;

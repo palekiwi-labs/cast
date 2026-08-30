@@ -7,7 +7,7 @@ use crate::dev::build_command::build_sandbox_command;
 use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_service_run_flags, resolve_run_opts};
 use crate::dev::service_context::ServiceContext;
 use crate::docker::BuildOptions;
-use crate::docker::args::build_run_args;
+use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
 use crate::docker::client::DockerClient;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
@@ -65,6 +65,20 @@ pub fn build_service_docker_args(
     build_run_args(&container_name, image_tag, flags, Some(command))
 }
 
+fn build_service_down_commands(
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    running: bool,
+) -> Vec<Vec<String>> {
+    let container_name = context.container_name(service_name);
+    let mut commands = Vec::with_capacity(if running { 2 } else { 1 });
+    if running {
+        commands.push(build_stop_args(&container_name));
+    }
+    commands.push(build_remove_args(&container_name));
+    commands
+}
+
 pub fn up(
     config: &ApprovedConfig,
     context: &ServiceContext,
@@ -110,6 +124,23 @@ pub fn up(
     );
     docker.run_command(args)?;
     eprintln!("service started: {container_name}");
+
+    Ok(())
+}
+
+pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    if !docker.container_exists(&container_name)? {
+        eprintln!("service is already absent: {container_name}");
+        return Ok(());
+    }
+
+    let running = docker.is_container_running(&container_name)?;
+    for command in build_service_down_commands(context, service_name, running) {
+        docker.run_command(command)?;
+    }
+    eprintln!("service removed: {container_name}");
 
     Ok(())
 }
@@ -224,5 +255,38 @@ mod tests {
         assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
         assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
         assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
+    }
+
+    #[test]
+    fn service_down_stops_then_removes_the_named_running_container() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_down_commands(&context, Some("isolated"), true),
+            vec![
+                vec!["stop", "cast-my-app-a1b2c3d4e5f6-isolated"],
+                vec!["rm", "cast-my-app-a1b2c3d4e5f6-isolated"],
+            ]
+        );
+    }
+
+    #[test]
+    fn service_down_only_removes_an_already_stopped_container() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_down_commands(&context, None, false),
+            vec![vec!["rm", "cast-my-app-a1b2c3d4e5f6"]]
+        );
     }
 }

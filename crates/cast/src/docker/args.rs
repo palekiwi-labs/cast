@@ -83,6 +83,11 @@ pub fn build_stop_args(name: &str) -> Vec<String> {
     vec!["stop".to_string(), name.to_string()]
 }
 
+/// Build arguments for `docker rm` command.
+pub fn build_remove_args(name: &str) -> Vec<String> {
+    vec!["rm".to_string(), name.to_string()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
