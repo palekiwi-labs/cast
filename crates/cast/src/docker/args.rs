@@ -45,6 +45,16 @@ pub fn build_ps_all_args(name: &str) -> Vec<String> {
     ]
 }
 
+/// Build arguments for observing full commands in a running container.
+pub fn build_top_args(name: &str) -> Vec<String> {
+    vec![
+        "top".to_string(),
+        name.to_string(),
+        "-eo".to_string(),
+        "args".to_string(),
+    ]
+}
+
 /// Build arguments for `docker images` command to check if an image exists
 pub fn build_image_exists_args(tag: &str) -> Vec<String> {
     vec![
@@ -184,6 +194,14 @@ mod tests {
                 "--format",
                 "{{.Names}}",
             ]
+        );
+    }
+
+    #[test]
+    fn build_top_args_reports_full_process_commands() {
+        assert_eq!(
+            build_top_args("cast-project-a1b2c3d4e5f6"),
+            vec!["top", "cast-project-a1b2c3d4e5f6", "-eo", "args"],
         );
     }
 
