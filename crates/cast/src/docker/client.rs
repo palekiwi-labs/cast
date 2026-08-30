@@ -1,4 +1,4 @@
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -90,6 +90,33 @@ impl DockerClient {
         Ok(!output.trim().is_empty())
     }
 
+    pub fn container_processes(&self, name: &str) -> Result<String> {
+        self.query_command(args::build_top_args(name))
+    }
+
+    pub fn container_logs(&self, name: &str, tail: usize) -> Result<String> {
+        let command_args = args::build_logs_args(name, tail);
+        debug!(command = "docker", args = ?command_args, "querying container logs");
+        let output = Command::new("docker")
+            .args(&command_args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!(
+                "`docker {}` failed ({})\n{}",
+                command_args.join(" "),
+                output.status,
+                stderr.trim()
+            );
+        }
+
+        let mut logs = String::from_utf8_lossy(&output.stdout).to_string();
+        logs.push_str(&String::from_utf8_lossy(&output.stderr));
+        Ok(logs)
+    }
+
     pub fn image_exists(&self, tag: &str) -> Result<bool> {
         let image_args = args::build_image_exists_args(tag);
         let output = self.query_command(image_args)?;
@@ -134,6 +161,18 @@ impl DockerClient {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    }
+
+    pub fn command_succeeds(&self, args: Vec<String>) -> Result<bool> {
+        debug!(command = "docker", args = ?args, "probing command");
+        let status = Command::new("docker")
+            .args(&args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+        Ok(status.success())
     }
 
     pub fn stream_command(&self, args: Vec<String>) -> Result<()> {

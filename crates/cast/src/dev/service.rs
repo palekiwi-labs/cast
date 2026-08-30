@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::build_command::build_sandbox_command;
@@ -11,6 +12,11 @@ use crate::docker::client::DockerClient;
 use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
+
+const PROVISIONING_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const READINESS_TIMEOUT: Duration = Duration::from_secs(30);
+const STARTUP_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const READINESS_PROBE_TIMEOUT: &str = "10s";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServiceStatus {
@@ -25,6 +31,14 @@ fn classify_service_status(exists: bool, running: bool) -> ServiceStatus {
         (true, false) => ServiceStatus::Stopped,
         (true, true) => ServiceStatus::Running,
     }
+}
+
+fn service_process_started(processes: &str) -> bool {
+    processes.lines().any(|line| {
+        let mut words = line.split_whitespace();
+        let executable = words.next().and_then(|word| word.rsplit('/').next());
+        executable == Some("herdr") && words.next() == Some("server")
+    })
 }
 
 impl std::fmt::Display for ServiceStatus {
@@ -55,6 +69,10 @@ pub fn build_service_readiness_probe_args(
             context.multiplexer_session_name(service_name)
         ),
         context.container_name(service_name),
+        "timeout".to_string(),
+        "--signal=TERM".to_string(),
+        "--kill-after=1s".to_string(),
+        READINESS_PROBE_TIMEOUT.to_string(),
     ];
     args.extend(build_sandbox_command(
         config,
@@ -89,6 +107,88 @@ pub fn build_service_docker_args(
     build_run_args(&container_name, image_tag, flags, Some(command))
 }
 
+fn exited_during_startup(
+    docker: &DockerClient,
+    container_name: &str,
+    stage: &str,
+) -> anyhow::Error {
+    let logs = docker
+        .container_logs(container_name, 100)
+        .unwrap_or_else(|error| format!("failed to read container logs: {error}"));
+    anyhow::anyhow!(
+        "service container exited during {stage}: {container_name}\n\nrecent logs:\n{}",
+        logs.trim()
+    )
+}
+
+fn wait_for_service_process(docker: &DockerClient, container_name: &str) -> Result<()> {
+    let started = Instant::now();
+    loop {
+        if !docker.is_container_running(container_name)? {
+            return Err(exited_during_startup(
+                docker,
+                container_name,
+                "sandbox provisioning",
+            ));
+        }
+        if service_process_started(&docker.container_processes(container_name)?) {
+            return Ok(());
+        }
+        if started.elapsed() >= PROVISIONING_TIMEOUT {
+            bail!(
+                "timed out after {}s waiting for sandbox provisioning: {container_name}",
+                PROVISIONING_TIMEOUT.as_secs()
+            );
+        }
+        std::thread::sleep(STARTUP_POLL_INTERVAL);
+    }
+}
+
+fn wait_for_service_api(
+    docker: &DockerClient,
+    config: &Config,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    username: &str,
+) -> Result<()> {
+    let container_name = context.container_name(service_name);
+    let probe_args = build_service_readiness_probe_args(config, context, service_name, username);
+    let started = Instant::now();
+    loop {
+        if !docker.is_container_running(&container_name)? {
+            return Err(exited_during_startup(
+                docker,
+                &container_name,
+                "multiplexer readiness",
+            ));
+        }
+        if docker.command_succeeds(probe_args.clone())? {
+            return Ok(());
+        }
+        if started.elapsed() >= READINESS_TIMEOUT {
+            bail!(
+                "timed out after {}s waiting for multiplexer readiness: {container_name}",
+                READINESS_TIMEOUT.as_secs()
+            );
+        }
+        std::thread::sleep(STARTUP_POLL_INTERVAL);
+    }
+}
+
+fn wait_for_service_ready(
+    docker: &DockerClient,
+    config: &Config,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    username: &str,
+) -> Result<()> {
+    let container_name = context.container_name(service_name);
+    eprintln!("waiting for sandbox provisioning: {container_name}");
+    wait_for_service_process(docker, &container_name)?;
+    eprintln!("waiting for multiplexer readiness: {container_name}");
+    wait_for_service_api(docker, config, context, service_name, username)
+}
+
 fn build_service_down_commands(
     context: &ServiceContext,
     service_name: Option<&str>,
@@ -110,12 +210,14 @@ pub fn up(
 ) -> Result<()> {
     let docker = DockerClient;
     let container_name = context.container_name(service_name);
+    let user = get_user()?;
     if docker.is_container_running(&container_name)? {
         eprintln!("service is already running: {container_name}");
+        wait_for_service_ready(&docker, config, context, service_name, &user.username)?;
+        eprintln!("service ready: {container_name}");
         return Ok(());
     }
 
-    let user = get_user()?;
     let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
     let run_opts = resolve_run_opts(
         user,
@@ -147,7 +249,14 @@ pub fn up(
         &host_env_names,
     );
     docker.run_command(args)?;
-    eprintln!("service started: {container_name}");
+    wait_for_service_ready(
+        &docker,
+        config,
+        context,
+        service_name,
+        &run_opts.user.username,
+    )?;
+    eprintln!("service ready: {container_name}");
 
     Ok(())
 }
@@ -247,6 +356,10 @@ mod tests {
                 "-e",
                 "HERDR_SESSION=cast-a1b2c3d4e5f6-isolated",
                 "cast-my-app-a1b2c3d4e5f6-isolated",
+                "timeout",
+                "--signal=TERM",
+                "--kill-after=1s",
+                "10s",
                 "nix",
                 "develop",
                 "/home/alice/.config/cast/nix#default",
@@ -311,6 +424,15 @@ mod tests {
         assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
         assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
         assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
+    }
+
+    #[test]
+    fn service_process_appears_only_after_nix_hands_off() {
+        let provisioning = "COMMAND\n/sbin/docker-init -- nix develop shell -c herdr server\nnix develop shell -c herdr server\n";
+        let started = "COMMAND\n/sbin/docker-init -- nix develop shell -c herdr server\n/nix/store/hash-herdr/bin/herdr server\n";
+
+        assert!(!service_process_started(provisioning));
+        assert!(service_process_started(started));
     }
 
     #[test]
