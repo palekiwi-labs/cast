@@ -51,7 +51,7 @@ pub fn build_top_args(name: &str) -> Vec<String> {
         "top".to_string(),
         name.to_string(),
         "-eo".to_string(),
-        "args".to_string(),
+        "pid,args".to_string(),
     ]
 }
 
@@ -211,7 +211,7 @@ mod tests {
     fn build_top_args_reports_full_process_commands() {
         assert_eq!(
             build_top_args("cast-project-a1b2c3d4e5f6"),
-            vec!["top", "cast-project-a1b2c3d4e5f6", "-eo", "args"],
+            vec!["top", "cast-project-a1b2c3d4e5f6", "-eo", "pid,args"],
         );
     }
 

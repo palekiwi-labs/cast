@@ -36,6 +36,9 @@ fn classify_service_status(exists: bool, running: bool) -> ServiceStatus {
 fn service_process_started(processes: &str) -> bool {
     processes.lines().any(|line| {
         let mut words = line.split_whitespace();
+        if !words.next().is_some_and(|pid| pid.parse::<u32>().is_ok()) {
+            return false;
+        }
         let executable = words.next().and_then(|word| word.rsplit('/').next());
         executable == Some("herdr") && words.next() == Some("server")
     })
@@ -428,8 +431,8 @@ mod tests {
 
     #[test]
     fn service_process_appears_only_after_nix_hands_off() {
-        let provisioning = "COMMAND\n/sbin/docker-init -- nix develop shell -c herdr server\nnix develop shell -c herdr server\n";
-        let started = "COMMAND\n/sbin/docker-init -- nix develop shell -c herdr server\n/nix/store/hash-herdr/bin/herdr server\n";
+        let provisioning = "PID COMMAND\n1 /sbin/docker-init -- nix develop shell -c herdr server\n7 nix develop shell -c herdr server\n";
+        let started = "PID COMMAND\n1 /sbin/docker-init -- nix develop shell -c herdr server\n42 /nix/store/hash-herdr/bin/herdr server\n";
 
         assert!(!service_process_started(provisioning));
         assert!(service_process_started(started));
