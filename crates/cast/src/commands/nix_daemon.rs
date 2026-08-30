@@ -24,7 +24,7 @@ pub enum NixDaemonCommands {
     /// Drop into an interactive shell in the nix daemon container
     Shell,
     /// Start the nix daemon container
-    Start,
+    Up,
     /// Stop the nix daemon container
     Stop,
 }
@@ -42,7 +42,7 @@ pub fn handle_nix_daemon(cfg: &ApprovedConfig, command: NixDaemonCommands) -> Re
             let status = nix_daemon::shell(&docker, cfg)?;
             Ok(crate::commands::cli::to_exit_code(status))
         }
-        NixDaemonCommands::Start => {
+        NixDaemonCommands::Up => {
             let docker = DockerClient;
             nix_daemon::ensure_running(&docker, cfg)?;
             Ok(ExitCode::SUCCESS)

@@ -118,7 +118,7 @@ pub fn shell(docker: &DockerClient, config: &ApprovedConfig) -> Result<ExitStatu
     // Check if it's actually running
     if !docker.is_container_running(container_name)? {
         bail!(
-            "Nix daemon is not running: {}. Run 'cast nix-daemon start' first.",
+            "Nix daemon is not running: {}. Run 'cast nix-daemon up' first.",
             container_name
         );
     }

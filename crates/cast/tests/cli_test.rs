@@ -174,6 +174,15 @@ fn test_cast_build_help() {
 }
 
 #[test]
+fn test_cast_nix_daemon_up_help() {
+    cast()
+        .args(["nix-daemon", "up", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon up"));
+}
+
+#[test]
 fn test_cast_shell_help() {
     cast()
         .args(["shell", "--help"])
