@@ -59,6 +59,8 @@
       "matchManagers": [
         "rust-toolchain"
       ],
+      "dependencyDashboardApproval": true,
+      "rebaseWhen": "never",
       "groupName": "rust toolchain"
     },
     {
