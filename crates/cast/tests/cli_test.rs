@@ -183,6 +183,15 @@ fn test_cast_nix_daemon_up_help() {
 }
 
 #[test]
+fn test_cast_nix_daemon_down_help() {
+    cast()
+        .args(["nix-daemon", "down", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon down"));
+}
+
+#[test]
 fn test_cast_shell_help() {
     cast()
         .args(["shell", "--help"])

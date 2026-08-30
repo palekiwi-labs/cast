@@ -26,7 +26,7 @@ pub enum NixDaemonCommands {
     /// Start the nix daemon container
     Up,
     /// Stop the nix daemon container
-    Stop,
+    Down,
 }
 
 pub fn handle_nix_daemon(cfg: &ApprovedConfig, command: NixDaemonCommands) -> Result<ExitCode> {
@@ -47,7 +47,7 @@ pub fn handle_nix_daemon(cfg: &ApprovedConfig, command: NixDaemonCommands) -> Re
             nix_daemon::ensure_running(&docker, cfg)?;
             Ok(ExitCode::SUCCESS)
         }
-        NixDaemonCommands::Stop => {
+        NixDaemonCommands::Down => {
             let docker = DockerClient;
             nix_daemon::stop(&docker, cfg)?;
             Ok(ExitCode::SUCCESS)
