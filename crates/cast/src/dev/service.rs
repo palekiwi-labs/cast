@@ -4,11 +4,11 @@ use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::build_command::build_sandbox_command;
-use crate::dev::run::{build_service_run_flags, resolve_run_opts, RunMode, RunOpts, SessionFlags};
+use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_service_run_flags, resolve_run_opts};
 use crate::dev::service_context::ServiceContext;
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
@@ -17,15 +17,13 @@ pub enum ServiceStatus {
     Absent,
     Stopped,
     Running,
-    MuxUnhealthy,
 }
 
-fn classify_service_status(exists: bool, running: bool, mux_healthy: bool) -> ServiceStatus {
-    match (exists, running, mux_healthy) {
-        (false, _, _) => ServiceStatus::Absent,
-        (true, false, _) => ServiceStatus::Stopped,
-        (true, true, false) => ServiceStatus::MuxUnhealthy,
-        (true, true, true) => ServiceStatus::Running,
+fn classify_service_status(exists: bool, running: bool) -> ServiceStatus {
+    match (exists, running) {
+        (false, _) => ServiceStatus::Absent,
+        (true, false) => ServiceStatus::Stopped,
+        (true, true) => ServiceStatus::Running,
     }
 }
 
@@ -35,7 +33,6 @@ impl std::fmt::Display for ServiceStatus {
             ServiceStatus::Absent => "absent",
             ServiceStatus::Stopped => "stopped",
             ServiceStatus::Running => "running",
-            ServiceStatus::MuxUnhealthy => "running (multiplexer unhealthy)",
         })
     }
 }
@@ -66,24 +63,6 @@ pub fn build_service_docker_args(
     let command = build_service_command(config, &opts.user.username);
 
     build_run_args(&container_name, image_tag, flags, Some(command))
-}
-
-pub fn build_service_healthcheck_args(
-    context: &ServiceContext,
-    service_name: Option<&str>,
-) -> Vec<String> {
-    vec![
-        "exec".to_string(),
-        "-e".to_string(),
-        format!(
-            "HERDR_SESSION={}",
-            context.multiplexer_session_name(service_name)
-        ),
-        context.container_name(service_name),
-        "herdr".to_string(),
-        "api".to_string(),
-        "snapshot".to_string(),
-    ]
 }
 
 pub fn up(
@@ -140,17 +119,11 @@ pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<Se
     let container_name = context.container_name(service_name);
     let exists = docker.container_exists(&container_name)?;
     if !exists {
-        return Ok(classify_service_status(false, false, false));
+        return Ok(classify_service_status(false, false));
     }
 
     let running = docker.is_container_running(&container_name)?;
-    if !running {
-        return Ok(classify_service_status(true, false, false));
-    }
-
-    let mux_healthy =
-        docker.command_succeeds(build_service_healthcheck_args(context, service_name))?;
-    Ok(classify_service_status(true, true, mux_healthy))
+    Ok(classify_service_status(true, running))
 }
 
 #[cfg(test)]
@@ -247,45 +220,9 @@ mod tests {
     }
 
     #[test]
-    fn service_healthcheck_targets_the_isolated_mux_session() {
-        let context = ServiceContext {
-            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
-            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
-            relative_cwd: PathBuf::new(),
-            workspace_id: "a1b2c3d4e5f6".to_string(),
-        };
-
-        assert_eq!(
-            build_service_healthcheck_args(&context, Some("isolated")),
-            vec![
-                "exec",
-                "-e",
-                "HERDR_SESSION=cast-a1b2c3d4e5f6-isolated",
-                "cast-my-app-a1b2c3d4e5f6-isolated",
-                "herdr",
-                "api",
-                "snapshot",
-            ]
-        );
-    }
-
-    #[test]
-    fn service_status_distinguishes_lifecycle_and_mux_health() {
-        assert_eq!(
-            classify_service_status(false, false, false),
-            ServiceStatus::Absent
-        );
-        assert_eq!(
-            classify_service_status(true, false, false),
-            ServiceStatus::Stopped
-        );
-        assert_eq!(
-            classify_service_status(true, true, false),
-            ServiceStatus::MuxUnhealthy
-        );
-        assert_eq!(
-            classify_service_status(true, true, true),
-            ServiceStatus::Running
-        );
+    fn service_status_reports_container_lifecycle() {
+        assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
+        assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
+        assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
     }
 }
