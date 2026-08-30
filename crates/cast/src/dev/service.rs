@@ -4,11 +4,11 @@ use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::build_command::build_sandbox_command;
-use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_service_run_flags, resolve_run_opts};
+use crate::dev::run::{build_service_run_flags, resolve_run_opts, RunMode, RunOpts, SessionFlags};
 use crate::dev::service_context::ServiceContext;
-use crate::docker::BuildOptions;
 use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
 use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
@@ -39,6 +39,30 @@ impl std::fmt::Display for ServiceStatus {
 
 pub fn build_service_command(config: &Config, username: &str) -> Vec<String> {
     build_sandbox_command(config, username, "herdr", vec!["server".to_string()])
+}
+
+pub fn build_service_readiness_probe_args(
+    config: &Config,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    username: &str,
+) -> Vec<String> {
+    let mut args = vec![
+        "exec".to_string(),
+        "-e".to_string(),
+        format!(
+            "HERDR_SESSION={}",
+            context.multiplexer_session_name(service_name)
+        ),
+        context.container_name(service_name),
+    ];
+    args.extend(build_sandbox_command(
+        config,
+        username,
+        "herdr",
+        vec!["api".to_string(), "snapshot".to_string()],
+    ));
+    args
 }
 
 pub fn build_service_docker_args(
@@ -200,6 +224,38 @@ mod tests {
         let command = build_service_command(&config, "alice");
 
         assert_eq!(command, vec!["herdr", "server"]);
+    }
+
+    #[test]
+    fn readiness_probe_uses_the_service_session_in_the_sandbox_shell() {
+        let config = Config {
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#project".to_string()),
+            ..Default::default()
+        };
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_readiness_probe_args(&config, &context, Some("isolated"), "alice"),
+            vec![
+                "exec",
+                "-e",
+                "HERDR_SESSION=cast-a1b2c3d4e5f6-isolated",
+                "cast-my-app-a1b2c3d4e5f6-isolated",
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix#default",
+                "-c",
+                "herdr",
+                "api",
+                "snapshot",
+            ]
+        );
     }
 
     #[test]
