@@ -175,8 +175,8 @@ impl Default for Config {
             use_project_shell: true,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
-            nix_volume_name: "cast-nix".to_string(),
-            nix_daemon_container_name: "cast-nix-daemon".to_string(),
+            nix_volume_name: "cast-nix-herdr-spike".to_string(),
+            nix_daemon_container_name: "cast-nix-daemon-herdr-spike".to_string(),
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             forbidden_paths: Vec::new(),
@@ -203,6 +203,17 @@ fn default_volume_type() -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn spike_defaults_isolate_the_nix_daemon_and_store() {
+        let config = Config::default();
+
+        assert_eq!(
+            config.nix_daemon_container_name,
+            "cast-nix-daemon-herdr-spike"
+        );
+        assert_eq!(config.nix_volume_name, "cast-nix-herdr-spike");
+    }
 
     #[test]
     fn test_mcp_config_deserialization() {
