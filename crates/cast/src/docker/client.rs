@@ -1,5 +1,5 @@
 use anyhow::{bail, Context, Result};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tracing::debug;
@@ -7,6 +7,19 @@ use tracing::debug;
 use crate::docker::args;
 
 pub struct DockerClient;
+
+pub struct DockerLogFollower {
+    child: Child,
+}
+
+impl Drop for DockerLogFollower {
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+}
 
 /// RAII guard to ignore SIGINT and SIGQUIT in the parent process and restore
 /// them to their previous handlers when dropped.
@@ -115,6 +128,20 @@ impl DockerClient {
         let mut logs = String::from_utf8_lossy(&output.stdout).to_string();
         logs.push_str(&String::from_utf8_lossy(&output.stderr));
         Ok(logs)
+    }
+
+    pub fn follow_container_logs(&self, name: &str) -> Result<DockerLogFollower> {
+        let command_args = args::build_follow_logs_args(name);
+        debug!(command = "docker", args = ?command_args, "following container logs");
+        let child = Command::new("docker")
+            .args(&command_args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        Ok(DockerLogFollower { child })
     }
 
     pub fn image_exists(&self, tag: &str) -> Result<bool> {

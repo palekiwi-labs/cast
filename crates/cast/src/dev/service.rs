@@ -13,9 +13,10 @@ use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
-const PROVISIONING_TIMEOUT: Duration = Duration::from_secs(5 * 60);
+const PROVISIONING_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 const READINESS_TIMEOUT: Duration = Duration::from_secs(30);
 const STARTUP_POLL_INTERVAL: Duration = Duration::from_millis(250);
+const STARTUP_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 const READINESS_PROBE_TIMEOUT: &str = "10s";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,6 +43,18 @@ fn service_process_started(processes: &str) -> bool {
         let executable = words.next().and_then(|word| word.rsplit('/').next());
         executable == Some("herdr") && words.next() == Some("server")
     })
+}
+
+fn process_snapshot_changed(previous: &mut Option<String>, current: &str) -> bool {
+    if previous.as_deref() == Some(current) {
+        return false;
+    }
+    *previous = Some(current.to_string());
+    true
+}
+
+fn next_heartbeat_after(elapsed: Duration) -> Duration {
+    elapsed + STARTUP_HEARTBEAT_INTERVAL
 }
 
 impl std::fmt::Display for ServiceStatus {
@@ -126,6 +139,8 @@ fn exited_during_startup(
 
 fn wait_for_service_process(docker: &DockerClient, container_name: &str) -> Result<()> {
     let started = Instant::now();
+    let mut previous_processes = None;
+    let mut next_heartbeat = STARTUP_HEARTBEAT_INTERVAL;
     loop {
         if !docker.is_container_running(container_name)? {
             return Err(exited_during_startup(
@@ -134,14 +149,36 @@ fn wait_for_service_process(docker: &DockerClient, container_name: &str) -> Resu
                 "sandbox provisioning",
             ));
         }
-        if service_process_started(&docker.container_processes(container_name)?) {
+        let processes = docker.container_processes(container_name)?;
+        if process_snapshot_changed(&mut previous_processes, &processes) {
+            eprintln!(
+                "service process snapshot after {}s:\n{}",
+                started.elapsed().as_secs(),
+                processes.trim()
+            );
+        }
+        if service_process_started(&processes) {
             return Ok(());
         }
         if started.elapsed() >= PROVISIONING_TIMEOUT {
+            let logs = docker
+                .container_logs(container_name, 100)
+                .unwrap_or_else(|error| format!("failed to read container logs: {error}"));
             bail!(
-                "timed out after {}s waiting for sandbox provisioning: {container_name}",
-                PROVISIONING_TIMEOUT.as_secs()
+                "timed out after {}s waiting for sandbox provisioning: {container_name}\n\n\
+                 final process snapshot:\n{}\n\nrecent logs:\n{}",
+                PROVISIONING_TIMEOUT.as_secs(),
+                processes.trim(),
+                logs.trim()
             );
+        }
+        if started.elapsed() >= next_heartbeat {
+            let elapsed = started.elapsed();
+            eprintln!(
+                "still waiting for sandbox provisioning after {}s: {container_name}",
+                elapsed.as_secs()
+            );
+            next_heartbeat = next_heartbeat_after(elapsed);
         }
         std::thread::sleep(STARTUP_POLL_INTERVAL);
     }
@@ -187,6 +224,7 @@ fn wait_for_service_ready(
 ) -> Result<()> {
     let container_name = context.container_name(service_name);
     eprintln!("waiting for sandbox provisioning: {container_name}");
+    let _log_follower = docker.follow_container_logs(&container_name)?;
     wait_for_service_process(docker, &container_name)?;
     eprintln!("waiting for multiplexer readiness: {container_name}");
     wait_for_service_api(docker, config, context, service_name, username)
@@ -436,6 +474,32 @@ mod tests {
 
         assert!(!service_process_started(provisioning));
         assert!(service_process_started(started));
+    }
+
+    #[test]
+    fn provisioning_diagnostics_report_only_process_changes() {
+        let mut previous = None;
+
+        assert!(process_snapshot_changed(
+            &mut previous,
+            "PID COMMAND\n1 nix develop shell -c herdr server\n"
+        ));
+        assert!(!process_snapshot_changed(
+            &mut previous,
+            "PID COMMAND\n1 nix develop shell -c herdr server\n"
+        ));
+        assert!(process_snapshot_changed(
+            &mut previous,
+            "PID COMMAND\n1 herdr server\n"
+        ));
+    }
+
+    #[test]
+    fn provisioning_heartbeat_reschedules_from_delayed_poll() {
+        assert_eq!(
+            next_heartbeat_after(Duration::from_secs(10 * 60)),
+            Duration::from_secs(10 * 60 + 30)
+        );
     }
 
     #[test]
