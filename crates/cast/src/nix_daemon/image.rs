@@ -13,6 +13,11 @@ pub fn get_image_tag() -> String {
     format!("{}:{}", IMAGE_BASE, CAST_VERSION)
 }
 
+/// Get the image tag for a configured Nix daemon generation.
+pub fn get_generation_image_tag(nix_version: &str) -> String {
+    format!("{IMAGE_BASE}-{nix_version}:{CAST_VERSION}")
+}
+
 /// Get the embedded Dockerfile content
 pub fn get_dockerfile() -> &'static str {
     DOCKERFILE
@@ -27,6 +32,33 @@ mod tests {
         assert_eq!(
             get_image_tag(),
             format!("localhost/cast-nix-daemon:{}", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn changing_nix_version_changes_every_generation_resource() {
+        use crate::config::Config;
+
+        let first = Config {
+            nix_version: "2.34.5".to_string(),
+            ..Config::default()
+        };
+        let second = Config {
+            nix_version: "2.34.6".to_string(),
+            ..Config::default()
+        };
+
+        assert_ne!(
+            get_generation_image_tag(&first.nix_version),
+            get_generation_image_tag(&second.nix_version)
+        );
+        assert_ne!(
+            first.effective_nix_daemon_container_name(),
+            second.effective_nix_daemon_container_name()
+        );
+        assert_ne!(
+            first.effective_nix_volume_name(),
+            second.effective_nix_volume_name()
         );
     }
 

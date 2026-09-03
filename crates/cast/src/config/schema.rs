@@ -49,6 +49,8 @@ pub struct Config {
     pub extra_data_volumes: BTreeMap<String, VolumeConfig>,
 
     // Nix Workflow
+    #[serde(default)]
+    pub nix_version: String,
     pub nix_volume_name: String,
     pub nix_daemon_container_name: String,
     pub nix_extra_substituters: Vec<String>,
@@ -159,6 +161,20 @@ pub struct VolumeConfig {
     pub volume_type: String,
 }
 
+impl Config {
+    pub fn effective_nix_volume_name(&self) -> String {
+        versioned_name(&self.nix_volume_name, &self.nix_version)
+    }
+
+    pub fn effective_nix_daemon_container_name(&self) -> String {
+        versioned_name(&self.nix_daemon_container_name, &self.nix_version)
+    }
+}
+
+fn versioned_name(base: &str, nix_version: &str) -> String {
+    format!("{base}-{nix_version}")
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -175,6 +191,7 @@ impl Default for Config {
             use_project_shell: true,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
+            nix_version: String::new(),
             nix_volume_name: "cast-nix".to_string(),
             nix_daemon_container_name: "cast-nix-daemon".to_string(),
             nix_extra_substituters: Vec::new(),
@@ -339,6 +356,27 @@ mod tests {
         assert!(
             config.use_project_shell,
             "use_project_shell must default to true"
+        );
+    }
+
+    #[test]
+    fn effective_nix_resource_names_append_version_to_custom_bases() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_volume_name: "team-store".to_string(),
+            nix_daemon_container_name: "team-daemon".to_string(),
+            ..Config::default()
+        };
+
+        assert_eq!(config.effective_nix_volume_name(), "team-store-2.34.6");
+        assert_eq!(
+            config.effective_nix_daemon_container_name(),
+            "team-daemon-2.34.6"
+        );
+        assert_ne!(config.effective_nix_volume_name(), config.nix_volume_name);
+        assert_ne!(
+            config.effective_nix_daemon_container_name(),
+            config.nix_daemon_container_name
         );
     }
 
