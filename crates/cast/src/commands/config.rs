@@ -11,14 +11,22 @@ use crate::user::get_user;
 use anyhow::{Context, Result};
 use owo_colors::OwoColorize;
 
-const DEFAULT_CAST_JSON: &str = r#"{
+const NIX_VERSION: &str = include_str!("../../assets/nix-version");
+
+fn default_cast_json() -> String {
+    format!(
+        r#"{{
+  "nix_version": "{}",
   "sandbox_shell": "~/.config/cast/nix#default",
   "nix_extra_substituters": ["https://cache.numtide.com"],
   "nix_extra_trusted_public_keys": [
     "niks3.numtide.com-1:DTx8wZduET09hRmMtKdQDxNNthLQETkc/yaX7M4qK0g="
   ]
+}}
+"#,
+        NIX_VERSION.trim()
+    )
 }
-"#;
 
 const SANDBOX_FLAKE_TEMPLATE: &str = include_str!("../../assets/global-flake-template/flake.nix");
 
@@ -106,9 +114,10 @@ pub(crate) fn init_global_config() -> Result<()> {
         .context("Failed to resolve user config directory")?
         .join("cast");
 
+    let default_cast_json = default_cast_json();
     write_if_missing(
         &cast_dir.join("cast.json"),
-        DEFAULT_CAST_JSON,
+        &default_cast_json,
         "global cast config",
     )?;
     write_if_missing(

@@ -149,6 +149,10 @@ fn test_config_init_creates_global_config_and_flake() {
     let config_path = home.path().join(".config/cast/cast.json");
     let config: serde_json::Value =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
+    assert_eq!(
+        config["nix_version"],
+        include_str!("../assets/nix-version").trim()
+    );
     assert_eq!(config["sandbox_shell"], "~/.config/cast/nix#default");
     assert_eq!(
         config["nix_extra_substituters"],

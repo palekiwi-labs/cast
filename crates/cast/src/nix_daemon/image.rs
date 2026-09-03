@@ -34,4 +34,13 @@ mod tests {
     fn test_get_dockerfile_not_empty() {
         assert!(get_dockerfile().contains("FROM"));
     }
+
+    #[test]
+    fn dockerfile_selects_nix_base_with_build_argument() {
+        let dockerfile = get_dockerfile();
+
+        assert!(dockerfile.contains("ARG NIX_VERSION"));
+        assert!(dockerfile.contains("FROM nixos/nix:${NIX_VERSION}"));
+        assert!(!dockerfile.contains(include_str!("../../assets/nix-version").trim()));
+    }
 }
