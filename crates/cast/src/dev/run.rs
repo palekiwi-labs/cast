@@ -393,7 +393,7 @@ pub fn build_docker_run_flags(
     // Nix store.
     run_args.extend([
         "-v".to_string(),
-        format!("{}:/nix:ro", config.nix_volume_name),
+        format!("{}:/nix:ro", config.effective_nix_volume_name()),
     ]);
 
     // Timezone.
@@ -554,7 +554,7 @@ mod tests {
         assert!(run_args.contains(&"/home/alice/project:/home/alice/project:rw".to_string()));
 
         // Nix store and timezone
-        assert!(run_args.contains(&format!("{}:/nix:ro", config.nix_volume_name)));
+        assert!(run_args.contains(&format!("{}:/nix:ro", config.effective_nix_volume_name())));
         assert!(run_args.contains(&"/etc/localtime:/etc/localtime:ro".to_string()));
         assert!(run_args.contains(&"--workdir".to_string()));
 
@@ -570,6 +570,21 @@ mod tests {
         assert!(
             run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
         );
+    }
+
+    #[test]
+    fn development_container_mounts_configured_generation_read_only() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_volume_name: "custom-store".to_string(),
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert!(run_args.contains(&"custom-store-2.34.6:/nix:ro".to_string()));
+        assert!(!run_args.contains(&"custom-store:/nix:ro".to_string()));
     }
 
     #[test]
