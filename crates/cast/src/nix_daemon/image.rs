@@ -6,13 +6,6 @@ const IMAGE_BASE: &str = "localhost/cast-nix-daemon";
 
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Get the full image tag for the nix daemon container
-///
-/// Format: `localhost/cast-nix-daemon:<version>`
-pub fn get_image_tag() -> String {
-    format!("{}:{}", IMAGE_BASE, CAST_VERSION)
-}
-
 /// Get the image tag for a configured Nix daemon generation.
 pub fn get_generation_image_tag(nix_version: &str) -> String {
     format!("{IMAGE_BASE}-{nix_version}:{CAST_VERSION}")
@@ -26,14 +19,6 @@ pub fn get_dockerfile() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_get_image_tag_format() {
-        assert_eq!(
-            get_image_tag(),
-            format!("localhost/cast-nix-daemon:{}", env!("CARGO_PKG_VERSION"))
-        );
-    }
 
     #[test]
     fn changing_nix_version_changes_every_generation_resource() {
