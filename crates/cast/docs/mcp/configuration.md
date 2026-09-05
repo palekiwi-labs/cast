@@ -40,6 +40,9 @@ map MCP parameters to command-line arguments.
 
 ### Example Configuration
 
+This project example assumes `cast config init` has written the required
+`nix_version` to the global configuration.
+
 ```json
 {
   "mcp": {

@@ -28,9 +28,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The nix daemon's binary caches are now provisioned daemon-side from
   `~/.config/cast/cast.json`. `cast config init` seeds the default with the
   numtide cache so harnesses fetch prebuilt rather than building from source.
+- Required exact `nix_version` configuration and generation-specific Nix daemon
+  images, containers, and persistent store volumes. New configurations receive
+  Cast's current pin from `cast config init`.
 
 ### Changed
 
+- **Breaking:** Existing configurations must add `nix_version` and be
+  re-approved. Cast now appends that version to default and custom Nix daemon
+  container and volume base names; legacy unsuffixed resources remain
+  untouched.
 - **Breaking:** Shell selection is now fully explicit. `cast` passes configured
   refs verbatim to `nix develop`; it no longer detects project or user flakes,
   derives shell fragments from agent names, or assumes a global flake path.
