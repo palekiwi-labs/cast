@@ -32,6 +32,14 @@ pub fn load_config_with_global(
     base_dir: &std::path::Path,
     global_path: Option<&std::path::Path>,
 ) -> Result<Config> {
+    load_config_from_sources(base_dir, global_path, true)
+}
+
+fn load_config_from_sources(
+    base_dir: &std::path::Path,
+    global_path: Option<&std::path::Path>,
+    include_env: bool,
+) -> Result<Config> {
     let mut figment = Figment::new().merge(Serialized::defaults(Config::default()));
 
     if let Some(global_path) = global_path {
@@ -44,17 +52,18 @@ pub fn load_config_with_global(
         .extract()
         .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
 
-    let config: Config = figment
+    let mut figment = figment
         .merge(Json::file(base_dir.join("cast.json")))
         .merge(Json::file(base_dir.join("cast.local.json")))
-        .merge(Serialized::defaults(mcp_json).key("mcp"))
-        .merge(Env::prefixed("CAST_").split("__"))
-        .extract()
-        .context("Failed to load configuration")?;
+        .merge(Serialized::defaults(mcp_json).key("mcp"));
+    if include_env {
+        figment = figment.merge(Env::prefixed("CAST_").split("__"));
+    }
+    let config: Config = figment.extract().context("Failed to load configuration")?;
 
     if config.nix_version.is_empty() {
         bail!(
-            "Missing required nix_version; run `cast config init` or add an exact Nix version to cast.json"
+            "Missing required nix_version; add an exact Nix version to `cast.json` (existing files are not changed by `cast config init`)"
         );
     }
     if !is_exact_nix_version(&config.nix_version) {
@@ -139,11 +148,11 @@ mod tests {
     fn missing_nix_version_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
 
-        let error = load_config_with_global(dir.path(), None).unwrap_err();
+        let error = load_config_from_sources(dir.path(), None, false).unwrap_err();
 
         assert_eq!(
             error.to_string(),
-            "Missing required nix_version; run `cast config init` or add an exact Nix version to cast.json"
+            "Missing required nix_version; add an exact Nix version to `cast.json` (existing files are not changed by `cast config init`)"
         );
     }
 
@@ -156,7 +165,7 @@ mod tests {
         )
         .unwrap();
 
-        let error = load_config_with_global(dir.path(), None).unwrap_err();
+        let error = load_config_from_sources(dir.path(), None, false).unwrap_err();
 
         assert_eq!(
             error.to_string(),
