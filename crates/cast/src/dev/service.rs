@@ -78,6 +78,14 @@ fn build_service_down_commands(
     commands
 }
 
+fn build_service_up_cleanup_command(
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    running: bool,
+) -> Option<Vec<String>> {
+    (!running).then(|| build_remove_args(&context.container_name(service_name)))
+}
+
 pub fn up(
     config: &ApprovedConfig,
     context: &ServiceContext,
@@ -85,9 +93,14 @@ pub fn up(
 ) -> Result<()> {
     let docker = DockerClient;
     let container_name = context.container_name(service_name);
-    if docker.is_container_running(&container_name)? {
-        eprintln!("service is already running: {container_name}");
-        return Ok(());
+    if let Some(inspection) = docker.inspect_container(&container_name)? {
+        if inspection.running {
+            eprintln!("service is already running: {container_name}");
+            return Ok(());
+        }
+        if let Some(command) = build_service_up_cleanup_command(context, service_name, false) {
+            docker.run_command(command)?;
+        }
     }
 
     let user = get_user()?;
@@ -147,13 +160,11 @@ pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> 
 pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<ServiceStatus> {
     let docker = DockerClient;
     let container_name = context.container_name(service_name);
-    let exists = docker.container_exists(&container_name)?;
-    if !exists {
-        return Ok(classify_service_status(false, false));
-    }
-
-    let running = docker.is_container_running(&container_name)?;
-    Ok(classify_service_status(true, running))
+    let inspection = docker.inspect_container(&container_name)?;
+    Ok(classify_service_status(
+        inspection.is_some(),
+        inspection.is_some_and(|state| state.running),
+    ))
 }
 
 #[cfg(test)]
@@ -226,6 +237,28 @@ mod tests {
         assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
         assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
         assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
+    }
+
+    #[test]
+    fn service_up_removes_a_stopped_container_before_recreating_it() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_up_cleanup_command(&context, Some("isolated"), false),
+            Some(vec![
+                "rm".to_string(),
+                "cast-my-app-a1b2c3d4e5f6-isolated".to_string()
+            ])
+        );
+        assert_eq!(
+            build_service_up_cleanup_command(&context, Some("isolated"), true),
+            None
+        );
     }
 
     #[test]
