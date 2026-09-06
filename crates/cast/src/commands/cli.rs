@@ -134,8 +134,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             )?;
             Ok(to_exit_code(status))
         }
-        Some(Commands::Shell { flags: _, raw: _ }) => {
-            anyhow::bail!("cast shell is not implemented yet")
+        Some(Commands::Shell { flags, raw }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = ServiceContext::resolve(&cwd)?;
+            let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
+            let status = dev::shell(&approved, &context, flags.name.as_deref(), raw)?;
+            Ok(to_exit_code(status))
         }
         #[cfg(feature = "mcp")]
         Some(Commands::Mcp { command }) => {
