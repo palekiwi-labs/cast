@@ -24,13 +24,28 @@ pub fn build_run_args(
 
 /// Build arguments for `docker ps` command to check if a container is running
 pub fn build_ps_args(name: &str) -> Vec<String> {
+    let escaped_name = escape_regex(name);
     vec![
         "ps".to_string(),
         "--filter".to_string(),
-        format!("name=^{}$", name),
+        format!("name=^{escaped_name}$"),
         "--format".to_string(),
         "{{.Names}}".to_string(),
     ]
+}
+
+fn escape_regex(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(
+            character,
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 /// Build arguments for `docker images` command to check if an image exists
@@ -153,6 +168,13 @@ mod tests {
                 "{{.Names}}"
             ]
         );
+    }
+
+    #[test]
+    fn test_build_ps_args_escapes_generation_version() {
+        let args = build_ps_args("cast-nix-daemon-2.34.6");
+
+        assert_eq!(args[2], r"name=^cast-nix-daemon-2\.34\.6$");
     }
 
     #[test]
