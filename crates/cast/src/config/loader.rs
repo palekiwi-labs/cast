@@ -63,13 +63,15 @@ fn load_config_from_sources(
 
     if config.nix_version.is_empty() {
         bail!(
-            "Missing required nix_version; add an exact Nix version to `cast.json` (existing files are not changed by `cast config init`)"
+            "Missing required nix_version.\n{}",
+            nix_version_recovery_hint(base_dir, global_path)
         );
     }
     if !is_exact_nix_version(&config.nix_version) {
         bail!(
-            "Invalid nix_version `{}`; expected an exact version such as `2.34.6`",
-            config.nix_version
+            "Invalid nix_version `{}`; expected an exact three-component version such as `2.34.6`.\n{}",
+            config.nix_version,
+            nix_version_recovery_hint(base_dir, global_path)
         );
     }
 
@@ -82,6 +84,30 @@ fn load_config_from_sources(
     );
 
     Ok(config)
+}
+
+fn nix_version_recovery_hint(
+    base_dir: &std::path::Path,
+    global_path: Option<&std::path::Path>,
+) -> String {
+    let mut paths = Vec::new();
+    if let Some(global_path) = global_path {
+        paths.push(global_path.display().to_string());
+    }
+    paths.push(base_dir.join("cast.json").display().to_string());
+    paths.push(base_dir.join("cast.local.json").display().to_string());
+
+    let paths = paths
+        .into_iter()
+        .map(|path| format!("  - {path}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Set `nix_version` in one of these configuration files:\n{paths}\n\
+         For a one-off run, set `CAST_NIX_VERSION=2.34.6`.\n\
+         `cast config init` does not modify existing files."
+    )
 }
 
 fn is_exact_nix_version(version: &str) -> bool {
@@ -147,13 +173,17 @@ mod tests {
     #[test]
     fn missing_nix_version_is_rejected() {
         let dir = tempfile::tempdir().unwrap();
+        let global_path = dir.path().join("global-cast.json");
 
-        let error = load_config_from_sources(dir.path(), None, false).unwrap_err();
+        let error = load_config_from_sources(dir.path(), Some(&global_path), false).unwrap_err();
+        let message = error.to_string();
 
-        assert_eq!(
-            error.to_string(),
-            "Missing required nix_version; add an exact Nix version to `cast.json` (existing files are not changed by `cast config init`)"
-        );
+        assert!(message.contains("Missing required nix_version"));
+        assert!(message.contains(&global_path.display().to_string()));
+        assert!(message.contains(&dir.path().join("cast.json").display().to_string()));
+        assert!(message.contains(&dir.path().join("cast.local.json").display().to_string()));
+        assert!(message.contains("CAST_NIX_VERSION=2.34.6"));
+        assert!(message.contains("`cast config init` does not modify existing files"));
     }
 
     #[test]
@@ -166,11 +196,11 @@ mod tests {
         .unwrap();
 
         let error = load_config_from_sources(dir.path(), None, false).unwrap_err();
+        let message = error.to_string();
 
-        assert_eq!(
-            error.to_string(),
-            "Invalid nix_version `latest`; expected an exact version such as `2.34.6`"
-        );
+        assert!(message.contains("Invalid nix_version `latest`"));
+        assert!(message.contains(&dir.path().join("cast.json").display().to_string()));
+        assert!(message.contains("CAST_NIX_VERSION=2.34.6"));
     }
 
     #[test]
