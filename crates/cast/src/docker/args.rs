@@ -45,6 +45,17 @@ pub fn build_ps_all_args(name: &str) -> Vec<String> {
     ]
 }
 
+/// Build arguments for reading a container's complete lifecycle state.
+pub fn build_inspect_args(name: &str) -> Vec<String> {
+    vec![
+        "container".to_string(),
+        "inspect".to_string(),
+        "--format".to_string(),
+        "{{json .State}}".to_string(),
+        name.to_string(),
+    ]
+}
+
 /// Build arguments for observing full commands in a running container.
 pub fn build_top_args(name: &str) -> Vec<String> {
     vec![
@@ -208,6 +219,20 @@ mod tests {
                 "name=^cast-project-a1b2c3d4e5f6$",
                 "--format",
                 "{{.Names}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_inspect_args_reports_container_lifecycle_once() {
+        assert_eq!(
+            build_inspect_args("cast-project-a1b2c3d4e5f6"),
+            vec![
+                "container",
+                "inspect",
+                "--format",
+                "{{json .State}}",
+                "cast-project-a1b2c3d4e5f6",
             ]
         );
     }
