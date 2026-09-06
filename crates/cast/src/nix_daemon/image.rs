@@ -7,6 +7,8 @@ const IMAGE_BASE: &str = "localhost/cast-nix-daemon";
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Get the image tag for a configured Nix daemon generation.
+///
+/// Format: `localhost/cast-nix-daemon-<nix_version>:<cast_version>`
 pub fn get_generation_image_tag(nix_version: &str) -> String {
     format!("{IMAGE_BASE}-{nix_version}:{CAST_VERSION}")
 }
