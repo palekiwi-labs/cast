@@ -166,6 +166,113 @@ mod tests {
         );
     }
 
+    fn service_context_fixture() -> ServiceContext {
+        ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        }
+    }
+
+    fn wrapped_config() -> Config {
+        Config {
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#ai".to_string()),
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn raw_service_exec_skips_devshell_wrapping() {
+        let args = build_service_exec_args(
+            &wrapped_config(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: false,
+                raw: true,
+            },
+            &["cargo".to_string(), "test".to_string()],
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "-it",
+                "--workdir",
+                "/home/alice/projects/my-app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "cargo",
+                "test",
+            ]
+        );
+    }
+
+    #[test]
+    fn headless_service_exec_allocates_no_terminal() {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: true,
+                raw: false,
+            },
+            &["echo".to_string(), "hi".to_string()],
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "--workdir",
+                "/home/alice/projects/my-app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "echo",
+                "hi",
+            ]
+        );
+    }
+
+    #[test]
+    fn service_exec_routes_to_a_named_service() {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: Some("review"),
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: true,
+                raw: true,
+            },
+            &["echo".to_string()],
+        );
+
+        assert!(
+            args.contains(&"cast-my-app-a1b2c3d4e5f6-review".to_string()),
+            "named exec must target the named service container: {args:?}"
+        );
+    }
+
+    #[test]
+    fn service_exec_rejects_a_stopped_service() {
+        let error =
+            validate_service_exec_status(ServiceStatus::Stopped, "cast-my-app-a1b2c3d4e5f6")
+                .expect_err("a stopped service must reject exec");
+
+        assert_eq!(
+            error.to_string(),
+            "service is stopped: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
+        );
+    }
+
     #[test]
     fn service_exec_rejects_an_absent_service() {
         let error = validate_service_exec_status(
