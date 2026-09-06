@@ -74,9 +74,13 @@ fn build_image(docker: &DockerClient, config: &Config, no_cache: bool) -> Result
     let temp_dir = TempDir::new()?;
     let context_path = temp_dir.path();
 
-    // Write the Dockerfile
+    // Write the Dockerfile with the configured Nix version baked into
+    // the base image reference
     let dockerfile_path = context_path.join("Dockerfile");
-    fs::write(&dockerfile_path, image::get_dockerfile())?;
+    fs::write(
+        &dockerfile_path,
+        image::render_dockerfile(&config.nix_version),
+    )?;
 
     // Build the image
     let build_args = build_image_args(config, context_path, no_cache);
@@ -100,12 +104,7 @@ pub fn build(docker: &DockerClient, config: &ApprovedConfig, opts: BuildOptions)
 
 fn build_image_args(config: &Config, context_path: &Path, no_cache: bool) -> Vec<String> {
     let image_tag = image::get_generation_image_tag(&config.nix_version);
-    args::build_docker_build_args(
-        &image_tag,
-        context_path,
-        &[("NIX_VERSION", &config.nix_version)],
-        no_cache,
-    )
+    args::build_docker_build_args(&image_tag, context_path, &[], no_cache)
 }
 
 /// Stop the nix daemon container
@@ -181,8 +180,6 @@ mod tests {
                 "build".to_string(),
                 "-t".to_string(),
                 expected_tag,
-                "--build-arg".to_string(),
-                "NIX_VERSION=2.34.6".to_string(),
                 "/tmp/build".to_string(),
             ]
         );

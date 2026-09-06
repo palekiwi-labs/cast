@@ -1,4 +1,5 @@
-ARG NIX_VERSION
+# Template: cast renders the configured Nix version into the base
+# image reference before handing this Dockerfile to a build.
 FROM nixos/nix:${NIX_VERSION}
 
 # Allow building git repositories owned by different users

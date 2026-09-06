@@ -6,6 +6,10 @@ const IMAGE_BASE: &str = "localhost/cast-nix-daemon";
 
 const CAST_VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Placeholder in the Dockerfile template replaced by the configured
+/// Nix version when the build context is written.
+const NIX_VERSION_PLACEHOLDER: &str = "${NIX_VERSION}";
+
 /// Get the image tag for a configured Nix daemon generation.
 ///
 /// Format: `localhost/cast-nix-daemon-<nix_version>:<cast_version>`
@@ -13,9 +17,14 @@ pub fn get_generation_image_tag(nix_version: &str) -> String {
     format!("{IMAGE_BASE}-{nix_version}:{CAST_VERSION}")
 }
 
-/// Get the embedded Dockerfile content
-pub fn get_dockerfile() -> &'static str {
-    DOCKERFILE
+/// Render the Dockerfile for a configured Nix daemon generation.
+///
+/// The concrete version is baked into the base image reference so the
+/// document handed to Docker is always fully resolved: no pre-FROM
+/// build argument with an empty default (BuildKit's
+/// InvalidDefaultArgInFrom check) and no silent fallback tag.
+pub fn render_dockerfile(nix_version: &str) -> String {
+    DOCKERFILE.replace(NIX_VERSION_PLACEHOLDER, nix_version)
 }
 
 #[cfg(test)]
@@ -50,16 +59,17 @@ mod tests {
     }
 
     #[test]
-    fn test_get_dockerfile_not_empty() {
-        assert!(get_dockerfile().contains("FROM"));
+    fn template_selects_nix_base_via_placeholder() {
+        assert!(DOCKERFILE.contains("FROM nixos/nix:${NIX_VERSION}"));
+        assert!(!DOCKERFILE.contains("ARG NIX_VERSION"));
+        assert!(!DOCKERFILE.contains(include_str!("../../assets/nix-version").trim()));
     }
 
     #[test]
-    fn dockerfile_selects_nix_base_with_build_argument() {
-        let dockerfile = get_dockerfile();
+    fn rendered_dockerfile_pins_configured_nix_version() {
+        let dockerfile = render_dockerfile("2.34.6");
 
-        assert!(dockerfile.contains("ARG NIX_VERSION"));
-        assert!(dockerfile.contains("FROM nixos/nix:${NIX_VERSION}"));
-        assert!(!dockerfile.contains(include_str!("../../assets/nix-version").trim()));
+        assert!(dockerfile.contains("FROM nixos/nix:2.34.6"));
+        assert!(!dockerfile.contains("${NIX_VERSION}"));
     }
 }
