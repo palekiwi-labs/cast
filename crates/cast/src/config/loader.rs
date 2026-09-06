@@ -174,6 +174,16 @@ mod tests {
     }
 
     #[test]
+    fn bundled_nix_version_satisfies_loader_contract() {
+        let version = include_str!("../../assets/nix-version").trim();
+
+        assert!(
+            is_exact_nix_version(version),
+            "assets/nix-version must contain an exact three-component version, got `{version}`"
+        );
+    }
+
+    #[test]
     fn test_merge_cast_and_mcp_json() {
         use std::fs::File;
         use std::io::Write;

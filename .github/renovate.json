@@ -35,10 +35,21 @@
         "^(?<currentValue>\\S+)\\s*$"
       ],
       "depNameTemplate": "nixos/nix",
-      "datasourceTemplate": "docker"
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
+    {
+      "description": "Require exact Nix daemon versions",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDepNames": [
+        "nixos/nix"
+      ],
+      "allowedVersions": "/^\\d+\\.\\d+\\.\\d+$/"
+    },
     {
       "description": "Group all minor and patch Cargo dependencies",
       "matchManagers": [
