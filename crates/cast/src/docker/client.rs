@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
-use std::process::{Child, Command, ExitStatus, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tracing::debug;
@@ -31,19 +31,6 @@ fn parse_container_inspection(output: &str) -> Result<ContainerInspection> {
 
 fn is_missing_container_error(stderr: &str) -> bool {
     stderr.contains("No such object:") || stderr.contains("No such container:")
-}
-
-pub struct DockerLogFollower {
-    child: Child,
-}
-
-impl Drop for DockerLogFollower {
-    fn drop(&mut self) {
-        if matches!(self.child.try_wait(), Ok(None)) {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
-        }
-    }
 }
 
 /// RAII guard to ignore SIGINT and SIGQUIT in the parent process and restore
@@ -153,47 +140,6 @@ impl DockerClient {
         Ok(!output.trim().is_empty())
     }
 
-    pub fn container_processes(&self, name: &str) -> Result<String> {
-        self.query_command(args::build_top_args(name))
-    }
-
-    pub fn container_logs(&self, name: &str, tail: usize) -> Result<String> {
-        let command_args = args::build_logs_args(name, tail);
-        debug!(command = "docker", args = ?command_args, "querying container logs");
-        let output = Command::new("docker")
-            .args(&command_args)
-            .output()
-            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!(
-                "`docker {}` failed ({})\n{}",
-                command_args.join(" "),
-                output.status,
-                stderr.trim()
-            );
-        }
-
-        let mut logs = String::from_utf8_lossy(&output.stdout).to_string();
-        logs.push_str(&String::from_utf8_lossy(&output.stderr));
-        Ok(logs)
-    }
-
-    pub fn follow_container_logs(&self, name: &str) -> Result<DockerLogFollower> {
-        let command_args = args::build_follow_logs_args(name);
-        debug!(command = "docker", args = ?command_args, "following container logs");
-        let child = Command::new("docker")
-            .args(&command_args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
-
-        Ok(DockerLogFollower { child })
-    }
-
     pub fn image_exists(&self, tag: &str) -> Result<bool> {
         let image_args = args::build_image_exists_args(tag);
         let output = self.query_command(image_args)?;
@@ -238,18 +184,6 @@ impl DockerClient {
         }
 
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    }
-
-    pub fn command_succeeds(&self, args: Vec<String>) -> Result<bool> {
-        debug!(command = "docker", args = ?args, "probing command");
-        let status = Command::new("docker")
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
-        Ok(status.success())
     }
 
     pub fn stream_command(&self, args: Vec<String>) -> Result<()> {

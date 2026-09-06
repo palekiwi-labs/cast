@@ -467,10 +467,7 @@ pub fn build_service_run_flags(
     }
     run_args.extend(build_cast_nix_mount_args(opts));
     run_args.extend(build_universal_data_volume_args(config, &opts.user));
-    run_args.splice(
-        0..0,
-        ["--detach", "--init", "--stop-signal", "SIGINT"].map(str::to_string),
-    );
+    run_args.splice(0..0, ["--detach", "--init"].map(str::to_string));
     run_args
 }
 
@@ -599,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn service_run_is_detached_and_stops_with_sigint() {
+    fn service_run_is_detached_without_vendor_specific_stop_signals() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
@@ -612,10 +609,8 @@ mod tests {
             Path::new("/home/alice/project"),
         );
 
-        assert_eq!(
-            &run_args[..4],
-            ["--detach", "--init", "--stop-signal", "SIGINT"]
-        );
+        assert_eq!(&run_args[..2], ["--detach", "--init"]);
+        assert!(!run_args.iter().any(|arg| arg == "--stop-signal"));
         assert!(!run_args.iter().any(|arg| arg == "--rm"));
     }
 

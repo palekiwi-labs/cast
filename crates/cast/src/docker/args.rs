@@ -56,31 +56,6 @@ pub fn build_inspect_args(name: &str) -> Vec<String> {
     ]
 }
 
-/// Build arguments for observing full commands in a running container.
-pub fn build_top_args(name: &str) -> Vec<String> {
-    vec![
-        "top".to_string(),
-        name.to_string(),
-        "-eo".to_string(),
-        "pid,args".to_string(),
-    ]
-}
-
-/// Build arguments for the most recent container log lines.
-pub fn build_logs_args(name: &str, tail: usize) -> Vec<String> {
-    vec![
-        "logs".to_string(),
-        "--tail".to_string(),
-        tail.to_string(),
-        name.to_string(),
-    ]
-}
-
-/// Build arguments for following all existing and new container logs.
-pub fn build_follow_logs_args(name: &str) -> Vec<String> {
-    vec!["logs".to_string(), "--follow".to_string(), name.to_string()]
-}
-
 /// Build arguments for `docker images` command to check if an image exists
 pub fn build_image_exists_args(tag: &str) -> Vec<String> {
     vec![
@@ -234,30 +209,6 @@ mod tests {
                 "{{json .State}}",
                 "cast-project-a1b2c3d4e5f6",
             ]
-        );
-    }
-
-    #[test]
-    fn build_top_args_reports_full_process_commands() {
-        assert_eq!(
-            build_top_args("cast-project-a1b2c3d4e5f6"),
-            vec!["top", "cast-project-a1b2c3d4e5f6", "-eo", "pid,args"],
-        );
-    }
-
-    #[test]
-    fn build_logs_args_limits_startup_failure_output() {
-        assert_eq!(
-            build_logs_args("cast-project-a1b2c3d4e5f6", 100),
-            vec!["logs", "--tail", "100", "cast-project-a1b2c3d4e5f6"],
-        );
-    }
-
-    #[test]
-    fn build_follow_logs_args_streams_existing_and_new_output() {
-        assert_eq!(
-            build_follow_logs_args("cast-project-a1b2c3d4e5f6"),
-            vec!["logs", "--follow", "cast-project-a1b2c3d4e5f6"],
         );
     }
 
