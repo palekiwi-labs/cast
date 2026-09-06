@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::ExitStatus;
 
 use anyhow::{Result, bail};
@@ -9,6 +10,7 @@ use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
 use crate::dev::container_name::resolve_container_name;
 use crate::dev::run::{SessionFlags, resolve_run_opts, run_in_container};
+use crate::dev::service_context::ServiceContext;
 use crate::dev::workspace::get_workspace;
 use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
@@ -30,6 +32,40 @@ pub fn build_exec_cmd(
         return cmd.to_vec();
     }
     build_command(config, container_username, &cmd[0], cmd[1..].to_vec())
+}
+
+/// Options for a command targeting a worktree service.
+pub struct ServiceExecOptions<'a> {
+    pub service_name: Option<&'a str>,
+    pub container_username: &'a str,
+    pub container_workdir: &'a Path,
+    pub headless: bool,
+    pub raw: bool,
+}
+
+/// Build `docker exec` arguments for a command targeting a worktree service.
+pub fn build_service_exec_args(
+    config: &Config,
+    context: &ServiceContext,
+    options: &ServiceExecOptions<'_>,
+    cmd: &[String],
+) -> Vec<String> {
+    let mut args = vec!["exec".to_string()];
+    if !options.headless {
+        args.push("-it".to_string());
+    }
+    args.extend([
+        "--workdir".to_string(),
+        options.container_workdir.to_string_lossy().into_owned(),
+        context.container_name(options.service_name),
+    ]);
+    args.extend(build_exec_cmd(
+        config,
+        options.container_username,
+        options.raw,
+        cmd,
+    ));
+    args
 }
 
 /// Orchestrate and run a `cast exec` session inside a fresh agent container.
@@ -114,6 +150,58 @@ pub fn exec(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dev::service_context::ServiceContext;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn service_exec_enters_configured_shells_in_the_invocation_directory() {
+        let config = Config {
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#ai".to_string()),
+            ..Config::default()
+        };
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::from("crates/app"),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+        let command = vec!["cargo".to_string(), "test".to_string()];
+
+        let args = build_service_exec_args(
+            &config,
+            &context,
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app/crates/app"),
+                headless: false,
+                raw: false,
+            },
+            &command,
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "-it",
+                "--workdir",
+                "/home/alice/projects/my-app/crates/app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix#default",
+                "-c",
+                "nix",
+                "develop",
+                ".#ai",
+                "-c",
+                "cargo",
+                "test",
+            ]
+        );
+    }
 
     // ── build_exec_cmd: raw mode ─────────────────────────────────────────────
 
