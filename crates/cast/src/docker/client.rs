@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use serde::Deserialize;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -7,6 +8,30 @@ use tracing::debug;
 use crate::docker::args;
 
 pub struct DockerClient;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ContainerInspection {
+    #[serde(rename = "Status")]
+    pub status: String,
+    #[serde(rename = "Running")]
+    pub running: bool,
+    #[serde(rename = "Paused")]
+    pub paused: bool,
+    #[serde(rename = "Restarting")]
+    pub restarting: bool,
+    #[serde(rename = "ExitCode")]
+    pub exit_code: i32,
+    #[serde(rename = "StartedAt")]
+    pub started_at: String,
+}
+
+fn parse_container_inspection(output: &str) -> Result<ContainerInspection> {
+    serde_json::from_str(output.trim()).context("failed to parse Docker container state")
+}
+
+fn is_missing_container_error(stderr: &str) -> bool {
+    stderr.contains("No such object:") || stderr.contains("No such container:")
+}
 
 pub struct DockerLogFollower {
     child: Child,
@@ -91,6 +116,31 @@ impl Drop for HeadlessSignalGuard {
 }
 
 impl DockerClient {
+    pub fn inspect_container(&self, name: &str) -> Result<Option<ContainerInspection>> {
+        let command_args = args::build_inspect_args(name);
+        debug!(command = "docker", args = ?command_args, "inspecting container");
+        let output = Command::new("docker")
+            .args(&command_args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_missing_container_error(&stderr) {
+                return Ok(None);
+            }
+            bail!(
+                "`docker {}` failed ({})\n{}",
+                command_args.join(" "),
+                output.status,
+                stderr.trim()
+            );
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        parse_container_inspection(&stdout).map(Some)
+    }
+
     pub fn container_exists(&self, name: &str) -> Result<bool> {
         let ps_args = args::build_ps_all_args(name);
         let output = self.query_command(ps_args)?;
@@ -318,5 +368,25 @@ impl DockerClient {
 
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn container_inspection_preserves_stopped_lifecycle_details() {
+        let inspection = parse_container_inspection(
+            r#"{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"ExitCode":137,"StartedAt":"2026-09-06T12:34:56.123456789Z"}"#,
+        )
+        .expect("Docker state should parse");
+
+        assert_eq!(inspection.status, "exited");
+        assert!(!inspection.running);
+        assert!(!inspection.paused);
+        assert!(!inspection.restarting);
+        assert_eq!(inspection.exit_code, 137);
+        assert_eq!(inspection.started_at, "2026-09-06T12:34:56.123456789Z");
     }
 }
