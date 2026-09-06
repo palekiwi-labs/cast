@@ -14,9 +14,14 @@ use owo_colors::OwoColorize;
 const NIX_VERSION: &str = include_str!("../../assets/nix-version");
 
 fn default_cast_json() -> String {
+    default_cast_json_for(NIX_VERSION.trim())
+}
+
+fn default_cast_json_for(nix_version: &str) -> String {
+    let nix_version = serde_json::to_string(nix_version).expect("Nix version must serialize");
     format!(
         r#"{{
-  "nix_version": "{}",
+  "nix_version": {},
   "sandbox_shell": "~/.config/cast/nix#default",
   "nix_extra_substituters": ["https://cache.numtide.com"],
   "nix_extra_trusted_public_keys": [
@@ -24,7 +29,7 @@ fn default_cast_json() -> String {
   ]
 }}
 "#,
-        NIX_VERSION.trim()
+        nix_version
     )
 }
 
@@ -150,4 +155,18 @@ fn write_if_missing(path: &Path, contents: &str, description: &str) -> Result<()
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_escapes_nix_version_as_json() {
+        let version = r#"2.34.6"\candidate"#;
+        let generated = default_cast_json_for(version);
+        let config: serde_json::Value = serde_json::from_str(&generated).unwrap();
+
+        assert_eq!(config["nix_version"], version);
+    }
 }
