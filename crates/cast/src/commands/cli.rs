@@ -120,8 +120,19 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Some(Commands::Exec { flags: _, cmd: _ }) => {
-            anyhow::bail!("cast exec is not implemented yet")
+        Some(Commands::Exec { flags, cmd }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = ServiceContext::resolve(&cwd)?;
+            let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
+            let status = dev::exec(
+                &approved,
+                &context,
+                flags.name.as_deref(),
+                flags.headless,
+                flags.raw,
+                cmd,
+            )?;
+            Ok(to_exit_code(status))
         }
         Some(Commands::Shell { flags: _, raw: _ }) => {
             anyhow::bail!("cast shell is not implemented yet")

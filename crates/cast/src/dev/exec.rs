@@ -1,21 +1,14 @@
 use std::path::Path;
 use std::process::ExitStatus;
 
-use anyhow::{Result, bail};
-use tracing::{debug, info, info_span};
-
 use crate::config::{ApprovedConfig, Config};
-use crate::dev;
-use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
-use crate::dev::container_name::resolve_container_name;
-use crate::dev::run::{SessionFlags, resolve_run_opts, run_in_container};
+use crate::dev::service::ServiceStatus;
 use crate::dev::service_context::ServiceContext;
-use crate::dev::workspace::get_workspace;
-use crate::docker::BuildOptions;
 use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
+use anyhow::{Result, bail};
 
 /// Build the command vector for `cast exec`.
 ///
@@ -68,83 +61,53 @@ pub fn build_service_exec_args(
     args
 }
 
-/// Orchestrate and run a `cast exec` session inside a fresh agent container.
-///
-/// Unlike `cast shell`, this always starts a **new** container (`docker run
-/// --rm`) rather than `docker exec`-ing into an existing one.
-///
-/// `name_token` is used for container naming and is always `Some(_)` for exec
-/// sessions.  It is separate from the TTY mode so that interactive exec (which
-/// needs a TTY) can still receive a unique ephemeral container name:
-///   - interactive exec → `Some("exec-{invocation_id}")`
-///   - headless exec    → `Some("{invocation_id}")`
+fn validate_service_exec_status(status: ServiceStatus, container_name: &str) -> Result<()> {
+    if status == ServiceStatus::Running {
+        return Ok(());
+    }
+
+    bail!("service is {status}: {container_name}; run `cast up` first")
+}
+
+/// Execute a command in the selected worktree service.
 pub fn exec(
-    agent: &dyn Agent,
     config: &ApprovedConfig,
-    flags: SessionFlags,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    headless: bool,
     raw: bool,
-    name_token: String,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
     if cmd.is_empty() {
-        bail!(
-            "cast exec requires a command. \
-             Usage: cast exec [FLAGS] <agent> <cmd> [args...]"
-        );
+        bail!("cast exec requires a command")
     }
 
+    let container_name = context.container_name(service_name);
+    validate_service_exec_status(
+        crate::dev::service::status(context, service_name)?,
+        &container_name,
+    )?;
+
     let docker = DockerClient;
-    let user = get_user()?;
-    let workspace = get_workspace(&user.username)?;
-
-    let port = dev::port::resolve_port(config, agent.name())?;
-    let cwd_basename = workspace.root_basename();
-    let container_name = resolve_container_name(
-        config,
-        agent.name(),
-        cwd_basename,
-        port,
-        flags.name.as_deref(),
-        Some(&name_token),
-    );
-
-    let span = info_span!(
-        "exec_session",
-        agent = agent.name(),
-        container = %container_name,
-        port = port,
-        raw = raw,
-    );
-    let _guard = span.enter();
-
-    debug!(port, %container_name, raw, "resolved exec parameters");
-
-    // Always ensure the Nix daemon is running — even --raw mounts /nix.
     nix_daemon::ensure_running(&docker, config)?;
 
-    let image_tag = dev::image::image_tag();
-
-    info!(
-        %image_tag,
-        %container_name,
-        port,
-        raw,
-        "starting exec session"
+    let user = get_user()?;
+    let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
+    let container_workdir = context.container_workdir(&workspace);
+    let args = build_service_exec_args(
+        config,
+        context,
+        &ServiceExecOptions {
+            service_name,
+            container_username: &user.username,
+            container_workdir: &container_workdir,
+            headless,
+            raw,
+        },
+        &cmd,
     );
 
-    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
-
-    let run_opts = resolve_run_opts(user, workspace, port, &flags);
-    let exec_cmd = build_exec_cmd(config, &run_opts.user.username, raw, &cmd);
-
-    run_in_container(
-        &docker,
-        config,
-        &run_opts,
-        &container_name,
-        &image_tag,
-        exec_cmd,
-    )
+    docker.interactive_command(args)
 }
 
 #[cfg(test)]
@@ -200,6 +163,20 @@ mod tests {
                 "cargo",
                 "test",
             ]
+        );
+    }
+
+    #[test]
+    fn service_exec_rejects_an_absent_service() {
+        let error = validate_service_exec_status(
+            crate::dev::service::ServiceStatus::Absent,
+            "cast-my-app-a1b2c3d4e5f6",
+        )
+        .expect_err("an absent service must reject exec");
+
+        assert_eq!(
+            error.to_string(),
+            "service is absent: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
         );
     }
 
@@ -369,21 +346,16 @@ mod tests {
 
     #[test]
     fn test_exec_empty_cmd_returns_error() {
-        // The authoritative enforcement of "exec requires a command" is the
-        // bail! at the top of exec(). It must fire before any side effects
-        // (docker, user resolution, etc.) so we can call it with throwaway
-        // args and assert an error is returned.
         use crate::config::ApprovedConfig;
-        use crate::dev::opencode::OpenCode;
-        use crate::dev::run::RunMode;
 
         let config = ApprovedConfig::assume_approved_for_test(Config::default());
-        let flags = SessionFlags {
-            mode: RunMode::Interactive,
-            name: None,
-            publish: false,
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
         };
-        let result = exec(&OpenCode, &config, flags, false, "tok".to_string(), vec![]);
+        let result = exec(&config, &context, None, false, false, vec![]);
         assert!(result.is_err(), "exec with empty cmd must return an error");
         let msg = format!("{}", result.unwrap_err());
         assert!(
