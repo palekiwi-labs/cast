@@ -34,7 +34,7 @@
           rustc = rustToolchain;
         };
         common = {
-          version = "0.3.0-herdr-spike";
+          version = "0.3.0-service";
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
