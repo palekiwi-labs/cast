@@ -1,6 +1,6 @@
 use super::Config;
 use crate::paths::home_config_dir;
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use figment::{
     Figment,
     providers::{Env, Format, Json, Serialized},
@@ -32,6 +32,14 @@ pub fn load_config_with_global(
     base_dir: &std::path::Path,
     global_path: Option<&std::path::Path>,
 ) -> Result<Config> {
+    load_config_from_sources(base_dir, global_path, true)
+}
+
+fn load_config_from_sources(
+    base_dir: &std::path::Path,
+    global_path: Option<&std::path::Path>,
+    include_env: bool,
+) -> Result<Config> {
     let mut figment = Figment::new().merge(Serialized::defaults(Config::default()));
 
     if let Some(global_path) = global_path {
@@ -44,13 +52,28 @@ pub fn load_config_with_global(
         .extract()
         .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
 
-    let config: Config = figment
+    let mut figment = figment
         .merge(Json::file(base_dir.join("cast.json")))
         .merge(Json::file(base_dir.join("cast.local.json")))
-        .merge(Serialized::defaults(mcp_json).key("mcp"))
-        .merge(Env::prefixed("CAST_").split("__"))
-        .extract()
-        .context("Failed to load configuration")?;
+        .merge(Serialized::defaults(mcp_json).key("mcp"));
+    if include_env {
+        figment = figment.merge(Env::prefixed("CAST_").split("__"));
+    }
+    let config: Config = figment.extract().context("Failed to load configuration")?;
+
+    if config.nix_version.is_empty() {
+        bail!(
+            "Missing required nix_version.\n{}",
+            nix_version_recovery_hint(base_dir, global_path)
+        );
+    }
+    if !is_exact_nix_version(&config.nix_version) {
+        bail!(
+            "Invalid nix_version `{}`; expected an exact three-component version such as `2.34.6`.\n{}",
+            config.nix_version,
+            nix_version_recovery_hint(base_dir, global_path)
+        );
+    }
 
     info!(
         memory = %config.memory,
@@ -63,6 +86,38 @@ pub fn load_config_with_global(
     Ok(config)
 }
 
+fn nix_version_recovery_hint(
+    base_dir: &std::path::Path,
+    global_path: Option<&std::path::Path>,
+) -> String {
+    let mut paths = Vec::new();
+    if let Some(global_path) = global_path {
+        paths.push(global_path.display().to_string());
+    }
+    paths.push(base_dir.join("cast.json").display().to_string());
+    paths.push(base_dir.join("cast.local.json").display().to_string());
+
+    let paths = paths
+        .into_iter()
+        .map(|path| format!("  - {path}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "Set `nix_version` in one of these configuration files:\n{paths}\n\
+         For a one-off run, set `CAST_NIX_VERSION=2.34.6`.\n\
+         `cast config init` does not modify existing files."
+    )
+}
+
+fn is_exact_nix_version(version: &str) -> bool {
+    let parts: Vec<_> = version.split('.').collect();
+    parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+}
+
 /// Resolve the global config path (~/.config/cast/cast.json)
 /// Returns None if the home directory cannot be determined
 fn global_config_path() -> Option<PathBuf> {
@@ -72,6 +127,14 @@ fn global_config_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const TEST_NIX_VERSION: &str = "2.34.6";
+
+    fn with_nix_version(body: &str) -> String {
+        let mut value: serde_json::Value = serde_json::from_str(body).unwrap();
+        value["nix_version"] = serde_json::json!(TEST_NIX_VERSION);
+        value.to_string()
+    }
 
     #[test]
     fn test_global_config_path_is_under_home_config() {
@@ -88,6 +151,7 @@ mod tests {
     #[test]
     fn test_load_config_succeeds() {
         let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("cast.json"), with_nix_version("{}")).unwrap();
         // Just verify it loads without error
         // Don't test specific values since they depend on user's environment
         let config = load_config_from(dir.path()).unwrap();
@@ -107,6 +171,49 @@ mod tests {
     }
 
     #[test]
+    fn missing_nix_version_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        let global_path = dir.path().join("global-cast.json");
+
+        let error = load_config_from_sources(dir.path(), Some(&global_path), false).unwrap_err();
+        let message = error.to_string();
+
+        assert!(message.contains("Missing required nix_version"));
+        assert!(message.contains(&global_path.display().to_string()));
+        assert!(message.contains(&dir.path().join("cast.json").display().to_string()));
+        assert!(message.contains(&dir.path().join("cast.local.json").display().to_string()));
+        assert!(message.contains("CAST_NIX_VERSION=2.34.6"));
+        assert!(message.contains("`cast config init` does not modify existing files"));
+    }
+
+    #[test]
+    fn mutable_nix_version_tag_is_rejected() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("cast.json"),
+            r#"{ "nix_version": "latest" }"#,
+        )
+        .unwrap();
+
+        let error = load_config_from_sources(dir.path(), None, false).unwrap_err();
+        let message = error.to_string();
+
+        assert!(message.contains("Invalid nix_version `latest`"));
+        assert!(message.contains(&dir.path().join("cast.json").display().to_string()));
+        assert!(message.contains("CAST_NIX_VERSION=2.34.6"));
+    }
+
+    #[test]
+    fn bundled_nix_version_satisfies_loader_contract() {
+        let version = include_str!("../../assets/nix-version").trim();
+
+        assert!(
+            is_exact_nix_version(version),
+            "assets/nix-version must contain an exact three-component version, got `{version}`"
+        );
+    }
+
+    #[test]
     fn test_merge_cast_and_mcp_json() {
         use std::fs::File;
         use std::io::Write;
@@ -118,7 +225,7 @@ mod tests {
         let mut cast_json = File::create(dir.path().join("cast.json")).unwrap();
         writeln!(
             cast_json,
-            r#"{{ "memory": "2048m", "mcp": {{ "port": 3000 }} }}"#
+            r#"{{ "nix_version": "2.34.6", "memory": "2048m", "mcp": {{ "port": 3000 }} }}"#
         )
         .unwrap();
 
@@ -142,8 +249,11 @@ mod tests {
         mcp: Option<&str>,
     ) -> Result<Config> {
         let dir = tempfile::tempdir().unwrap();
+        let project = project
+            .map(with_nix_version)
+            .unwrap_or_else(|| with_nix_version("{}"));
         for (name, body) in [
-            ("cast.json", project),
+            ("cast.json", Some(project.as_str())),
             ("cast.local.json", local),
             ("cast-mcp.json", mcp),
         ] {
@@ -227,9 +337,10 @@ mod tests {
         std::fs::create_dir_all(&project_dir).unwrap();
 
         let global_path = dir.path().join("global-cast.json");
-        if let Some(body) = global {
-            std::fs::write(&global_path, body).unwrap();
-        }
+        let global = global
+            .map(with_nix_version)
+            .unwrap_or_else(|| with_nix_version("{}"));
+        std::fs::write(&global_path, global).unwrap();
         if let Some(body) = project {
             std::fs::write(project_dir.join("cast.json"), body).unwrap();
         }
@@ -354,7 +465,11 @@ mod tests {
 
         // Create cast.json only
         let mut cast_json = File::create(dir.path().join("cast.json")).unwrap();
-        writeln!(cast_json, r#"{{ "memory": "2048m" }}"#).unwrap();
+        writeln!(
+            cast_json,
+            r#"{{ "nix_version": "2.34.6", "memory": "2048m" }}"#
+        )
+        .unwrap();
 
         let config = load_config_from(dir.path()).unwrap();
 

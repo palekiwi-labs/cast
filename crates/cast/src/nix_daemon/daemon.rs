@@ -1,8 +1,9 @@
 use std::fs;
+use std::path::Path;
 use std::process::ExitStatus;
 use tempfile::TempDir;
 
-use crate::config::ApprovedConfig;
+use crate::config::{ApprovedConfig, Config};
 use crate::docker::BuildOptions;
 use crate::docker::args;
 use crate::docker::client::DockerClient;
@@ -12,27 +13,24 @@ use tracing::info;
 
 /// Ensure the nix daemon container is running
 pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
-    let container_name = &config.nix_daemon_container_name;
+    let container_name = config.effective_nix_daemon_container_name();
 
     // Check if already running
-    if docker.is_container_running(container_name)? {
+    if docker.is_container_running(&container_name)? {
         info!(%container_name, "nix daemon already running");
         return Ok(());
     }
 
     // Get the image tag (derived from the cast version)
-    let image_tag = image::get_image_tag();
+    let image_tag = image::get_generation_image_tag(&config.nix_version);
 
     // Check if the image exists, build it if it doesn't
     if !docker.image_exists(&image_tag)? {
         // info! writes to the file log; eprintln! writes to the console.
         // Status messages go to stderr so stdout stays clean for pipelines.
         eprintln!("Building nix daemon image: {}", image_tag);
-        build_image(docker, &image_tag, false)?;
+        build_image(docker, config, false)?;
     }
-
-    // Generate dynamic nix.conf content
-    let nix_conf_content = nix_config::generate_nix_conf(config);
 
     // Start the daemon container
     info!(
@@ -46,16 +44,7 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
     );
 
     // Assemble options
-    let opts = vec![
-        "-d".to_string(),
-        "--rm".to_string(),
-        "-e".to_string(),
-        format!("NIX_CONFIG={}", nix_conf_content),
-        "-v".to_string(),
-        format!("{}:/nix:rw", config.nix_volume_name),
-    ];
-
-    let run_args = args::build_run_args(container_name, &image_tag, opts, None);
+    let run_args = build_daemon_run_args(config);
     docker.run_command(run_args)?;
 
     info!(%container_name, "nix daemon started successfully");
@@ -63,26 +52,46 @@ pub fn ensure_running(docker: &DockerClient, config: &ApprovedConfig) -> Result<
     Ok(())
 }
 
+fn build_daemon_run_args(config: &Config) -> Vec<String> {
+    let container_name = config.effective_nix_daemon_container_name();
+    let image_tag = image::get_generation_image_tag(&config.nix_version);
+    let nix_conf_content = nix_config::generate_nix_conf(config);
+    let opts = vec![
+        "-d".to_string(),
+        "--rm".to_string(),
+        "-e".to_string(),
+        format!("NIX_CONFIG={}", nix_conf_content),
+        "-v".to_string(),
+        format!("{}:/nix:rw", config.effective_nix_volume_name()),
+    ];
+
+    args::build_run_args(&container_name, &image_tag, opts, None)
+}
+
 /// Build the custom nix daemon image
-fn build_image(docker: &DockerClient, tag: &str, no_cache: bool) -> Result<()> {
+fn build_image(docker: &DockerClient, config: &Config, no_cache: bool) -> Result<()> {
     // Create a temporary directory for the build context
     let temp_dir = TempDir::new()?;
     let context_path = temp_dir.path();
 
-    // Write the Dockerfile
+    // Write the Dockerfile with the configured Nix version baked into
+    // the base image reference
     let dockerfile_path = context_path.join("Dockerfile");
-    fs::write(&dockerfile_path, image::get_dockerfile())?;
+    fs::write(
+        &dockerfile_path,
+        image::render_dockerfile(&config.nix_version),
+    )?;
 
     // Build the image
-    let build_args = args::build_docker_build_args(tag, context_path, &[], no_cache);
+    let build_args = build_image_args(config, context_path, no_cache);
     docker.stream_command(build_args)?;
 
     Ok(())
 }
 
 /// Explicitly build the custom nix daemon image
-pub fn build(docker: &DockerClient, opts: BuildOptions) -> Result<()> {
-    let image_tag = image::get_image_tag();
+pub fn build(docker: &DockerClient, config: &ApprovedConfig, opts: BuildOptions) -> Result<()> {
+    let image_tag = image::get_generation_image_tag(&config.nix_version);
 
     if !opts.force && docker.image_exists(&image_tag)? {
         eprintln!("Nix daemon image already exists: {}", image_tag);
@@ -90,45 +99,138 @@ pub fn build(docker: &DockerClient, opts: BuildOptions) -> Result<()> {
     }
 
     eprintln!("Building nix daemon image: {}", image_tag);
-    build_image(docker, &image_tag, opts.no_cache)
+    build_image(docker, config, opts.no_cache)
+}
+
+fn build_image_args(config: &Config, context_path: &Path, no_cache: bool) -> Vec<String> {
+    let image_tag = image::get_generation_image_tag(&config.nix_version);
+    args::build_docker_build_args(&image_tag, context_path, &[], no_cache)
 }
 
 /// Stop the nix daemon container
 pub fn stop(docker: &DockerClient, config: &ApprovedConfig) -> Result<()> {
-    let container_name = &config.nix_daemon_container_name;
+    let container_name = config.effective_nix_daemon_container_name();
 
     // Check if it's actually running
-    if !docker.is_container_running(container_name)? {
+    if !docker.is_container_running(&container_name)? {
         eprintln!("Nix daemon is not running: {}", container_name);
         return Ok(());
     }
 
     eprintln!("Stopping nix daemon container: {}", container_name);
-    let stop_args = args::build_stop_args(container_name);
+    let stop_args = build_daemon_stop_args(config);
     docker.run_command(stop_args)?;
     eprintln!("Nix daemon stopped successfully");
 
     Ok(())
 }
 
+fn build_daemon_stop_args(config: &Config) -> Vec<String> {
+    args::build_stop_args(&config.effective_nix_daemon_container_name())
+}
+
 /// Drop into an interactive shell in the nix daemon container
 pub fn shell(docker: &DockerClient, config: &ApprovedConfig) -> Result<ExitStatus> {
-    let container_name = &config.nix_daemon_container_name;
+    let container_name = config.effective_nix_daemon_container_name();
 
     // Check if it's actually running
-    if !docker.is_container_running(container_name)? {
+    if !docker.is_container_running(&container_name)? {
         bail!(
             "Nix daemon is not running: {}. Run 'cast nix-daemon start' first.",
             container_name
         );
     }
 
-    let exec_args = vec![
+    docker.interactive_command(build_daemon_shell_args(config))
+}
+
+fn build_daemon_shell_args(config: &Config) -> Vec<String> {
+    vec![
         "exec".to_string(),
         "-it".to_string(),
-        container_name.clone(),
+        config.effective_nix_daemon_container_name(),
         "/bin/sh".to_string(),
-    ];
+    ]
+}
 
-    docker.interactive_command(exec_args)
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use crate::config::Config;
+
+    use super::*;
+
+    #[test]
+    fn daemon_build_selects_configured_generation() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            ..Config::default()
+        };
+
+        let build_args = build_image_args(&config, Path::new("/tmp/build"), false);
+        let expected_tag = format!(
+            "localhost/cast-nix-daemon-2.34.6:{}",
+            env!("CARGO_PKG_VERSION")
+        );
+
+        assert_eq!(
+            build_args,
+            vec![
+                "build".to_string(),
+                "-t".to_string(),
+                expected_tag,
+                "/tmp/build".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn daemon_start_uses_versioned_container_image_and_volume() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_daemon_container_name: "custom-daemon".to_string(),
+            nix_volume_name: "custom-store".to_string(),
+            ..Config::default()
+        };
+
+        let run_args = build_daemon_run_args(&config);
+
+        assert_eq!(run_args[0..3], ["run", "--name", "custom-daemon-2.34.6"]);
+        assert!(run_args.contains(&"custom-store-2.34.6:/nix:rw".to_string()));
+        assert!(run_args.contains(&format!(
+            "localhost/cast-nix-daemon-2.34.6:{}",
+            env!("CARGO_PKG_VERSION")
+        )));
+        assert!(!run_args.contains(&"custom-daemon".to_string()));
+        assert!(!run_args.contains(&"custom-store:/nix:rw".to_string()));
+    }
+
+    #[test]
+    fn daemon_stop_targets_versioned_container() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_daemon_container_name: "custom-daemon".to_string(),
+            ..Config::default()
+        };
+
+        assert_eq!(
+            build_daemon_stop_args(&config),
+            ["stop", "custom-daemon-2.34.6"]
+        );
+    }
+
+    #[test]
+    fn daemon_shell_targets_versioned_container() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_daemon_container_name: "custom-daemon".to_string(),
+            ..Config::default()
+        };
+
+        assert_eq!(
+            build_daemon_shell_args(&config),
+            ["exec", "-it", "custom-daemon-2.34.6", "/bin/sh"]
+        );
+    }
 }

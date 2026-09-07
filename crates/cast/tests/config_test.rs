@@ -22,6 +22,7 @@ fn test_config_load_with_partial_json() {
     let config_path = temp_dir.path().join("cast.json");
 
     let json = json!({
+        "nix_version": "2.34.6",
         "memory": "4g",
         "cpus": 2.5,
     });
@@ -42,6 +43,7 @@ fn test_config_env_vars_override() {
     let config_path = temp_dir.path().join("cast.json");
 
     let json = json!({
+        "nix_version": "2.34.5",
         "memory": "2g",
         "cpus": 1.5,
         "nix_volume_name": "from-file"
@@ -59,6 +61,7 @@ fn test_config_env_vars_override() {
         .env("CAST_DATA_DIR", data_dir.path())
         .env("CAST_MEMORY", "8g")
         .env("CAST_CPUS", "4.0")
+        .env("CAST_NIX_VERSION", "2.34.6")
         .env("CAST_NIX_VOLUME_NAME", "from-env")
         .env("CAST_SANDBOX_SHELL", "github:org/global#ai")
         .env("CAST_PROJECT_SHELL", ".#project")
@@ -76,6 +79,7 @@ fn test_config_env_vars_override() {
     // Env vars should override file config
     assert_eq!(config["memory"], "8g");
     assert_eq!(config["cpus"], 4.0);
+    assert_eq!(config["nix_version"], "2.34.6");
     // Test that fields with underscores work correctly
     assert_eq!(config["nix_volume_name"], "from-env");
     assert_eq!(config["sandbox_shell"], "github:org/global#ai");
@@ -105,6 +109,7 @@ fn test_config_local_file_overrides_project_but_not_env() {
         .current_dir(workspace.path())
         .env("CAST_LOG_DIR", data_dir.path().join("logs"))
         .env("CAST_DATA_DIR", data_dir.path())
+        .env("CAST_NIX_VERSION", "2.34.6")
         .env("CAST_MEMORY", "8g")
         .args(["config", "show"])
         .output()
@@ -129,7 +134,8 @@ fn test_config_serialize_to_json() {
 fn cast_with_data_dir(data_dir: &std::path::Path) -> Command {
     let mut cmd = Command::cargo_bin("cast").unwrap();
     cmd.env("CAST_LOG_DIR", std::env::temp_dir().join("cast-test-logs"))
-        .env("CAST_DATA_DIR", data_dir);
+        .env("CAST_DATA_DIR", data_dir)
+        .env("CAST_NIX_VERSION", "2.34.6");
     cmd
 }
 
@@ -149,6 +155,10 @@ fn test_config_init_creates_global_config_and_flake() {
     let config_path = home.path().join(".config/cast/cast.json");
     let config: serde_json::Value =
         serde_json::from_slice(&fs::read(config_path).unwrap()).unwrap();
+    assert_eq!(
+        config["nix_version"],
+        include_str!("../assets/nix-version").trim()
+    );
     assert_eq!(config["sandbox_shell"], "~/.config/cast/nix#default");
     assert_eq!(
         config["nix_extra_substituters"],

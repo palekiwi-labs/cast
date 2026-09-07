@@ -27,7 +27,8 @@ inside the devshell by default. Use `cast shell --raw <agent>` to bypass it.
 
 `cast` can run a dedicated Nix daemon in a Docker container.
 
-- The Nix store is shared via a Docker volume (default: `cast-nix`).
+- The configured Nix version selects a generation-specific Docker volume
+  (default base: `cast-nix`, effective name: `cast-nix-<nix_version>`).
 - The daemon container has `rw` access to the store.
 - Agent sandboxes have `ro` access to the store.
 - Communication happens over a Unix socket.

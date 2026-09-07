@@ -20,6 +20,10 @@ This page lists key configuration fields available in both `cast.json` and
 
 ## Nix Settings
 
+- `nix_version`: Required exact Nix version, such as `"2.34.6"`. Cast uses it
+  to select the upstream `nixos/nix:<nix_version>` image and isolate daemon
+  resources. `cast config init` writes Cast's current pin into new
+  configurations without changing existing files.
 - `sandbox_shell`: Full flake reference for the outer harness layer, such as
   `~/.config/cast/nix#default`, `.#ai`, or `github:org/repo#shell`. Unset means
   no sandbox layer. A leading `~/` resolves against the container user's home;
@@ -31,7 +35,14 @@ This page lists key configuration fields available in both `cast.json` and
   `true`).
 - `use_project_shell`: Whether to enable the configured project layer (default:
   `true`).
-- `nix_volume_name`: Name of the Docker volume for the Nix store.
+- `nix_volume_name`: Base name of the Docker volume for the Nix store. The
+  effective name is `<nix_volume_name>-<nix_version>`.
+- `nix_daemon_container_name`: Base name of the daemon container. The effective
+  name is `<nix_daemon_container_name>-<nix_version>`.
+
+Configurations created before `nix_version` was introduced must add an exact
+version manually or be regenerated with `cast config init` after moving the
+existing file aside. Cast does not rewrite an existing configuration.
 
 The removed `global_shell`, `use_flake`, and `use_flake_path` keys are silently
 ignored. Replace a bare `global_shell` name with a complete `sandbox_shell` ref;

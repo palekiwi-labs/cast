@@ -21,7 +21,7 @@ pub fn build_dev_image(
     let opts = BuildOptions { force, no_cache };
 
     if nix_daemon {
-        nix_daemon::build(&docker, opts)?;
+        nix_daemon::build(&docker, cfg, opts)?;
     }
 
     image::ensure_dev_image(&docker, cfg, &user, opts)?;

@@ -12,6 +12,7 @@ Every configuration field in `cast` can be overridden by environment variables.
 
 - `memory` becomes `CAST_MEMORY`.
 - `cpus` becomes `CAST_CPUS`.
+- `nix_version` becomes `CAST_NIX_VERSION`.
 - `mcp.port` becomes `CAST_MCP__PORT`.
 - `mcp.hostname` becomes `CAST_MCP__HOSTNAME`.
 - `sandbox_shell` becomes `CAST_SANDBOX_SHELL`.
