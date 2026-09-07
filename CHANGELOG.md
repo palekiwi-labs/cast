@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-09-07
+
+First tagged checkpoint of the 0.2 line: the 0.2 scope plus versioned
+Nix daemon generations. A proper 0.2.0 may still be cut from master
+later; otherwise the next release is 0.3.0.
+
 ### Added
 
 - `cast config init`, a flagless global bootstrap command that creates the

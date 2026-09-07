@@ -34,7 +34,7 @@
           rustc = rustToolchain;
         };
         common = {
-          version = "0.2.0";
+          version = "0.2.0-rc.1";
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
