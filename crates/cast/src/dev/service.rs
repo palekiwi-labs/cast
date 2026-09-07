@@ -49,13 +49,11 @@ pub fn build_service_docker_args(
     host_env_names: &BTreeSet<String>,
 ) -> Vec<String> {
     let container_name = context.container_name(service_name);
-    let multiplexer_session = context.multiplexer_session_name(service_name);
     let container_workdir = context.container_workdir(&opts.workspace);
     let flags = build_service_run_flags(
         config,
         opts,
         host_env_names,
-        &multiplexer_session,
         &context.git_common_dir,
         &container_workdir,
     );
@@ -224,7 +222,6 @@ mod tests {
             &args[..3],
             ["run", "--name", "cast-my-app-a1b2c3d4e5f6-isolated"]
         );
-        assert!(args.contains(&"HERDR_SESSION=cast-a1b2c3d4e5f6-isolated".to_string()));
         assert!(args.ends_with(&[
             "localhost/cast:spike".to_string(),
             "sleep".to_string(),

@@ -439,7 +439,6 @@ pub fn build_service_run_flags(
     config: &Config,
     opts: &RunOpts,
     host_env_names: &BTreeSet<String>,
-    multiplexer_session: &str,
     git_common_dir: &Path,
     container_workdir: &Path,
 ) -> Vec<String> {
@@ -451,10 +450,6 @@ pub fn build_service_run_flags(
     if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
         run_args.drain(position..=position + 1);
     }
-    run_args.extend([
-        "-e".to_string(),
-        format!("HERDR_SESSION={multiplexer_session}"),
-    ]);
     if !git_common_dir.starts_with(&opts.workspace.root) {
         run_args.extend([
             "-v".to_string(),
@@ -604,7 +599,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project"),
         );
@@ -624,7 +618,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project"),
         );
@@ -634,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn service_run_injects_the_isolated_multiplexer_session() {
+    fn service_run_names_no_multiplexer() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
@@ -642,12 +635,14 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project"),
         );
 
-        assert!(run_args.contains(&"HERDR_SESSION=cast-a1b2c3d4e5f6".to_string()));
+        assert!(
+            !run_args.iter().any(|arg| arg.starts_with("HERDR_")),
+            "service environment must not name a multiplexer, got: {run_args:?}"
+        );
     }
 
     #[test]
@@ -659,7 +654,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/main/.git"),
             Path::new("/home/alice/project"),
         );
@@ -680,7 +674,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project"),
         );
@@ -703,7 +696,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project"),
         );
@@ -721,7 +713,6 @@ mod tests {
             &config,
             &opts,
             &no_host_env(),
-            "cast-a1b2c3d4e5f6",
             Path::new("/home/alice/project/.git"),
             Path::new("/home/alice/project/crates/app"),
         );
