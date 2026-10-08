@@ -50,12 +50,8 @@ fn load_config_from_sources(
         .merge(Json::file(base_dir.join("cast.json")))
         .merge(Json::file(base_dir.join("cast.local.json")));
 
-    // Load cast-mcp.json into an intermediate Value.
-    // This allows the file to have a flat structure (no root "mcp" key).
-    //
-    // The merge is gated on the file existing: `mcp` is an opt-in, and an
-    // unconditional merge of an empty dict would materialize the block for
-    // every project.
+    // Load flat cast-mcp.json into the "mcp" key only if present, avoiding
+    // materializing a default block for projects without MCP.
     let mcp_path = base_dir.join("cast-mcp.json");
     if mcp_path.is_file() {
         let mcp_json: figment::value::Value = Figment::from(Json::file(&mcp_path))
@@ -390,8 +386,6 @@ mod tests {
 
     #[test]
     fn empty_cast_mcp_json_opts_in_with_defaults() {
-        // The file existing is the opt-in; an empty object just accepts the
-        // built-in defaults.
         let config = load_without_env(None, None, Some("{}")).unwrap();
 
         let mcp = config.mcp.expect("mcp block present");

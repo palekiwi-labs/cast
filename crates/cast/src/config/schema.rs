@@ -65,10 +65,8 @@ pub struct Config {
     #[serde(default)]
     pub extra_env_passthrough: Vec<String>,
 
-    /// The `mcp` block, present only when some configuration source
-    /// declares one. Absence is meaningful: it is the signal that this
-    /// project has no MCP server, and it suppresses `CAST_MCP_URL`
-    /// injection into the sandbox.
+    /// Optional MCP settings. When absent, `CAST_MCP_URL` is not injected into
+    /// the sandbox.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp: Option<McpConfig>,
 }
@@ -167,17 +165,11 @@ pub struct VolumeConfig {
 
 impl Config {
     /// Whether any configuration source declared an `mcp` block.
-    ///
-    /// This is the project's opt-in to MCP: it governs whether
-    /// `CAST_MCP_URL` is injected into the sandbox, so that a sandbox can
-    /// tell "no MCP server here" from "the server is down".
     pub fn mcp_configured(&self) -> bool {
         self.mcp.is_some()
     }
 
-    /// The MCP settings to serve with. `cast mcp start` works without an
-    /// `mcp` block (built-in documentation tools on the default port), so
-    /// the opt-in governs injection only, not the server.
+    /// MCP settings to serve with, falling back to defaults when unconfigured.
     pub fn effective_mcp(&self) -> McpConfig {
         self.mcp.clone().unwrap_or_default()
     }

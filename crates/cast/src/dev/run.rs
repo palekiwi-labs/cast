@@ -378,10 +378,7 @@ pub fn build_docker_run_flags(
         }
     }
 
-    // MCP server URL injection, opt-in via the `mcp` config block. Leaving
-    // the variable unset in MCP-less projects lets clients inside the
-    // sandbox distinguish "this project has no MCP server" from "the
-    // configured server is unreachable".
+    // MCP server URL injection (opt-in).
     if let Some(mcp) = &config.mcp {
         let mcp_url = format!("http://host.docker.internal:{}/mcp", mcp.port);
         run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
@@ -746,8 +743,6 @@ mod tests {
 
     #[test]
     fn test_build_docker_run_flags_mcp_default_block_uses_default_port() {
-        // An empty `mcp` block is still an opt-in: the URL is injected with
-        // the built-in default port.
         let config = Config {
             mcp: Some(crate::config::McpConfig::default()),
             ..Config::default()
