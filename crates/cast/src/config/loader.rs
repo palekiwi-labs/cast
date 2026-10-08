@@ -46,16 +46,24 @@ fn load_config_from_sources(
         figment = figment.merge(Json::file(global_path));
     }
 
-    // Load cast-mcp.json into an intermediate Value.
-    // This allows the file to have a flat structure (no root "mcp" key).
-    let mcp_json: figment::value::Value = Figment::from(Json::file(base_dir.join("cast-mcp.json")))
-        .extract()
-        .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
-
     let mut figment = figment
         .merge(Json::file(base_dir.join("cast.json")))
-        .merge(Json::file(base_dir.join("cast.local.json")))
-        .merge(Serialized::defaults(mcp_json).key("mcp"));
+        .merge(Json::file(base_dir.join("cast.local.json")));
+
+    // Load cast-mcp.json into an intermediate Value.
+    // This allows the file to have a flat structure (no root "mcp" key).
+    //
+    // The merge is gated on the file existing: `mcp` is an opt-in, and an
+    // unconditional merge of an empty dict would materialize the block for
+    // every project.
+    let mcp_path = base_dir.join("cast-mcp.json");
+    if mcp_path.is_file() {
+        let mcp_json: figment::value::Value = Figment::from(Json::file(&mcp_path))
+            .extract()
+            .unwrap_or_else(|_| figment::value::Value::from(figment::value::Dict::new()));
+        figment = figment.merge(Serialized::defaults(mcp_json).key("mcp"));
+    }
+
     if include_env {
         figment = figment.merge(Env::prefixed("CAST_").split("__"));
     }
@@ -127,6 +135,7 @@ fn global_config_path() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::schema::{DEFAULT_MCP_HOSTNAME, DEFAULT_MCP_PORT};
 
     const TEST_NIX_VERSION: &str = "2.34.6";
 
@@ -237,10 +246,11 @@ mod tests {
 
         // Should have memory from cast.json
         assert_eq!(config.memory, "2048m");
+        let mcp = config.mcp.expect("mcp block should be present");
         // Should have hostname from cast-mcp.json
-        assert_eq!(config.mcp.hostname, "0.0.0.0");
+        assert_eq!(mcp.hostname, "0.0.0.0");
         // Should have port from cast-mcp.json (precedence)
-        assert_eq!(config.mcp.port, 4000);
+        assert_eq!(mcp.port, 4000);
     }
 
     fn load_with_project_files(
@@ -316,7 +326,97 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(config.mcp.port, 4000);
+        assert_eq!(config.mcp.expect("mcp block present").port, 4000);
+    }
+
+    /// Load from project files only, with neither a global config nor the
+    /// ambient `CAST_*` environment, so `mcp` presence depends purely on the
+    /// files written by the test.
+    fn load_without_env(
+        project: Option<&str>,
+        local: Option<&str>,
+        mcp: Option<&str>,
+    ) -> Result<Config> {
+        let dir = tempfile::tempdir().unwrap();
+        let project = project
+            .map(with_nix_version)
+            .unwrap_or_else(|| with_nix_version("{}"));
+        for (name, body) in [
+            ("cast.json", Some(project.as_str())),
+            ("cast.local.json", local),
+            ("cast-mcp.json", mcp),
+        ] {
+            if let Some(body) = body {
+                std::fs::write(dir.path().join(name), body).unwrap();
+            }
+        }
+
+        load_config_from_sources(dir.path(), None, false)
+    }
+
+    #[test]
+    fn mcp_block_absent_from_every_source_leaves_mcp_unset() {
+        let config = load_without_env(None, None, None).unwrap();
+
+        assert!(
+            config.mcp.is_none(),
+            "a project with no mcp block must not materialize one: {:?}",
+            config.mcp
+        );
+        assert!(!config.mcp_configured());
+    }
+
+    #[test]
+    fn mcp_block_in_project_config_opts_in() {
+        let config = load_without_env(Some(r#"{ "mcp": { "port": 3100 } }"#), None, None).unwrap();
+
+        assert!(config.mcp_configured());
+        assert_eq!(config.mcp.expect("mcp block present").port, 3100);
+    }
+
+    #[test]
+    fn mcp_block_in_local_config_opts_in() {
+        let config = load_without_env(None, Some(r#"{ "mcp": { "port": 3200 } }"#), None).unwrap();
+
+        assert_eq!(config.mcp.expect("mcp block present").port, 3200);
+    }
+
+    #[test]
+    fn cast_mcp_json_opts_in() {
+        let config = load_without_env(None, None, Some(r#"{ "port": 3300 }"#)).unwrap();
+
+        assert_eq!(config.mcp.expect("mcp block present").port, 3300);
+    }
+
+    #[test]
+    fn empty_cast_mcp_json_opts_in_with_defaults() {
+        // The file existing is the opt-in; an empty object just accepts the
+        // built-in defaults.
+        let config = load_without_env(None, None, Some("{}")).unwrap();
+
+        let mcp = config.mcp.expect("mcp block present");
+        assert_eq!(mcp.port, DEFAULT_MCP_PORT);
+        assert_eq!(mcp.hostname, DEFAULT_MCP_HOSTNAME);
+    }
+
+    #[test]
+    fn mcp_block_in_global_config_opts_in() {
+        let config = load_with_configs(Some(r#"{ "mcp": { "port": 3400 } }"#), None);
+
+        assert_eq!(config.mcp.expect("mcp block present").port, 3400);
+    }
+
+    #[test]
+    fn unset_mcp_block_is_omitted_from_the_serialized_config() {
+        // The approval snapshot and `cast config show` must show the absence,
+        // not a defaulted block.
+        let config = load_without_env(None, None, None).unwrap();
+        let value = serde_json::to_value(&config).unwrap();
+
+        assert!(
+            value.get("mcp").is_none(),
+            "serialized config should omit mcp entirely: {value}"
+        );
     }
 
     #[test]
@@ -471,10 +571,10 @@ mod tests {
         )
         .unwrap();
 
-        let config = load_config_from(dir.path()).unwrap();
+        let config = load_config_from_sources(dir.path(), None, false).unwrap();
 
         assert_eq!(config.memory, "2048m");
-        // Should have defaults for MCP
-        assert_eq!(config.mcp.port, 8080);
+        // A missing cast-mcp.json must not synthesize an mcp block.
+        assert!(config.mcp.is_none());
     }
 }
