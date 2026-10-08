@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `CAST_MCP_URL` is now injected into the sandbox only when the project
+  configures MCP. Declaring an `mcp` block in any configuration source is the
+  opt-in: the global `~/.config/cast/cast.json`, the project `cast.json`,
+  `cast.local.json`, a `cast-mcp.json` file (its existence is enough), or a
+  `CAST_MCP__*` environment override. Previously every sandbox received
+  `http://host.docker.internal:8080/mcp`, so an MCP-less project was
+  indistinguishable from a crashed or unstarted server, and the default port
+  could collide with an unrelated host service.
+
+  `cast mcp start` is unchanged and still works without an `mcp` block, serving
+  its built-in documentation tools on the default host and port. The opt-in
+  governs injection only.
+
+  Clients need no changes: `cast-mcp-client` already omits the `cast` server
+  when no flag, environment variable, or config entry supplies a URL, so
+  `status` and `list` report it as not configured. Consumers that template the
+  variable do need attention — an opencode remote entry using
+  `"url": "{env:CAST_MCP_URL}"` resolves to an empty URL in a project with no
+  `mcp` block and should be disabled there.
+
+### Migration
+
+- Projects with no `mcp` block will see a changed configuration hash, because
+  the key is now omitted from the serialized config rather than filled in from
+  defaults. Run `cast config allow` to re-approve.
+
 ## [0.2.0-rc.1] - 2026-09-07
 
 First tagged checkpoint of the 0.2 line: the 0.2 scope plus versioned

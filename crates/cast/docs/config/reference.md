@@ -87,6 +87,18 @@ migrate the other keys to `project_shell`. See
 
 ## MCP Settings (`mcp` block)
 
+The block is optional, and its presence is the project's opt-in to MCP.
+When no configuration source declares an `mcp` block, `cast` launches the
+sandbox without `CAST_MCP_URL`, so clients inside it can tell "this
+project has no MCP server" from "the configured server is unreachable".
+See [MCP Client][mcp-client].
+
+Any source is enough to opt in: the global `~/.config/cast/cast.json`, the
+project `cast.json`, `cast.local.json`, a `cast-mcp.json` file (even an
+empty one), or a `CAST_MCP__*` environment override. The opt-in governs
+injection only — `cast mcp start` serves its built-in documentation tools
+on the defaults below with no block present.
+
 - `port`: Port for the MCP server (default: `8080`).
 - `hostname`: Hostname for the MCP server (default: `"127.0.0.1"`).
 - `tools`: Map of tool definitions. See [MCP Configuration][mcp-config]
@@ -100,5 +112,6 @@ A legacy `agent_versions` key is silently ignored if present.
 
 [schema-src]: ../../src/config/schema.rs
 [mcp-config]: ../mcp/configuration.md
+[mcp-client]: ../mcp/client.md
 [env-overrides]: env-overrides.md
 [flake-integration]: ../nix/flake-integration.md

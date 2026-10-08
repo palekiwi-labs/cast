@@ -7,7 +7,8 @@
 1. **Global Config**: `~/.config/cast/cast.json`
 2. **Project Config**: `./cast.json` (at the workspace root)
 3. **Local Project Config**: `./cast.local.json` (personal overrides)
-4. **Flat MCP Config**: `./cast-mcp.json` (merged into the `mcp` section)
+4. **Flat MCP Config**: `./cast-mcp.json` (merged into the `mcp` section;
+   the file existing is enough to opt the project in to MCP)
 
 ## Loading Precedence
 
