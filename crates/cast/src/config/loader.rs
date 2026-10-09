@@ -359,14 +359,12 @@ mod tests {
             "a project with no mcp block must not materialize one: {:?}",
             config.mcp
         );
-        assert!(!config.mcp_configured());
     }
 
     #[test]
     fn mcp_block_in_project_config_opts_in() {
         let config = load_without_env(Some(r#"{ "mcp": { "port": 3100 } }"#), None, None).unwrap();
 
-        assert!(config.mcp_configured());
         assert_eq!(config.mcp.expect("mcp block present").port, 3100);
     }
 

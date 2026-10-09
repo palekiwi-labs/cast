@@ -164,11 +164,6 @@ pub struct VolumeConfig {
 }
 
 impl Config {
-    /// Whether any configuration source declared an `mcp` block.
-    pub fn mcp_configured(&self) -> bool {
-        self.mcp.is_some()
-    }
-
     /// MCP settings to serve with, falling back to defaults when unconfigured.
     pub fn effective_mcp(&self) -> McpConfig {
         self.mcp.clone().unwrap_or_default()
