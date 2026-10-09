@@ -44,8 +44,18 @@ pub fn build_service_exec_args(
     cmd: &[String],
 ) -> Vec<String> {
     let mut args = vec!["exec".to_string()];
-    if !options.headless {
+    let terminal_env: &[&str] = if options.headless {
+        &["NO_COLOR=1"]
+    } else {
         args.push("-it".to_string());
+        &[
+            "TERM=xterm-256color",
+            "COLORTERM=truecolor",
+            "FORCE_COLOR=1",
+        ]
+    };
+    for var in terminal_env {
+        args.extend(["-e".to_string(), var.to_string()]);
     }
     args.extend([
         "--workdir".to_string(),
@@ -149,6 +159,12 @@ mod tests {
             vec![
                 "exec",
                 "-it",
+                "-e",
+                "TERM=xterm-256color",
+                "-e",
+                "COLORTERM=truecolor",
+                "-e",
+                "FORCE_COLOR=1",
                 "--workdir",
                 "/home/alice/projects/my-app/crates/app",
                 "cast-my-app-a1b2c3d4e5f6",
@@ -164,6 +180,42 @@ mod tests {
                 "test",
             ]
         );
+    }
+
+    fn terminal_env_of(headless: bool) -> Vec<String> {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless,
+                raw: true,
+            },
+            &["bash".to_string()],
+        );
+        args.windows(2)
+            .filter(|pair| pair[0] == "-e")
+            .map(|pair| pair[1].clone())
+            .collect()
+    }
+
+    #[test]
+    fn interactive_service_exec_advertises_a_colour_terminal() {
+        assert_eq!(
+            terminal_env_of(false),
+            vec![
+                "TERM=xterm-256color",
+                "COLORTERM=truecolor",
+                "FORCE_COLOR=1"
+            ]
+        );
+    }
+
+    #[test]
+    fn headless_service_exec_disables_colour() {
+        assert_eq!(terminal_env_of(true), vec!["NO_COLOR=1"]);
     }
 
     fn service_context_fixture() -> ServiceContext {
@@ -203,6 +255,12 @@ mod tests {
             vec![
                 "exec",
                 "-it",
+                "-e",
+                "TERM=xterm-256color",
+                "-e",
+                "COLORTERM=truecolor",
+                "-e",
+                "FORCE_COLOR=1",
                 "--workdir",
                 "/home/alice/projects/my-app",
                 "cast-my-app-a1b2c3d4e5f6",
@@ -231,6 +289,8 @@ mod tests {
             args,
             vec![
                 "exec",
+                "-e",
+                "NO_COLOR=1",
                 "--workdir",
                 "/home/alice/projects/my-app",
                 "cast-my-app-a1b2c3d4e5f6",

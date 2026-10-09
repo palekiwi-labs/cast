@@ -85,6 +85,12 @@ mod tests {
             vec![
                 "exec",
                 "-it",
+                "-e",
+                "TERM=xterm-256color",
+                "-e",
+                "COLORTERM=truecolor",
+                "-e",
+                "FORCE_COLOR=1",
                 "--workdir",
                 "/home/alice/projects/my-app",
                 "cast-my-app-a1b2c3d4e5f6-review",

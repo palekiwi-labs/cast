@@ -16,12 +16,12 @@ use crate::dev::universal::volumes::{
     build_cast_nix_mount_args, build_universal_data_volume_args, build_universal_run_args,
 };
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{get_workspace, ResolvedWorkspace};
+use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
+use crate::docker::BuildOptions;
 use crate::docker::args::build_run_args;
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::nix_daemon;
-use crate::user::{get_user, ResolvedUser};
+use crate::user::{ResolvedUser, get_user};
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -454,6 +454,12 @@ pub fn build_service_run_flags(
         run_args[workdir + 1] = container_workdir.to_string_lossy().into_owned();
     }
     run_args.retain(|arg| arg != "--rm");
+    // Terminal capabilities belong to each `docker exec`: a long-lived
+    // service serves both interactive and headless callers, and exec can
+    // override container variables but never unset them.
+    if let Some(position) = run_args.iter().position(|arg| arg == "NO_COLOR=1") {
+        run_args.drain(position - 1..=position);
+    }
     if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
         run_args.drain(position..=position + 1);
     }
@@ -643,6 +649,29 @@ mod tests {
 
         assert!(!run_args.iter().any(|arg| arg == "-p"));
         assert!(!run_args.iter().any(|arg| arg == "32768:80"));
+    }
+
+    #[test]
+    fn service_run_leaves_terminal_capabilities_to_each_exec() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_service_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        for var in ["NO_COLOR", "TERM", "COLORTERM", "FORCE_COLOR"] {
+            assert!(
+                !run_args
+                    .iter()
+                    .any(|arg| arg.starts_with(&format!("{var}="))),
+                "service container must not fix {var}, got: {run_args:?}"
+            );
+        }
     }
 
     #[test]
@@ -904,7 +933,9 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+        );
     }
 
     #[test]
@@ -916,7 +947,9 @@ mod tests {
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+        );
     }
 
     #[test]
