@@ -13,6 +13,10 @@ whereas in `cast.json` the settings must be under the `mcp` key.
 This allows you to keep your main configuration clean by moving MCP-specific
 settings to their own file.
 
+Declaring an `mcp` block in either file also opts the project in to MCP:
+only then does `cast` inject `CAST_MCP_URL` into the sandbox. See
+[MCP Settings](../config/reference.md#mcp-settings-mcp-block).
+
 ## Tool Definition
 
 A tool definition consists of its metadata, the command to execute, and how to
@@ -39,6 +43,9 @@ map MCP parameters to command-line arguments.
   - `set`: Map of environment variables to set specifically for this tool.
 
 ### Example Configuration
+
+This project example assumes `cast config init` has written the required
+`nix_version` to the global configuration.
 
 ```json
 {

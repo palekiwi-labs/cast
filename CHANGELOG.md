@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.2] - 2026-10-09
+
+Second release candidate of the 0.2 line: the `CAST_MCP_URL` injection
+opt-in and Nix package versions derived from `Cargo.toml`. A proper
+0.2.0 may still be cut from master later; otherwise the next release is
+0.3.0.
+
+### Changed
+
+- `CAST_MCP_URL` is now injected into the sandbox only when the project
+  configures MCP. Declaring an `mcp` block in any configuration source is the
+  opt-in: the global `~/.config/cast/cast.json`, the project `cast.json`,
+  `cast.local.json`, a `cast-mcp.json` file (its existence is enough), or a
+  `CAST_MCP__*` environment override. Previously every sandbox received
+  `http://host.docker.internal:8080/mcp`, so an MCP-less project was
+  indistinguishable from a crashed or unstarted server, and the default port
+  could collide with an unrelated host service.
+
+  `cast mcp start` is unchanged and still works without an `mcp` block, serving
+  its built-in documentation tools on the default host and port. The opt-in
+  governs injection only.
+
+  Clients need no changes: `cast-mcp-client` already omits the `cast` server
+  when no flag, environment variable, or config entry supplies a URL, so
+  `status` and `list` report it as not configured. Consumers that template the
+  variable do need attention — an opencode remote entry using
+  `"url": "{env:CAST_MCP_URL}"` resolves to an empty URL in a project with no
+  `mcp` block and should be disabled there.
+
+- Nix flake package versions are derived from each crate's `Cargo.toml`
+  instead of a duplicated literal; `cast-mcp-client` no longer inherits
+  `cast`'s version.
+
+### Migration
+
+- Projects with no `mcp` block will see a changed configuration hash, because
+  the key is now omitted from the serialized config rather than filled in from
+  defaults. Run `cast config allow` to re-approve.
+
+## [0.2.0-rc.1] - 2026-09-07
+
+First tagged checkpoint of the 0.2 line: the 0.2 scope plus versioned
+Nix daemon generations. A proper 0.2.0 may still be cut from master
+later; otherwise the next release is 0.3.0.
+
 ### Added
 
 - `cast config init`, a flagless global bootstrap command that creates the
@@ -28,9 +73,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The nix daemon's binary caches are now provisioned daemon-side from
   `~/.config/cast/cast.json`. `cast config init` seeds the default with the
   numtide cache so harnesses fetch prebuilt rather than building from source.
+- Required exact `nix_version` configuration and generation-specific Nix daemon
+  images, containers, and persistent store volumes. New configurations receive
+  Cast's current pin from `cast config init`.
 
 ### Changed
 
+- **Breaking:** Existing configurations must add `nix_version` and be
+  re-approved. Cast now appends that version to default and custom Nix daemon
+  container and volume base names; legacy unsuffixed resources remain
+  untouched.
 - **Breaking:** Shell selection is now fully explicit. `cast` passes configured
   refs verbatim to `nix develop`; it no longer detects project or user flakes,
   derives shell fragments from agent names, or assumes a global flake path.
@@ -59,6 +111,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Development and execution containers now run with `--init`, so `docker-init`
+  (tini) is PID 1 and reaps orphaned children. Agents and shells spawn deep
+  process trees whose orphans previously lingered as zombies and accumulated
+  against `--pids-limit` until the container could no longer fork. tini also
+  forwards signals, so Ctrl+C still reaches nested processes.
 - The global flake template no longer declares a `nixConfig` cache block. It
   made nix prompt for approval on every devshell entry, a prompt the
   non-trusted dev user cannot usefully answer since the daemon rejects the

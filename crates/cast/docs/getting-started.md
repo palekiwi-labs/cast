@@ -41,6 +41,10 @@ flake reference:
 }
 ```
 
+This project configuration inherits the required `nix_version` written to the
+global configuration by `cast config init`. A project only needs to repeat it
+when overriding that pin.
+
 The generated global configuration already selects
 `~/.config/cast/nix#default`, which provides all supported harnesses.
 

@@ -24,10 +24,11 @@ pub fn build_run_args(
 
 /// Build arguments for `docker ps` command to check if a container is running
 pub fn build_ps_args(name: &str) -> Vec<String> {
+    let escaped_name = escape_regex(name);
     vec![
         "ps".to_string(),
         "--filter".to_string(),
-        format!("name=^{}$", name),
+        format!("name=^{escaped_name}$"),
         "--format".to_string(),
         "{{.Names}}".to_string(),
     ]
@@ -35,11 +36,12 @@ pub fn build_ps_args(name: &str) -> Vec<String> {
 
 /// Build arguments for `docker ps --all` to check whether a container exists.
 pub fn build_ps_all_args(name: &str) -> Vec<String> {
+    let escaped_name = escape_regex(name);
     vec![
         "ps".to_string(),
         "--all".to_string(),
         "--filter".to_string(),
-        format!("name=^{}$", name),
+        format!("name=^{escaped_name}$"),
         "--format".to_string(),
         "{{.Names}}".to_string(),
     ]
@@ -54,6 +56,20 @@ pub fn build_inspect_args(name: &str) -> Vec<String> {
         "{{json .State}}".to_string(),
         name.to_string(),
     ]
+}
+
+fn escape_regex(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(
+            character,
+            '\\' | '.' | '+' | '*' | '?' | '(' | ')' | '|' | '[' | ']' | '{' | '}' | '^' | '$'
+        ) {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped
 }
 
 /// Build arguments for `docker images` command to check if an image exists
@@ -210,6 +226,13 @@ mod tests {
                 "cast-project-a1b2c3d4e5f6",
             ]
         );
+    }
+
+    #[test]
+    fn test_build_ps_args_escapes_generation_version() {
+        let args = build_ps_args("cast-nix-daemon-2.34.6");
+
+        assert_eq!(args[2], r"name=^cast-nix-daemon-2\.34\.6$");
     }
 
     #[test]

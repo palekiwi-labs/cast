@@ -37,7 +37,16 @@ Checks the health of all configured MCP servers.
 
 Generates Bash script wrappers for every tool on the configured servers.
 
-## Global Flags
+## Subcommand Flags
 
-- `--cast-mcp-url`: Override the URL for the default `"cast"` server.
-- `--env`: Show errors in a more verbose format.
+Every subcommand accepts the following option:
+
+- `--cast-mcp-url <URL>`: Override the URL for the default `"cast"` server.
+  Takes precedence over the `CAST_MCP_URL` environment variable and config.
+
+The flag belongs to each subcommand, not the root command, so it must come
+after the subcommand name:
+
+```bash
+cast-mcp-client list --cast-mcp-url http://localhost:8080/mcp
+```

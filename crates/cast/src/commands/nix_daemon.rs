@@ -34,7 +34,7 @@ pub fn handle_nix_daemon(cfg: &ApprovedConfig, command: NixDaemonCommands) -> Re
         NixDaemonCommands::Build { force, no_cache } => {
             let docker = DockerClient;
             let opts = BuildOptions { force, no_cache };
-            nix_daemon::build(&docker, opts)?;
+            nix_daemon::build(&docker, cfg, opts)?;
             Ok(ExitCode::SUCCESS)
         }
         NixDaemonCommands::Shell => {

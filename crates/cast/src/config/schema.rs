@@ -49,6 +49,8 @@ pub struct Config {
     pub extra_data_volumes: BTreeMap<String, VolumeConfig>,
 
     // Nix Workflow
+    #[serde(default)]
+    pub nix_version: String,
     pub nix_volume_name: String,
     pub nix_daemon_container_name: String,
     pub nix_extra_substituters: Vec<String>,
@@ -63,8 +65,10 @@ pub struct Config {
     #[serde(default)]
     pub extra_env_passthrough: Vec<String>,
 
-    #[serde(default)]
-    pub mcp: McpConfig,
+    /// Optional MCP settings. When absent, `CAST_MCP_URL` is not injected into
+    /// the sandbox.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mcp: Option<McpConfig>,
 }
 
 pub const DEFAULT_MCP_PORT: u16 = 8080;
@@ -159,6 +163,25 @@ pub struct VolumeConfig {
     pub volume_type: String,
 }
 
+impl Config {
+    /// MCP settings to serve with, falling back to defaults when unconfigured.
+    pub fn effective_mcp(&self) -> McpConfig {
+        self.mcp.clone().unwrap_or_default()
+    }
+
+    pub fn effective_nix_volume_name(&self) -> String {
+        versioned_name(&self.nix_volume_name, &self.nix_version)
+    }
+
+    pub fn effective_nix_daemon_container_name(&self) -> String {
+        versioned_name(&self.nix_daemon_container_name, &self.nix_version)
+    }
+}
+
+fn versioned_name(base: &str, nix_version: &str) -> String {
+    format!("{base}-{nix_version}")
+}
+
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -175,6 +198,7 @@ impl Default for Config {
             use_project_shell: true,
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
+            nix_version: String::new(),
             nix_volume_name: "cast-nix-service".to_string(),
             nix_daemon_container_name: "cast-nix-daemon-service".to_string(),
             nix_extra_substituters: Vec::new(),
@@ -182,7 +206,7 @@ impl Default for Config {
             forbidden_paths: Vec::new(),
             env_passthrough: Vec::new(),
             extra_env_passthrough: Vec::new(),
-            mcp: McpConfig::default(),
+            mcp: None,
         }
     }
 }
@@ -347,6 +371,27 @@ mod tests {
         assert!(
             config.use_project_shell,
             "use_project_shell must default to true"
+        );
+    }
+
+    #[test]
+    fn effective_nix_resource_names_append_version_to_custom_bases() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_volume_name: "team-store".to_string(),
+            nix_daemon_container_name: "team-daemon".to_string(),
+            ..Config::default()
+        };
+
+        assert_eq!(config.effective_nix_volume_name(), "team-store-2.34.6");
+        assert_eq!(
+            config.effective_nix_daemon_container_name(),
+            "team-daemon-2.34.6"
+        );
+        assert_ne!(config.effective_nix_volume_name(), config.nix_volume_name);
+        assert_ne!(
+            config.effective_nix_daemon_container_name(),
+            config.nix_daemon_container_name
         );
     }
 

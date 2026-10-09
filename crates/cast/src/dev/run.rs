@@ -316,7 +316,12 @@ pub fn build_docker_run_flags(
         TtyMode::Headless => vec![],
     };
 
-    let mut run_args: Vec<String> = vec!["--rm".to_string()];
+    // `--init` runs docker-init (tini) as PID 1. Agents and shells spawn deep
+    // process trees whose children are frequently orphaned; without a reaping
+    // init they linger as zombies and accumulate against `--pids-limit` until
+    // the container can no longer fork. tini also forwards signals, so Ctrl+C
+    // still reaches nested processes.
+    let mut run_args: Vec<String> = vec!["--rm".to_string(), "--init".to_string()];
     run_args.extend(tty_flags);
     run_args.extend([
         // Security hardening
@@ -375,9 +380,11 @@ pub fn build_docker_run_flags(
         }
     }
 
-    // MCP server URL injection.
-    let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
-    run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+    // MCP server URL injection (opt-in).
+    if let Some(mcp) = &config.mcp {
+        let mcp_url = format!("http://host.docker.internal:{}/mcp", mcp.port);
+        run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+    }
 
     // Host identity: injected so diagnostics collected inside the container
     // can be grouped by the launching host. Always present (falls back to
@@ -390,7 +397,7 @@ pub fn build_docker_run_flags(
     // Nix store.
     run_args.extend([
         "-v".to_string(),
-        format!("{}:/nix:ro", config.nix_volume_name),
+        format!("{}:/nix:ro", config.effective_nix_volume_name()),
     ]);
 
     // Timezone.
@@ -569,12 +576,21 @@ mod tests {
         // Generic flags present
         assert!(run_args.contains(&"--rm".to_string()));
         assert!(run_args.contains(&"-it".to_string()));
+
+        // An init supervisor must run as PID 1 so orphaned children are
+        // reaped instead of accumulating against --pids-limit.
+        assert_eq!(
+            run_args.iter().filter(|a| *a == "--init").count(),
+            1,
+            "expected exactly one --init flag: {run_args:?}"
+        );
+
         assert!(run_args.contains(&"no-new-privileges".to_string()));
         assert!(run_args.contains(&"USER=alice".to_string()));
         assert!(run_args.contains(&"/home/alice/project:/home/alice/project:rw".to_string()));
 
         // Nix store and timezone
-        assert!(run_args.contains(&format!("{}:/nix:ro", config.nix_volume_name)));
+        assert!(run_args.contains(&format!("{}:/nix:ro", config.effective_nix_volume_name())));
         assert!(run_args.contains(&"/etc/localtime:/etc/localtime:ro".to_string()));
         assert!(run_args.contains(&"--workdir".to_string()));
 
@@ -586,8 +602,11 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("opencode")));
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
-        // MCP URL injection
-        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+        // MCP URL injection is opt-in: no `mcp` block, no variable.
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL")),
+            "CAST_MCP_URL must not be injected without an mcp block: {run_args:?}"
+        );
     }
 
     #[test]
@@ -722,6 +741,21 @@ mod tests {
             .expect("service flags should set a workdir");
 
         assert_eq!(run_args[workdir + 1], "/home/alice/project/crates/app");
+    }
+
+    #[test]
+    fn development_container_mounts_configured_generation_read_only() {
+        let config = Config {
+            nix_version: "2.34.6".to_string(),
+            nix_volume_name: "custom-store".to_string(),
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert!(run_args.contains(&"custom-store-2.34.6:/nix:ro".to_string()));
+        assert!(!run_args.contains(&"custom-store:/nix:ro".to_string()));
     }
 
     #[test]
@@ -860,12 +894,74 @@ mod tests {
 
     #[test]
     fn test_build_docker_run_flags_mcp_custom_port() {
-        let mut config = Config::default();
-        config.mcp.port = 9000;
+        let config = Config {
+            mcp: Some(crate::config::McpConfig {
+                port: 9000,
+                ..crate::config::McpConfig::default()
+            }),
+            ..Config::default()
+        };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
         assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_mcp_default_block_uses_default_port() {
+        let config = Config {
+            mcp: Some(crate::config::McpConfig::default()),
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+        assert!(run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string()));
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_omits_mcp_url_when_unconfigured() {
+        let config = Config {
+            mcp: None,
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL")),
+            "CAST_MCP_URL must not be injected without an mcp block: {run_args:?}"
+        );
+        // The `-e` flag that would have carried it must be gone too.
+        assert!(
+            !run_args.iter().any(|a| a.contains("/mcp")),
+            "no MCP URL fragment may survive: {run_args:?}"
+        );
+    }
+
+    /// Without an `mcp` block cast sets no `CAST_MCP_URL` of its own, so an
+    /// explicitly allowlisted host value must still reach the container.
+    #[test]
+    fn test_build_docker_run_flags_preserves_passthrough_mcp_url_when_unconfigured() {
+        let config = Config {
+            env_passthrough: vec!["CAST_MCP_URL".to_string()],
+            mcp: None,
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["CAST_MCP_URL"]));
+
+        let passthrough = run_args
+            .iter()
+            .position(|a| a == "CAST_MCP_URL")
+            .unwrap_or_else(|| panic!("passthrough CAST_MCP_URL missing: {run_args:?}"));
+        assert_eq!(run_args[passthrough - 1], "-e");
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL=")),
+            "cast must not set its own CAST_MCP_URL without an mcp block: {run_args:?}"
+        );
     }
 
     #[test]
@@ -1034,6 +1130,21 @@ mod tests {
         assert!(
             !run_args.contains(&"-t".to_string()),
             "Should NOT contain -t in headless mode"
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_headless_includes_init() {
+        // Headless runs orphan the most subprocesses (fire-and-forget agent
+        // invocations), so the init supervisor matters here too.
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert_eq!(
+            run_args.iter().filter(|a| *a == "--init").count(),
+            1,
+            "expected exactly one --init flag: {run_args:?}"
         );
     }
 

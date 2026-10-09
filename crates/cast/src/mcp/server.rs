@@ -14,7 +14,7 @@ pub async fn run_http_server(
     port: u16,
     approved: ApprovedConfig,
 ) -> anyhow::Result<()> {
-    let mcp_config = approved.mcp.clone();
+    let mcp_config = approved.effective_mcp();
     let host_env: std::collections::HashMap<String, String> = std::env::vars().collect();
 
     let handler = McpHandler::new(mcp_config, host_env)

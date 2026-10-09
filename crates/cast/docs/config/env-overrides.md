@@ -12,6 +12,7 @@ Every configuration field in `cast` can be overridden by environment variables.
 
 - `memory` becomes `CAST_MEMORY`.
 - `cpus` becomes `CAST_CPUS`.
+- `nix_version` becomes `CAST_NIX_VERSION`.
 - `mcp.port` becomes `CAST_MCP__PORT`.
 - `mcp.hostname` becomes `CAST_MCP__HOSTNAME`.
 - `sandbox_shell` becomes `CAST_SANDBOX_SHELL`.
@@ -72,6 +73,10 @@ Behaviour:
   applies `--env` after `--env-file`) and over the image's own `ENV` defaults.
   They do not override the variables `cast` sets itself (`USER`, `TERM`,
   `CAST_MCP_URL`, ...), which are emitted later in argv.
+- `CAST_MCP_URL` is not reserved. `cast` sets it only when an `mcp` block is
+  configured, so an allowlisted host `CAST_MCP_URL` is overridden only in that
+  case. Without an `mcp` block, `cast` sets no value of its own and the
+  passthrough value reaches the container unchanged.
 
 ### Precedence and Replacement
 

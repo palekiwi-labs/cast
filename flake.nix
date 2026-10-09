@@ -33,8 +33,13 @@
           cargo = rustToolchain;
           rustc = rustToolchain;
         };
+        # Package versions are derived from each crate's manifest so
+        # Cargo.toml stays the single source of truth; release bumps
+        # never need a matching flake.nix edit.
+        castCargo = pkgs.lib.importTOML ./crates/cast/Cargo.toml;
+        mcpClientCargo = pkgs.lib.importTOML ./crates/cast-mcp-client/Cargo.toml;
         common = {
-          version = "0.3.0-service";
+
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
@@ -55,6 +60,7 @@
         packages = {
           cast = rustPlatform.buildRustPackage (common // {
             pname = "cast";
+            version = castCargo.package.version;
             cargoBuildFlags = [ "-p" "cast" ];
             cargoTestFlags = [ "-p" "cast" ];
             nativeCheckInputs = [ pkgs.git ];
@@ -67,6 +73,7 @@
 
           cast-mcp-client = rustPlatform.buildRustPackage (common // {
             pname = "cast-mcp-client";
+            version = mcpClientCargo.package.version;
             cargoBuildFlags = [ "-p" "cast-mcp-client" ];
             cargoTestFlags = [ "-p" "cast-mcp-client" ];
             nativeCheckInputs = [ pkgs.bash pkgs.jq ];
