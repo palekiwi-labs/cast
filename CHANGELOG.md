@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.2] - 2026-10-09
+
+Second release candidate of the 0.2 line: the `CAST_MCP_URL` injection
+opt-in and Nix package versions derived from `Cargo.toml`. A proper
+0.2.0 may still be cut from master later; otherwise the next release is
+0.3.0.
+
 ### Changed
 
 - `CAST_MCP_URL` is now injected into the sandbox only when the project
@@ -28,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   variable do need attention — an opencode remote entry using
   `"url": "{env:CAST_MCP_URL}"` resolves to an empty URL in a project with no
   `mcp` block and should be disabled there.
+
+- Nix flake package versions are derived from each crate's `Cargo.toml`
+  instead of a duplicated literal; `cast-mcp-client` no longer inherits
+  `cast`'s version.
 
 ### Migration
 
