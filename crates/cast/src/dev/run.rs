@@ -378,9 +378,14 @@ pub fn build_docker_run_flags(
         }
     }
 
-    // MCP server URL injection.
-    let mcp_url = format!("http://host.docker.internal:{}/mcp", config.mcp.port);
-    run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+    // MCP server URL injection, opt-in via the `mcp` config block. Leaving
+    // the variable unset in MCP-less projects lets clients inside the
+    // sandbox distinguish "this project has no MCP server" from "the
+    // configured server is unreachable".
+    if let Some(mcp) = &config.mcp {
+        let mcp_url = format!("http://host.docker.internal:{}/mcp", mcp.port);
+        run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
+    }
 
     // Host identity: injected so diagnostics collected inside the container
     // can be grouped by the launching host. Always present (falls back to
@@ -566,9 +571,10 @@ mod tests {
         assert!(!run_args.iter().any(|a| a.contains("opencode")));
         assert!(!run_args.iter().any(|a| a.contains("cast/nix")));
 
-        // MCP URL injection
+        // MCP URL injection is opt-in: no `mcp` block, no variable.
         assert!(
-            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL")),
+            "CAST_MCP_URL must not be injected without an mcp block: {run_args:?}"
         );
     }
 
@@ -723,13 +729,55 @@ mod tests {
 
     #[test]
     fn test_build_docker_run_flags_mcp_custom_port() {
-        let mut config = Config::default();
-        config.mcp.port = 9000;
+        let config = Config {
+            mcp: Some(crate::config::McpConfig {
+                port: 9000,
+                ..crate::config::McpConfig::default()
+            }),
+            ..Config::default()
+        };
         let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
 
         let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
         assert!(
             run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:9000/mcp".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_mcp_default_block_uses_default_port() {
+        // An empty `mcp` block is still an opt-in: the URL is injected with
+        // the built-in default port.
+        let config = Config {
+            mcp: Some(crate::config::McpConfig::default()),
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+        assert!(
+            run_args.contains(&"CAST_MCP_URL=http://host.docker.internal:8080/mcp".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_docker_run_flags_omits_mcp_url_when_unconfigured() {
+        let config = Config {
+            mcp: None,
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &no_host_env());
+
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL")),
+            "CAST_MCP_URL must not be injected without an mcp block: {run_args:?}"
+        );
+        // The `-e` flag that would have carried it must be gone too.
+        assert!(
+            !run_args.iter().any(|a| a.contains("/mcp")),
+            "no MCP URL fragment may survive: {run_args:?}"
         );
     }
 
