@@ -13,6 +13,16 @@ pub fn build_extra_volume_args(
 
     for (key, vol) in &cfg.extra_data_volumes {
         let target = expand_container_target(&vol.target, &user.username, &ws.container_path);
+        if vol.volume_type == "tmpfs" {
+            // Ephemeral, per-container, and owned by the user: Docker would
+            // otherwise create a missing mount directory as root.
+            args.push("--tmpfs".to_string());
+            args.push(format!(
+                "{}:{},uid={},gid={},mode=0700",
+                target, vol.mode, user.uid, user.gid
+            ));
+            continue;
+        }
         let mount_spec = build_mount_spec(cfg, key, vol, &target, host_home_dir);
         args.push("-v".to_string());
         args.push(mount_spec);
@@ -94,6 +104,27 @@ mod tests {
     }
 
     // --- build_extra_volume_args ---
+
+    #[test]
+    fn test_extra_volume_args_tmpfs_is_an_ephemeral_user_owned_directory() {
+        let mut cfg = Config::default();
+        cfg.extra_data_volumes.insert(
+            "herdr-state".to_string(),
+            volume("~/.config/herdr", "tmpfs", None, "rw"),
+        );
+        let user = make_user("alice");
+        let ws = make_ws("/home/alice/my-app", "/home/alice/my-app");
+
+        let args = build_extra_volume_args(&cfg, &user, &ws, Some(Path::new("/home/alice")));
+
+        assert_eq!(
+            args,
+            vec![
+                "--tmpfs",
+                "/home/alice/.config/herdr:rw,uid=1000,gid=1000,mode=0700"
+            ]
+        );
+    }
 
     #[test]
     fn test_extra_volume_args_empty_returns_empty_vec() {
