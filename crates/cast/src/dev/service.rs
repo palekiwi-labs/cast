@@ -1,0 +1,293 @@
+use std::collections::BTreeSet;
+
+use anyhow::Result;
+
+use crate::config::{ApprovedConfig, Config};
+use crate::dev::run::{build_service_run_flags, resolve_run_opts, RunMode, RunOpts, SessionFlags};
+use crate::dev::service_context::ServiceContext;
+use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
+use crate::docker::client::DockerClient;
+use crate::docker::BuildOptions;
+use crate::user::get_user;
+use crate::{dev, nix_daemon};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceStatus {
+    Absent,
+    Stopped,
+    Running,
+}
+
+fn classify_service_status(exists: bool, running: bool) -> ServiceStatus {
+    match (exists, running) {
+        (false, _) => ServiceStatus::Absent,
+        (true, false) => ServiceStatus::Stopped,
+        (true, true) => ServiceStatus::Running,
+    }
+}
+
+impl std::fmt::Display for ServiceStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ServiceStatus::Absent => "absent",
+            ServiceStatus::Stopped => "stopped",
+            ServiceStatus::Running => "running",
+        })
+    }
+}
+
+pub fn build_service_command() -> Vec<String> {
+    vec!["sleep".to_string(), "infinity".to_string()]
+}
+
+pub fn build_service_docker_args(
+    config: &Config,
+    opts: &RunOpts,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    image_tag: &str,
+    host_env_names: &BTreeSet<String>,
+) -> Vec<String> {
+    let container_name = context.container_name(service_name);
+    let container_workdir = context.container_workdir(&opts.workspace);
+    let flags = build_service_run_flags(
+        config,
+        opts,
+        host_env_names,
+        &context.git_common_dir,
+        &container_workdir,
+    );
+    let command = build_service_command();
+
+    build_run_args(&container_name, image_tag, flags, Some(command))
+}
+
+fn build_service_down_commands(
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    running: bool,
+) -> Vec<Vec<String>> {
+    let container_name = context.container_name(service_name);
+    let mut commands = Vec::with_capacity(if running { 2 } else { 1 });
+    if running {
+        commands.push(build_stop_args(&container_name));
+    }
+    commands.push(build_remove_args(&container_name));
+    commands
+}
+
+fn build_service_up_cleanup_command(
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    running: bool,
+) -> Option<Vec<String>> {
+    (!running).then(|| build_remove_args(&context.container_name(service_name)))
+}
+
+pub fn up(
+    config: &ApprovedConfig,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+) -> Result<()> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    if let Some(inspection) = docker.inspect_container(&container_name)? {
+        if inspection.running {
+            eprintln!("service is already running: {container_name}");
+            return Ok(());
+        }
+        if let Some(command) = build_service_up_cleanup_command(context, service_name, false) {
+            docker.run_command(command)?;
+        }
+    }
+
+    let user = get_user()?;
+    let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
+    let run_opts = resolve_run_opts(
+        user,
+        workspace,
+        0,
+        &SessionFlags {
+            mode: RunMode::Headless {
+                token: "service".to_string(),
+            },
+            name: service_name.map(str::to_string),
+            publish: false,
+        },
+    );
+
+    nix_daemon::ensure_running(&docker, config)?;
+    dev::image::ensure_dev_image(&docker, config, &run_opts.user, BuildOptions::default())?;
+
+    let host_env_names = std::env::vars()
+        .filter(|(_, value)| !value.is_empty())
+        .map(|(name, _)| name)
+        .collect::<BTreeSet<_>>();
+    let image_tag = dev::image::image_tag();
+    let args = build_service_docker_args(
+        config,
+        &run_opts,
+        context,
+        service_name,
+        &image_tag,
+        &host_env_names,
+    );
+    docker.run_command(args)?;
+    eprintln!("service running: {container_name}");
+
+    Ok(())
+}
+
+pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    if !docker.container_exists(&container_name)? {
+        eprintln!("service is already absent: {container_name}");
+        return Ok(());
+    }
+
+    let running = docker.is_container_running(&container_name)?;
+    for command in build_service_down_commands(context, service_name, running) {
+        docker.run_command(command)?;
+    }
+    eprintln!("service removed: {container_name}");
+
+    Ok(())
+}
+
+pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<ServiceStatus> {
+    let docker = DockerClient;
+    let container_name = context.container_name(service_name);
+    let inspection = docker.inspect_container(&container_name)?;
+    Ok(classify_service_status(
+        inspection.is_some(),
+        inspection.is_some_and(|state| state.running),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dev::run::{RunOpts, TtyMode};
+    use crate::dev::service_context::ServiceContext;
+    use crate::dev::workspace::ResolvedWorkspace;
+    use crate::user::ResolvedUser;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
+
+    #[test]
+    fn service_command_is_a_vendor_neutral_keepalive() {
+        let command = build_service_command();
+
+        assert_eq!(command, vec!["sleep", "infinity"]);
+    }
+
+    #[test]
+    fn service_docker_args_target_the_named_worktree_service() {
+        let config = Config::default();
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/main/.git"),
+            relative_cwd: PathBuf::from("crates/app"),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+        let workspace = ResolvedWorkspace {
+            root: context.worktree_root.clone(),
+            container_path: PathBuf::from("/home/alice/projects/my-app"),
+        };
+        let opts = RunOpts {
+            workspace,
+            user: ResolvedUser {
+                username: "alice".to_string(),
+                uid: 1000,
+                gid: 1000,
+            },
+            port: 0,
+            host_home_dir: None,
+            host_name: "test-host".to_string(),
+            tty_mode: TtyMode::Headless,
+            publish: false,
+        };
+
+        let args = build_service_docker_args(
+            &config,
+            &opts,
+            &context,
+            Some("isolated"),
+            "localhost/cast:spike",
+            &BTreeSet::new(),
+        );
+
+        assert_eq!(
+            &args[..3],
+            ["run", "--name", "cast-my-app-a1b2c3d4e5f6-isolated"]
+        );
+        assert!(args.ends_with(&[
+            "localhost/cast:spike".to_string(),
+            "sleep".to_string(),
+            "infinity".to_string()
+        ]));
+    }
+
+    #[test]
+    fn service_status_reports_container_lifecycle() {
+        assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
+        assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
+        assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
+    }
+
+    #[test]
+    fn service_up_removes_a_stopped_container_before_recreating_it() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_up_cleanup_command(&context, Some("isolated"), false),
+            Some(vec![
+                "rm".to_string(),
+                "cast-my-app-a1b2c3d4e5f6-isolated".to_string()
+            ])
+        );
+        assert_eq!(
+            build_service_up_cleanup_command(&context, Some("isolated"), true),
+            None
+        );
+    }
+
+    #[test]
+    fn service_down_stops_then_removes_the_named_running_container() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_down_commands(&context, Some("isolated"), true),
+            vec![
+                vec!["stop", "cast-my-app-a1b2c3d4e5f6-isolated"],
+                vec!["rm", "cast-my-app-a1b2c3d4e5f6-isolated"],
+            ]
+        );
+    }
+
+    #[test]
+    fn service_down_only_removes_an_already_stopped_container() {
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+
+        assert_eq!(
+            build_service_down_commands(&context, None, false),
+            vec![vec!["rm", "cast-my-app-a1b2c3d4e5f6"]]
+        );
+    }
+}

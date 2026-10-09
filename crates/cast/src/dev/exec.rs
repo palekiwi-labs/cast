@@ -1,19 +1,14 @@
+use std::path::Path;
 use std::process::ExitStatus;
 
-use anyhow::{Result, bail};
-use tracing::{debug, info, info_span};
-
 use crate::config::{ApprovedConfig, Config};
-use crate::dev;
-use crate::dev::agent::Agent;
 use crate::dev::build_command::build_command;
-use crate::dev::container_name::resolve_container_name;
-use crate::dev::run::{SessionFlags, resolve_run_opts, run_in_container};
-use crate::dev::workspace::get_workspace;
-use crate::docker::BuildOptions;
+use crate::dev::service::ServiceStatus;
+use crate::dev::service_context::ServiceContext;
 use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
+use anyhow::{Result, bail};
 
 /// Build the command vector for `cast exec`.
 ///
@@ -32,88 +27,325 @@ pub fn build_exec_cmd(
     build_command(config, container_username, &cmd[0], cmd[1..].to_vec())
 }
 
-/// Orchestrate and run a `cast exec` session inside a fresh agent container.
-///
-/// Unlike `cast shell`, this always starts a **new** container (`docker run
-/// --rm`) rather than `docker exec`-ing into an existing one.
-///
-/// `name_token` is used for container naming and is always `Some(_)` for exec
-/// sessions.  It is separate from the TTY mode so that interactive exec (which
-/// needs a TTY) can still receive a unique ephemeral container name:
-///   - interactive exec → `Some("exec-{invocation_id}")`
-///   - headless exec    → `Some("{invocation_id}")`
+/// Options for a command targeting a worktree service.
+pub struct ServiceExecOptions<'a> {
+    pub service_name: Option<&'a str>,
+    pub container_username: &'a str,
+    pub container_workdir: &'a Path,
+    pub headless: bool,
+    pub raw: bool,
+}
+
+/// Build `docker exec` arguments for a command targeting a worktree service.
+pub fn build_service_exec_args(
+    config: &Config,
+    context: &ServiceContext,
+    options: &ServiceExecOptions<'_>,
+    cmd: &[String],
+) -> Vec<String> {
+    let mut args = vec!["exec".to_string()];
+    let terminal_env: &[&str] = if options.headless {
+        &["NO_COLOR=1"]
+    } else {
+        args.push("-it".to_string());
+        &[
+            "TERM=xterm-256color",
+            "COLORTERM=truecolor",
+            "FORCE_COLOR=1",
+        ]
+    };
+    for var in terminal_env {
+        args.extend(["-e".to_string(), var.to_string()]);
+    }
+    args.extend([
+        "--workdir".to_string(),
+        options.container_workdir.to_string_lossy().into_owned(),
+        context.container_name(options.service_name),
+    ]);
+    args.extend(build_exec_cmd(
+        config,
+        options.container_username,
+        options.raw,
+        cmd,
+    ));
+    args
+}
+
+fn validate_service_exec_status(status: ServiceStatus, container_name: &str) -> Result<()> {
+    if status == ServiceStatus::Running {
+        return Ok(());
+    }
+
+    bail!("service is {status}: {container_name}; run `cast up` first")
+}
+
+/// Execute a command in the selected worktree service.
 pub fn exec(
-    agent: &dyn Agent,
     config: &ApprovedConfig,
-    flags: SessionFlags,
+    context: &ServiceContext,
+    service_name: Option<&str>,
+    headless: bool,
     raw: bool,
-    name_token: String,
     cmd: Vec<String>,
 ) -> Result<ExitStatus> {
     if cmd.is_empty() {
-        bail!(
-            "cast exec requires a command. \
-             Usage: cast exec [FLAGS] <agent> <cmd> [args...]"
-        );
+        bail!("cast exec requires a command")
     }
 
+    let container_name = context.container_name(service_name);
+    validate_service_exec_status(
+        crate::dev::service::status(context, service_name)?,
+        &container_name,
+    )?;
+
     let docker = DockerClient;
-    let user = get_user()?;
-    let workspace = get_workspace(&user.username)?;
-
-    let port = dev::port::resolve_port(config, agent.name())?;
-    let cwd_basename = workspace.root_basename();
-    let container_name = resolve_container_name(
-        config,
-        agent.name(),
-        cwd_basename,
-        port,
-        flags.name.as_deref(),
-        Some(&name_token),
-    );
-
-    let span = info_span!(
-        "exec_session",
-        agent = agent.name(),
-        container = %container_name,
-        port = port,
-        raw = raw,
-    );
-    let _guard = span.enter();
-
-    debug!(port, %container_name, raw, "resolved exec parameters");
-
-    // Always ensure the Nix daemon is running — even --raw mounts /nix.
     nix_daemon::ensure_running(&docker, config)?;
 
-    let image_tag = dev::image::image_tag();
-
-    info!(
-        %image_tag,
-        %container_name,
-        port,
-        raw,
-        "starting exec session"
+    let user = get_user()?;
+    let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
+    let container_workdir = context.container_workdir(&workspace);
+    let args = build_service_exec_args(
+        config,
+        context,
+        &ServiceExecOptions {
+            service_name,
+            container_username: &user.username,
+            container_workdir: &container_workdir,
+            headless,
+            raw,
+        },
+        &cmd,
     );
 
-    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
-
-    let run_opts = resolve_run_opts(user, workspace, port, &flags);
-    let exec_cmd = build_exec_cmd(config, &run_opts.user.username, raw, &cmd);
-
-    run_in_container(
-        &docker,
-        config,
-        &run_opts,
-        &container_name,
-        &image_tag,
-        exec_cmd,
-    )
+    docker.interactive_command(args)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dev::service_context::ServiceContext;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn service_exec_enters_configured_shells_in_the_invocation_directory() {
+        let config = Config {
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#ai".to_string()),
+            ..Config::default()
+        };
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::from("crates/app"),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+        let command = vec!["cargo".to_string(), "test".to_string()];
+
+        let args = build_service_exec_args(
+            &config,
+            &context,
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app/crates/app"),
+                headless: false,
+                raw: false,
+            },
+            &command,
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "-it",
+                "-e",
+                "TERM=xterm-256color",
+                "-e",
+                "COLORTERM=truecolor",
+                "-e",
+                "FORCE_COLOR=1",
+                "--workdir",
+                "/home/alice/projects/my-app/crates/app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "nix",
+                "develop",
+                "/home/alice/.config/cast/nix#default",
+                "-c",
+                "nix",
+                "develop",
+                ".#ai",
+                "-c",
+                "cargo",
+                "test",
+            ]
+        );
+    }
+
+    fn terminal_env_of(headless: bool) -> Vec<String> {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless,
+                raw: true,
+            },
+            &["bash".to_string()],
+        );
+        args.windows(2)
+            .filter(|pair| pair[0] == "-e")
+            .map(|pair| pair[1].clone())
+            .collect()
+    }
+
+    #[test]
+    fn interactive_service_exec_advertises_a_colour_terminal() {
+        assert_eq!(
+            terminal_env_of(false),
+            vec![
+                "TERM=xterm-256color",
+                "COLORTERM=truecolor",
+                "FORCE_COLOR=1"
+            ]
+        );
+    }
+
+    #[test]
+    fn headless_service_exec_disables_colour() {
+        assert_eq!(terminal_env_of(true), vec!["NO_COLOR=1"]);
+    }
+
+    fn service_context_fixture() -> ServiceContext {
+        ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        }
+    }
+
+    fn wrapped_config() -> Config {
+        Config {
+            sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
+            project_shell: Some(".#ai".to_string()),
+            ..Config::default()
+        }
+    }
+
+    #[test]
+    fn raw_service_exec_skips_devshell_wrapping() {
+        let args = build_service_exec_args(
+            &wrapped_config(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: false,
+                raw: true,
+            },
+            &["cargo".to_string(), "test".to_string()],
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "-it",
+                "-e",
+                "TERM=xterm-256color",
+                "-e",
+                "COLORTERM=truecolor",
+                "-e",
+                "FORCE_COLOR=1",
+                "--workdir",
+                "/home/alice/projects/my-app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "cargo",
+                "test",
+            ]
+        );
+    }
+
+    #[test]
+    fn headless_service_exec_allocates_no_terminal() {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: true,
+                raw: false,
+            },
+            &["echo".to_string(), "hi".to_string()],
+        );
+
+        assert_eq!(
+            args,
+            vec![
+                "exec",
+                "-e",
+                "NO_COLOR=1",
+                "--workdir",
+                "/home/alice/projects/my-app",
+                "cast-my-app-a1b2c3d4e5f6",
+                "echo",
+                "hi",
+            ]
+        );
+    }
+
+    #[test]
+    fn service_exec_routes_to_a_named_service() {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: Some("review"),
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: true,
+                raw: true,
+            },
+            &["echo".to_string()],
+        );
+
+        assert!(
+            args.contains(&"cast-my-app-a1b2c3d4e5f6-review".to_string()),
+            "named exec must target the named service container: {args:?}"
+        );
+    }
+
+    #[test]
+    fn service_exec_rejects_a_stopped_service() {
+        let error =
+            validate_service_exec_status(ServiceStatus::Stopped, "cast-my-app-a1b2c3d4e5f6")
+                .expect_err("a stopped service must reject exec");
+
+        assert_eq!(
+            error.to_string(),
+            "service is stopped: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
+        );
+    }
+
+    #[test]
+    fn service_exec_rejects_an_absent_service() {
+        let error = validate_service_exec_status(
+            crate::dev::service::ServiceStatus::Absent,
+            "cast-my-app-a1b2c3d4e5f6",
+        )
+        .expect_err("an absent service must reject exec");
+
+        assert_eq!(
+            error.to_string(),
+            "service is absent: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
+        );
+    }
 
     // ── build_exec_cmd: raw mode ─────────────────────────────────────────────
 
@@ -196,76 +428,6 @@ mod tests {
         );
     }
 
-    // ── container name token invariants ──────────────────────────────────────
-
-    #[test]
-    fn test_exec_interactive_token_contains_exec_prefix() {
-        // Interactive exec token is "exec-{invocation_id}"; verify the
-        // resulting name contains "exec-".
-        use crate::config::Config;
-        use crate::dev::container_name::resolve_container_name;
-
-        let cfg = Config::default();
-        let token = format!("exec-{}", "abc123");
-        let name = resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some(&token));
-        assert!(
-            name.contains("exec-"),
-            "interactive exec container name should contain 'exec-': {}",
-            name
-        );
-    }
-
-    #[test]
-    fn test_exec_headless_token_no_exec_prefix() {
-        // Headless exec token is the bare invocation_id (no "exec-" prefix).
-        use crate::config::Config;
-        use crate::dev::container_name::resolve_container_name;
-
-        let cfg = Config::default();
-        let token = "abc123"; // bare invocation_id
-        let name = resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some(token));
-        // Name ends with the raw token, not exec-<token>
-        assert!(
-            name.ends_with(token),
-            "headless exec name should end with bare token: {}",
-            name
-        );
-        assert!(
-            !name.contains("exec-"),
-            "headless exec name should NOT contain 'exec-': {}",
-            name
-        );
-    }
-
-    // ── collision-avoidance invariant (S11) ──────────────────────────────────
-
-    #[test]
-    fn test_exec_auto_name_differs_from_interactive_run_name() {
-        // Auto-generated exec container names must never equal the stable
-        // interactive `cast run` name for the same CWD/agent/port triple,
-        // because exec always supplies a token and run (interactive) does not.
-        use crate::config::Config;
-        use crate::dev::container_name::resolve_container_name;
-
-        let cfg = Config::default();
-        // Interactive run: no token → stable name
-        let run_name = resolve_container_name(&cfg, "opencode", "my-app", 8080, None, None);
-        // Interactive exec: token = "exec-{id}"
-        let exec_name =
-            resolve_container_name(&cfg, "opencode", "my-app", 8080, None, Some("exec-abc123"));
-        assert_ne!(
-            run_name, exec_name,
-            "exec auto-name must differ from interactive run name"
-        );
-        // exec name extends the run name (preserves docker ps --filter prefix)
-        assert!(
-            exec_name.starts_with(&run_name),
-            "exec name '{}' should start with run name '{}'",
-            exec_name,
-            run_name
-        );
-    }
-
     // ── empty cmd handling ────────────────────────────────────────────────────
 
     #[test]
@@ -281,21 +443,16 @@ mod tests {
 
     #[test]
     fn test_exec_empty_cmd_returns_error() {
-        // The authoritative enforcement of "exec requires a command" is the
-        // bail! at the top of exec(). It must fire before any side effects
-        // (docker, user resolution, etc.) so we can call it with throwaway
-        // args and assert an error is returned.
         use crate::config::ApprovedConfig;
-        use crate::dev::opencode::OpenCode;
-        use crate::dev::run::RunMode;
 
         let config = ApprovedConfig::assume_approved_for_test(Config::default());
-        let flags = SessionFlags {
-            mode: RunMode::Interactive,
-            name: None,
-            publish: false,
+        let context = ServiceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
         };
-        let result = exec(&OpenCode, &config, flags, false, "tok".to_string(), vec![]);
+        let result = exec(&config, &context, None, false, false, vec![]);
         assert!(result.is_err(), "exec with empty cmd must return an error");
         let msg = format!("{}", result.unwrap_err());
         assert!(

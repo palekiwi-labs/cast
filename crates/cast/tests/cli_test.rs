@@ -102,13 +102,63 @@ fn test_cast_port_ignores_extra_args() {
 }
 
 #[test]
-fn test_cast_run_help() {
+fn test_cast_run_is_not_available() {
     cast()
         .args(["run", "--help"])
         .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'run'"));
+}
+
+#[test]
+fn test_cast_up_help() {
+    cast()
+        .args(["up", "--help"])
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: cast run"))
-        .stdout(predicate::str::contains("opencode"));
+        .stdout(predicate::str::contains("Usage: cast up"));
+}
+
+#[test]
+fn test_cast_up_accepts_service_name() {
+    cast()
+        .args(["up", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_down_accepts_service_name() {
+    cast()
+        .args(["down", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast down"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_status_accepts_service_name() {
+    cast()
+        .args(["status", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast status"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_exec_accepts_arbitrary_command() {
+    cast()
+        .args(["exec", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("<CMD>..."))
+        .stdout(predicate::str::contains("--name <NAME>"))
+        .stdout(predicate::str::contains("--headless"))
+        .stdout(predicate::str::contains("--raw"))
+        .stdout(predicate::str::contains("opencode").not());
 }
 
 #[test]
@@ -125,85 +175,33 @@ fn test_cast_build_help() {
 }
 
 #[test]
+fn test_cast_nix_daemon_up_help() {
+    cast()
+        .args(["nix-daemon", "up", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon up"));
+}
+
+#[test]
+fn test_cast_nix_daemon_down_help() {
+    cast()
+        .args(["nix-daemon", "down", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon down"));
+}
+
+#[test]
 fn test_cast_shell_help() {
     cast()
         .args(["shell", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage: cast shell"))
-        .stdout(predicate::str::contains("opencode"))
+        .stdout(predicate::str::contains("--name <NAME>"))
+        .stdout(predicate::str::contains("opencode").not())
         .stdout(predicate::str::contains("--raw"));
-}
-
-#[test]
-fn test_cast_shell_raw_opencode_help() {
-    cast()
-        .args(["shell", "--raw", "opencode", "--help"])
-        .assert()
-        .success();
-}
-
-#[test]
-fn test_cast_shell_opencode_raw_fails() {
-    cast()
-        .args(["shell", "opencode", "--raw"])
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains(
-            "unexpected argument '--raw' found",
-        ));
-}
-
-#[test]
-fn test_cast_shell_opencode_help() {
-    cast()
-        .args(["shell", "opencode", "--help"])
-        .assert()
-        .success();
-}
-
-#[test]
-fn test_cast_shell_claudecode_help() {
-    cast()
-        .args(["shell", "claudecode", "--help"])
-        .assert()
-        .success();
-}
-
-// ── Phase 6: --headless flag parsing ────────────────────────────────────────
-
-#[test]
-fn test_cast_run_headless_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--headless"));
-}
-
-#[test]
-fn test_cast_run_headless_name_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--name"));
-}
-
-/// `--headless` before the agent subcommand is consumed by RunFlags, not
-/// rejected as an unknown flag. Verified by confirming clap's only complaint
-/// is the missing subcommand, not an unrecognised argument.
-#[test]
-fn test_cast_run_headless_before_agent_is_consumed() {
-    cast()
-        .args(["run", "--headless"])
-        .assert()
-        .failure()
-        .stderr(
-            predicate::str::contains("subcommand is required")
-                .or(predicate::str::contains("requires a subcommand")),
-        )
-        .stderr(predicate::str::contains("unexpected argument").not());
 }
 
 /// `cast port opencode --headless` — extra flag is forwarded to port
