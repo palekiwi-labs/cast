@@ -122,6 +122,27 @@ fn test_config_local_file_overrides_project_but_not_env() {
 }
 
 #[test]
+fn test_config_mcp_port_env_opts_unconfigured_project_into_mcp() {
+    let workspace = TempDir::new().unwrap();
+    let home = TempDir::new().unwrap();
+    let data_dir = TempDir::new().unwrap();
+
+    // No global, project, local, or cast-mcp.json config declares `mcp`: the
+    // env override alone must materialize the block.
+    let output = cast_with_data_dir(data_dir.path())
+        .current_dir(workspace.path())
+        .env("HOME", home.path())
+        .env("CAST_MCP__PORT", "3500")
+        .args(["config", "show"])
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    let config: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(config["mcp"]["port"], 3500);
+}
+
+#[test]
 fn test_config_serialize_to_json() {
     let config = cast::config::Config::default();
 

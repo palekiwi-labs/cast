@@ -378,10 +378,7 @@ pub fn build_docker_run_flags(
         }
     }
 
-    // MCP server URL injection, opt-in via the `mcp` config block. Leaving
-    // the variable unset in MCP-less projects lets clients inside the
-    // sandbox distinguish "this project has no MCP server" from "the
-    // configured server is unreachable".
+    // MCP server URL injection (opt-in).
     if let Some(mcp) = &config.mcp {
         let mcp_url = format!("http://host.docker.internal:{}/mcp", mcp.port);
         run_args.extend(["-e".to_string(), format!("CAST_MCP_URL={}", mcp_url)]);
@@ -746,8 +743,6 @@ mod tests {
 
     #[test]
     fn test_build_docker_run_flags_mcp_default_block_uses_default_port() {
-        // An empty `mcp` block is still an opt-in: the URL is injected with
-        // the built-in default port.
         let config = Config {
             mcp: Some(crate::config::McpConfig::default()),
             ..Config::default()
@@ -778,6 +773,30 @@ mod tests {
         assert!(
             !run_args.iter().any(|a| a.contains("/mcp")),
             "no MCP URL fragment may survive: {run_args:?}"
+        );
+    }
+
+    /// Without an `mcp` block cast sets no `CAST_MCP_URL` of its own, so an
+    /// explicitly allowlisted host value must still reach the container.
+    #[test]
+    fn test_build_docker_run_flags_preserves_passthrough_mcp_url_when_unconfigured() {
+        let config = Config {
+            env_passthrough: vec!["CAST_MCP_URL".to_string()],
+            mcp: None,
+            ..Config::default()
+        };
+        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_docker_run_flags(&config, &opts, &host_env(&["CAST_MCP_URL"]));
+
+        let passthrough = run_args
+            .iter()
+            .position(|a| a == "CAST_MCP_URL")
+            .unwrap_or_else(|| panic!("passthrough CAST_MCP_URL missing: {run_args:?}"));
+        assert_eq!(run_args[passthrough - 1], "-e");
+        assert!(
+            !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL=")),
+            "cast must not set its own CAST_MCP_URL without an mcp block: {run_args:?}"
         );
     }
 
