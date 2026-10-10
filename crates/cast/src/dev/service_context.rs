@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -214,9 +214,11 @@ mod tests {
         let error = ServiceContext::resolve(directory.path())
             .expect_err("non-Git directory should be rejected");
 
-        assert!(error
-            .to_string()
-            .contains("Current directory is not in a Git worktree"));
+        assert!(
+            error
+                .to_string()
+                .contains("Current directory is not in a Git worktree")
+        );
     }
 
     #[test]
