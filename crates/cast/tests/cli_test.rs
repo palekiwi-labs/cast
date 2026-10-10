@@ -55,50 +55,12 @@ fn test_cast_config_show_outputs_valid_json() {
 }
 
 #[test]
-fn test_cast_port_different_for_different_agents() {
-    let output_o = cast().args(["port", "opencode"]).assert().success();
-    let stdout_o = String::from_utf8_lossy(&output_o.get_output().stdout);
-    let port_o: u16 = stdout_o.trim().parse().unwrap();
-
-    let output_p = cast().args(["port", "pi"]).assert().success();
-    let stdout_p = String::from_utf8_lossy(&output_p.get_output().stdout);
-    let port_p: u16 = stdout_p.trim().parse().unwrap();
-
-    let output_c = cast().args(["port", "claudecode"]).assert().success();
-    let stdout_c = String::from_utf8_lossy(&output_c.get_output().stdout);
-    let port_c: u16 = stdout_c.trim().parse().unwrap();
-
-    assert_ne!(
-        port_o, port_p,
-        "opencode and pi should have different ports"
-    );
-    assert_ne!(
-        port_o, port_c,
-        "opencode and claudecode should have different ports"
-    );
-    assert_ne!(
-        port_p, port_c,
-        "pi and claudecode should have different ports"
-    );
-}
-
-#[test]
-fn test_cast_port_ignores_extra_args() {
-    let output1 = cast().args(["port", "pi"]).assert().success();
-    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
-    let port1: u16 = stdout1.trim().parse().unwrap();
-
-    let output2 = cast()
-        .args(["port", "pi", "--some-flag", "value"])
+fn test_cast_port_is_not_available() {
+    cast()
+        .args(["port", "--help"])
         .assert()
-        .success();
-    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
-    let port2: u16 = stdout2.trim().parse().unwrap();
-
-    assert_eq!(
-        port1, port2,
-        "Extra args should not affect port computation"
-    );
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'port'"));
 }
 
 #[test]
@@ -202,25 +164,4 @@ fn test_cast_shell_help() {
         .stdout(predicate::str::contains("--name <NAME>"))
         .stdout(predicate::str::contains("opencode").not())
         .stdout(predicate::str::contains("--raw"));
-}
-
-/// `cast port opencode --headless` — extra flag is forwarded to port
-/// computation as extra_args; port output is unaffected.
-#[test]
-fn test_cast_port_unaffected_by_headless_extra_arg() {
-    let output1 = cast().args(["port", "opencode"]).assert().success();
-    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
-    let port1: u16 = stdout1.trim().parse().unwrap();
-
-    let output2 = cast()
-        .args(["port", "opencode", "--headless"])
-        .assert()
-        .success();
-    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
-    let port2: u16 = stdout2.trim().parse().unwrap();
-
-    assert_eq!(
-        port1, port2,
-        "port must be identical with or without --headless in extra_args"
-    );
 }

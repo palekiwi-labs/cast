@@ -9,7 +9,6 @@ pub mod extra_dirs;
 pub mod image;
 pub mod opencode;
 pub mod pi;
-pub mod port;
 pub mod run;
 pub mod service;
 pub mod service_context;

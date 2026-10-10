@@ -1,12 +1,8 @@
 use std::process::{ExitCode, ExitStatus};
 
-use super::{config, nix_daemon, port};
+use super::{config, nix_daemon};
 use crate::config::{ApprovedConfig, Config, load_config, load_config_from};
 use crate::dev;
-use crate::dev::agent::Agent;
-use crate::dev::claudecode::ClaudeCode;
-use crate::dev::opencode::OpenCode;
-use crate::dev::pi::Pi;
 use crate::dev::service_context::ServiceContext;
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
@@ -95,7 +91,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let approved = verify_config(cfg)?;
             nix_daemon::handle_nix_daemon(&approved, command)
         }
-        Some(Commands::Port { agent }) => port::handle_port(&cfg, agent.as_agent()),
         Some(Commands::Up { flags }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
             let context = ServiceContext::resolve(&cwd)?;
@@ -155,32 +150,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     }
 }
 
-#[derive(Subcommand)]
-#[command(subcommand_required = true)]
-pub enum RunAgent {
-    /// Start an interactive OpenCode session
-    #[command(alias = "o", disable_help_flag = true)]
-    Opencode {
-        /// Extra arguments to pass to the opencode command
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
-        extra_args: Vec<String>,
-    },
-    /// Start an interactive Pi session
-    #[command(alias = "p", disable_help_flag = true)]
-    Pi {
-        /// Extra arguments to pass to the pi command
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
-        extra_args: Vec<String>,
-    },
-    /// Start an interactive ClaudeCode session
-    #[command(alias = "c", disable_help_flag = true)]
-    Claudecode {
-        /// Extra arguments to pass to the claude command
-        #[arg(trailing_var_arg = true, allow_hyphen_values = true, num_args = 0..)]
-        extra_args: Vec<String>,
-    },
-}
-
 #[cfg(feature = "mcp")]
 #[derive(Subcommand)]
 pub enum McpCommands {
@@ -238,11 +207,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: nix_daemon::NixDaemonCommands,
     },
-    /// Print the port that the container will publish
-    Port {
-        #[command(subcommand)]
-        agent: RunAgent,
-    },
     /// Start the service container
     Up {
         #[command(flatten)]
@@ -280,16 +244,6 @@ pub enum Commands {
         #[command(subcommand)]
         command: McpCommands,
     },
-}
-
-impl RunAgent {
-    pub fn as_agent(&self) -> &'static dyn Agent {
-        match self {
-            RunAgent::Opencode { .. } => &OpenCode,
-            RunAgent::Pi { .. } => &Pi,
-            RunAgent::Claudecode { .. } => &ClaudeCode,
-        }
-    }
 }
 
 /// Convert an ExitStatus into an ExitCode, following Unix conventions.
