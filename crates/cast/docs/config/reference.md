@@ -63,7 +63,12 @@ migrate the other keys to `project_shell`. See
   for workspace root.
 - `source` (optional): Host path (for `bind`) or volume name (for `volume`).
   Supports `~/` expansion for host paths.
-- `type`: Either `"volume"` (default) or `"bind"`.
+- `type`: `"volume"` (default), `"bind"`, or `"tmpfs"` (ephemeral,
+  per-container, owned by the sandbox user).
+
+A `bind` source must already exist on the host: `cast up` fails, naming the
+entry and path, rather than letting Docker create it as a root-owned
+directory.
 - `mode`: Either `"rw"` (default) or `"ro"`.
 
 #### Example
@@ -84,6 +89,29 @@ migrate the other keys to `project_shell`. See
   }
 }
 ```
+
+#### Example: agent harness mounts
+
+`cast` ships no harness-specific mounts. Declare the configuration your
+harnesses need in the global `~/.config/cast/cast.json`; create each source
+on the host first (a file such as `~/.claude.json` must exist as a file).
+
+```json
+{
+  "extra_data_volumes": {
+    "agents":      { "type": "bind", "source": "~/.agents",          "target": "~/.agents" },
+    "pi":          { "type": "bind", "source": "~/.pi",              "target": "~/.pi" },
+    "opencode":    { "type": "bind", "source": "~/.config/opencode", "target": "~/.config/opencode" },
+    "claude":      { "type": "bind", "source": "~/.claude",          "target": "~/.claude" },
+    "claude-json": { "type": "bind", "source": "~/.claude.json",     "target": "~/.claude.json" }
+  }
+}
+```
+
+Container paths outside any mount are ephemeral. Docker creates missing
+parents of a mount target as root, so a tool that must write runtime state
+under such a parent (sockets, session files) needs its own `tmpfs` or
+`volume` entry at that path.
 
 ## MCP Settings (`mcp` block)
 
