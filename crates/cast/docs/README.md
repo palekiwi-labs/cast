@@ -11,7 +11,6 @@ server.
   integration.
 - **[Command Reference](commands/reference.md)**: Detailed guide to all `cast`
   subcommands.
-- **[Agents](agents.md)**: Supported agents and the `Agent` trait.
 - **[Configuration](config/overview.md)**: Loading precedence and field
   reference.
 - **[Nix Integration](nix/overview.md)**: Flake wrapping and the Nix daemon.
@@ -20,4 +19,3 @@ server.
 ## For Developers
 
 - See [src/lib.rs](../src/lib.rs) for the module overview.
-- The `Agent` trait is defined in [src/dev/agent.rs](../src/dev/agent.rs).

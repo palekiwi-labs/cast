@@ -105,25 +105,17 @@ mod tests {
     }
 
     #[test]
-    fn dev_dockerfile_creates_union_config_dirs() {
-        // Union of all supported harness config dirs is created.
-        assert!(DEV_DOCKERFILE.contains(".claude"));
-        assert!(DEV_DOCKERFILE.contains(".pi"));
-        assert!(DEV_DOCKERFILE.contains(".config"));
-        assert!(DEV_DOCKERFILE.contains(".cache"));
-        assert!(DEV_DOCKERFILE.contains(".local"));
-    }
-
-    #[test]
-    fn dev_dockerfile_creates_and_chowns_cross_harness_agents_dir() {
-        // The vendor-neutral cross-harness .agents dir must be pre-created and
-        // chowned so a bind-mounted ~/.agents lands on a user-owned directory.
-        // Exactly two occurrences: one in mkdir, one in chown.
-        assert_eq!(
-            DEV_DOCKERFILE.matches("/home/${USERNAME}/.agents").count(),
-            2,
-            "Dockerfile.dev must reference /home/${{USERNAME}}/.agents in both mkdir and chown"
-        );
+    fn dev_dockerfile_creates_only_generic_home_dirs() {
+        assert!(DEV_DOCKERFILE.contains("/home/${USERNAME}/.config"));
+        assert!(DEV_DOCKERFILE.contains("/home/${USERNAME}/.cache"));
+        assert!(DEV_DOCKERFILE.contains("/home/${USERNAME}/.local"));
+        // Harness directories are user-declared mounts, not image state.
+        for harness_dir in [".claude", ".pi", ".agents"] {
+            assert!(
+                !DEV_DOCKERFILE.contains(&format!("/home/${{USERNAME}}/{harness_dir}")),
+                "Dockerfile.dev must not pre-create {harness_dir}"
+            );
+        }
     }
 
     #[test]
