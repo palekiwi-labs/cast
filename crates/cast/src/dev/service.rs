@@ -3,11 +3,11 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
-use crate::dev::run::{build_service_run_flags, resolve_run_opts, RunMode, RunOpts, SessionFlags};
+use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_service_run_flags, resolve_run_opts};
 use crate::dev::service_context::ServiceContext;
+use crate::docker::BuildOptions;
 use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
 use crate::docker::client::DockerClient;
-use crate::docker::BuildOptions;
 use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
@@ -115,6 +115,13 @@ pub fn up(
             publish: false,
         },
     );
+
+    dev::volumes::validate_bind_sources(
+        config,
+        &run_opts.user,
+        &run_opts.workspace,
+        run_opts.host_home_dir.as_deref(),
+    )?;
 
     nix_daemon::ensure_running(&docker, config)?;
     dev::image::ensure_dev_image(&docker, config, &run_opts.user, BuildOptions::default())?;
