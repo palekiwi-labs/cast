@@ -1,16 +1,12 @@
-pub mod agent;
 pub mod build;
 pub mod build_command;
-pub mod claudecode;
-pub mod container_name;
 pub mod env_file;
 pub mod exec;
 pub mod extra_dirs;
 pub mod image;
-pub mod opencode;
-pub mod pi;
-pub mod port;
 pub mod run;
+pub mod service;
+pub mod service_context;
 pub mod shadow_mounts;
 pub mod shell;
 pub mod universal;
@@ -20,5 +16,5 @@ pub mod workspace;
 
 pub use build::build_dev_image;
 pub use exec::exec;
-pub use run::{RunMode, SessionFlags, TtyMode, run_agent};
+pub use run::{RunMode, SessionFlags, TtyMode};
 pub use shell::shell;

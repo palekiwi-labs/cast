@@ -58,8 +58,4 @@ Starts the built-in MCP server.
 - `--port <port>`: Specify the port to listen on (overrides cast.json).
 - `--host <host>`: Specify the host to bind to (overrides cast.json).
 
-## `port <agent>`
-
-Prints the deterministic port assigned to the agent for the current workspace.
-
 For implementation details, see [crates/cast/src/commands/](../src/commands/).

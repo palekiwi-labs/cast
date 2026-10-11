@@ -229,6 +229,14 @@ mod tests {
     use serde_json::json;
 
     #[test]
+    fn default_config_selects_standard_nix_daemon_and_volume_names() {
+        let config = Config::default();
+
+        assert_eq!(config.nix_daemon_container_name, "cast-nix-daemon");
+        assert_eq!(config.nix_volume_name, "cast-nix");
+    }
+
+    #[test]
     fn test_mcp_config_deserialization() {
         let json = json!({
             "port": 32123,
