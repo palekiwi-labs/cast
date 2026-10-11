@@ -199,8 +199,8 @@ impl Default for Config {
             volumes_namespace: "cast".to_string(),
             extra_data_volumes: BTreeMap::new(),
             nix_version: String::new(),
-            nix_volume_name: "cast-nix-service".to_string(),
-            nix_daemon_container_name: "cast-nix-daemon-service".to_string(),
+            nix_volume_name: "cast-nix".to_string(),
+            nix_daemon_container_name: "cast-nix-daemon".to_string(),
             nix_extra_substituters: Vec::new(),
             nix_extra_trusted_public_keys: Vec::new(),
             forbidden_paths: Vec::new(),
@@ -229,11 +229,11 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn spike_defaults_isolate_the_nix_daemon_and_store() {
+    fn default_config_selects_standard_nix_daemon_and_volume_names() {
         let config = Config::default();
 
-        assert_eq!(config.nix_daemon_container_name, "cast-nix-daemon-service");
-        assert_eq!(config.nix_volume_name, "cast-nix-service");
+        assert_eq!(config.nix_daemon_container_name, "cast-nix-daemon");
+        assert_eq!(config.nix_volume_name, "cast-nix");
     }
 
     #[test]
