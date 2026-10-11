@@ -34,6 +34,29 @@ pub struct ServiceExecOptions<'a> {
     pub container_workdir: &'a Path,
     pub headless: bool,
     pub raw: bool,
+    /// Host `TERM`, forwarded to interactive execs when valid.
+    pub host_term: Option<&'a str>,
+}
+
+/// Terminal type used when the host `TERM` is unset or unusable.
+const FALLBACK_TERM: &str = "xterm-256color";
+
+/// Resolve the container `TERM` from the host value.
+///
+/// The host value is forwarded only when it matches `[A-Za-z0-9._+-]+`;
+/// otherwise the fallback is used.
+fn container_term(host_term: Option<&str>) -> &str {
+    match host_term {
+        Some(term)
+            if !term.is_empty()
+                && term
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || "._+-".contains(c)) =>
+        {
+            term
+        }
+        _ => FALLBACK_TERM,
+    }
 }
 
 /// Build `docker exec` arguments for a command targeting a worktree service.
@@ -48,11 +71,11 @@ pub fn build_service_exec_args(
         &["NO_COLOR=1"]
     } else {
         args.push("-it".to_string());
-        &[
-            "TERM=xterm-256color",
-            "COLORTERM=truecolor",
-            "FORCE_COLOR=1",
-        ]
+        args.extend([
+            "-e".to_string(),
+            format!("TERM={}", container_term(options.host_term)),
+        ]);
+        &["COLORTERM=truecolor", "FORCE_COLOR=1"]
     };
     for var in terminal_env {
         args.extend(["-e".to_string(), var.to_string()]);
@@ -104,6 +127,7 @@ pub fn exec(
     let user = get_user()?;
     let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
     let container_workdir = context.container_workdir(&workspace);
+    let host_term = std::env::var("TERM").ok();
     let args = build_service_exec_args(
         config,
         context,
@@ -113,6 +137,7 @@ pub fn exec(
             container_workdir: &container_workdir,
             headless,
             raw,
+            host_term: host_term.as_deref(),
         },
         &cmd,
     );
@@ -150,6 +175,7 @@ mod tests {
                 container_workdir: Path::new("/home/alice/projects/my-app/crates/app"),
                 headless: false,
                 raw: false,
+                host_term: None,
             },
             &command,
         );
@@ -192,6 +218,7 @@ mod tests {
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless,
                 raw: true,
+                host_term: None,
             },
             &["bash".to_string()],
         );
@@ -211,6 +238,64 @@ mod tests {
                 "FORCE_COLOR=1"
             ]
         );
+    }
+
+    fn interactive_term_for(host_term: Option<&str>) -> Vec<String> {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: false,
+                raw: true,
+                host_term,
+            },
+            &["bash".to_string()],
+        );
+        args.windows(2)
+            .filter(|pair| pair[0] == "-e" && pair[1].starts_with("TERM="))
+            .map(|pair| pair[1].clone())
+            .collect()
+    }
+
+    #[test]
+    fn interactive_service_exec_forwards_the_host_term() {
+        assert_eq!(interactive_term_for(Some("tmux")), vec!["TERM=tmux"]);
+        assert_eq!(
+            interactive_term_for(Some("tmux-256color")),
+            vec!["TERM=tmux-256color"]
+        );
+    }
+
+    #[test]
+    fn interactive_service_exec_falls_back_when_host_term_is_unusable() {
+        for host in [None, Some(""), Some("bad term"), Some("x;rm"), Some("a=b")] {
+            assert_eq!(
+                interactive_term_for(host),
+                vec!["TERM=xterm-256color"],
+                "host TERM {host:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn headless_service_exec_ignores_the_host_term() {
+        let args = build_service_exec_args(
+            &Config::default(),
+            &service_context_fixture(),
+            &ServiceExecOptions {
+                service_name: None,
+                container_username: "alice",
+                container_workdir: Path::new("/home/alice/projects/my-app"),
+                headless: true,
+                raw: true,
+                host_term: Some("tmux"),
+            },
+            &["bash".to_string()],
+        );
+        assert!(!args.iter().any(|a| a.starts_with("TERM=")), "{args:?}");
     }
 
     #[test]
@@ -246,6 +331,7 @@ mod tests {
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: false,
                 raw: true,
+                host_term: None,
             },
             &["cargo".to_string(), "test".to_string()],
         );
@@ -281,6 +367,7 @@ mod tests {
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: true,
                 raw: false,
+                host_term: None,
             },
             &["echo".to_string(), "hi".to_string()],
         );
@@ -311,6 +398,7 @@ mod tests {
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: true,
                 raw: true,
+                host_term: None,
             },
             &["echo".to_string()],
         );

@@ -18,6 +18,7 @@ pub fn build_service_shell_args(
     container_username: &str,
     container_workdir: &Path,
     raw: bool,
+    host_term: Option<&str>,
 ) -> Vec<String> {
     build_service_exec_args(
         config,
@@ -28,6 +29,7 @@ pub fn build_service_shell_args(
             container_workdir,
             headless: false,
             raw,
+            host_term,
         },
         &[SERVICE_SHELL.to_string()],
     )
@@ -78,6 +80,7 @@ mod tests {
             "alice",
             Path::new("/home/alice/projects/my-app"),
             false,
+            Some("tmux"),
         );
 
         assert_eq!(
@@ -86,7 +89,7 @@ mod tests {
                 "exec",
                 "-it",
                 "-e",
-                "TERM=xterm-256color",
+                "TERM=tmux",
                 "-e",
                 "COLORTERM=truecolor",
                 "-e",
