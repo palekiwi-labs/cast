@@ -65,11 +65,11 @@ migrate the other keys to `project_shell`. See
   Supports `~/` expansion for host paths.
 - `type`: `"volume"` (default), `"bind"`, or `"tmpfs"` (ephemeral,
   per-container, owned by the sandbox user).
+- `mode`: Either `"rw"` (default) or `"ro"`.
 
 A `bind` source must already exist on the host: `cast up` fails, naming the
 entry and path, rather than letting Docker create it as a root-owned
 directory.
-- `mode`: Either `"rw"` (default) or `"ro"`.
 
 #### Example
 
