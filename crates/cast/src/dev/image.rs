@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn spike_image_tag_is_isolated_from_releases() {
-        assert_eq!(image_tag(), "localhost/cast:0.3.0-service");
+        assert_eq!(image_tag(), format!("localhost/cast:{CAST_VERSION}"));
     }
 
     #[test]
