@@ -54,10 +54,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // configuration scope.
     let cfg = if matches!(
         &cli.command,
+        Some(Commands::Down { .. } | Commands::Status { .. })
+    ) {
+        Config::default()
+    } else if matches!(
+        &cli.command,
         Some(
             Commands::Up { .. }
-                | Commands::Down { .. }
-                | Commands::Status { .. }
                 | Commands::Exec { .. }
                 | Commands::Shell { .. }
         )
