@@ -237,3 +237,13 @@ fn test_cast_accepts_container_safe_instance_names() {
             .success();
     }
 }
+
+#[test]
+fn test_cast_help_calls_containers_instances() {
+    cast()
+        .arg("--help")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("instance container"))
+        .stdout(predicate::str::contains("service").not());
+}

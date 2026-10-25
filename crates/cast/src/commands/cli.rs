@@ -24,10 +24,10 @@ fn parse_instance_name(name: &str) -> Result<String, String> {
     }
 }
 
-/// Selects a service within the current Git worktree.
+/// Selects an instance within the current Git worktree.
 #[derive(clap::Args, Clone, Debug)]
 pub struct ServiceFlags {
-    /// Select a named service instead of the default service
+    /// Select a named instance instead of the default instance
     #[arg(long, value_parser = parse_instance_name)]
     pub name: Option<String>,
 }
@@ -72,7 +72,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
-    // Service commands are scoped to the Git worktree, even when invoked from
+    // Instance commands are scoped to the Git worktree, even when invoked from
     // one of its subdirectories. Other commands retain their existing cwd
     // configuration scope.
     let cfg = if matches!(
@@ -194,7 +194,7 @@ pub struct ExecFlags {
     #[arg(long)]
     pub headless: bool,
 
-    /// Select a named service instead of the default service
+    /// Select a named instance instead of the default instance
     #[arg(long, value_parser = parse_instance_name)]
     pub name: Option<String>,
 
@@ -229,22 +229,22 @@ pub enum Commands {
         #[command(subcommand)]
         command: nix_daemon::NixDaemonCommands,
     },
-    /// Start the service container
+    /// Start an instance container
     Up {
         #[command(flatten)]
         flags: ServiceFlags,
     },
-    /// Stop and remove the service container
+    /// Stop and remove an instance container
     Down {
         #[command(flatten)]
         flags: ServiceFlags,
     },
-    /// Show the service container status
+    /// Show the status of an instance container
     Status {
         #[command(flatten)]
         flags: ServiceFlags,
     },
-    /// Execute an arbitrary command in the service container
+    /// Execute an arbitrary command in an instance container
     Exec {
         #[command(flatten)]
         flags: ExecFlags,
@@ -252,7 +252,7 @@ pub enum Commands {
         #[arg(required = true, trailing_var_arg = true, allow_hyphen_values = true)]
         cmd: Vec<String>,
     },
-    /// Drop into an interactive shell in the service container
+    /// Drop into an interactive shell in an instance container
     Shell {
         #[command(flatten)]
         flags: ServiceFlags,

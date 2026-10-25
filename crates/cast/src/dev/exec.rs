@@ -99,7 +99,7 @@ fn validate_service_exec_status(status: ServiceStatus, container_name: &str) -> 
         return Ok(());
     }
 
-    bail!("service is {status}: {container_name}; run `cast up` first")
+    bail!("instance is {status}: {container_name}; run `cast up` first")
 }
 
 /// Execute a command in the selected worktree service.
@@ -417,7 +417,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "service is stopped: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
+            "instance is stopped: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
         );
     }
 
@@ -431,7 +431,7 @@ mod tests {
 
         assert_eq!(
             error.to_string(),
-            "service is absent: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
+            "instance is absent: cast-my-app-a1b2c3d4e5f6; run `cast up` first"
         );
     }
 

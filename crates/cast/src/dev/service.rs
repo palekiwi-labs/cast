@@ -93,7 +93,7 @@ pub fn up(
     let container_name = context.container_name(service_name);
     if let Some(inspection) = docker.inspect_container(&container_name)? {
         if inspection.running {
-            eprintln!("service is already running: {container_name}");
+            eprintln!("instance is already running: {container_name}");
             return Ok(());
         }
         if let Some(command) = build_service_up_cleanup_command(context, service_name, false) {
@@ -140,7 +140,7 @@ pub fn up(
         &host_env_names,
     );
     docker.run_command(args)?;
-    eprintln!("service running: {container_name}");
+    eprintln!("instance running: {container_name}");
 
     Ok(())
 }
@@ -149,7 +149,7 @@ pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> 
     let docker = DockerClient;
     let container_name = context.container_name(service_name);
     if !docker.container_exists(&container_name)? {
-        eprintln!("service is already absent: {container_name}");
+        eprintln!("instance is already absent: {container_name}");
         return Ok(());
     }
 
@@ -157,7 +157,7 @@ pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> 
     for command in build_service_down_commands(context, service_name, running) {
         docker.run_command(command)?;
     }
-    eprintln!("service removed: {container_name}");
+    eprintln!("instance removed: {container_name}");
 
     Ok(())
 }
