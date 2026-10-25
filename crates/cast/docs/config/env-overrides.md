@@ -71,8 +71,12 @@ Behaviour:
   sorted by name.
 - Passthrough values take precedence over entries in `cast.env` (Docker
   applies `--env` after `--env-file`) and over the image's own `ENV` defaults.
-  They do not override the variables `cast` sets itself (`USER`, `TERM`,
+  They do not override the variables `cast` sets itself (`USER`,
   `CAST_MCP_URL`, ...), which are emitted later in argv.
+- `TERM` needs no passthrough entry. Interactive `cast exec` and `cast shell`
+  forward the host `TERM` (e.g. `tmux` when nested in a host tmux), falling
+  back to `xterm-256color` when it is unset, empty, or does not match
+  `[A-Za-z0-9._+-]+`. Headless execs set no `TERM`.
 - `CAST_MCP_URL` is not reserved. `cast` sets it only when an `mcp` block is
   configured, so an allowlisted host `CAST_MCP_URL` is overridden only in that
   case. Without an `mcp` block, `cast` sets no value of its own and the

@@ -55,60 +55,90 @@ fn test_cast_config_show_outputs_valid_json() {
 }
 
 #[test]
-fn test_cast_port_different_for_different_agents() {
-    let output_o = cast().args(["port", "opencode"]).assert().success();
-    let stdout_o = String::from_utf8_lossy(&output_o.get_output().stdout);
-    let port_o: u16 = stdout_o.trim().parse().unwrap();
-
-    let output_p = cast().args(["port", "pi"]).assert().success();
-    let stdout_p = String::from_utf8_lossy(&output_p.get_output().stdout);
-    let port_p: u16 = stdout_p.trim().parse().unwrap();
-
-    let output_c = cast().args(["port", "claudecode"]).assert().success();
-    let stdout_c = String::from_utf8_lossy(&output_c.get_output().stdout);
-    let port_c: u16 = stdout_c.trim().parse().unwrap();
-
-    assert_ne!(
-        port_o, port_p,
-        "opencode and pi should have different ports"
-    );
-    assert_ne!(
-        port_o, port_c,
-        "opencode and claudecode should have different ports"
-    );
-    assert_ne!(
-        port_p, port_c,
-        "pi and claudecode should have different ports"
-    );
-}
-
-#[test]
-fn test_cast_port_ignores_extra_args() {
-    let output1 = cast().args(["port", "pi"]).assert().success();
-    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
-    let port1: u16 = stdout1.trim().parse().unwrap();
-
-    let output2 = cast()
-        .args(["port", "pi", "--some-flag", "value"])
+fn test_cast_port_is_not_available() {
+    cast()
+        .args(["port", "--help"])
         .assert()
-        .success();
-    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
-    let port2: u16 = stdout2.trim().parse().unwrap();
-
-    assert_eq!(
-        port1, port2,
-        "Extra args should not affect port computation"
-    );
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'port'"));
 }
 
 #[test]
-fn test_cast_run_help() {
+fn test_cast_run_is_not_available() {
     cast()
         .args(["run", "--help"])
         .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'run'"));
+}
+
+#[test]
+fn test_cast_up_help() {
+    cast()
+        .args(["up", "--help"])
+        .assert()
         .success()
-        .stdout(predicate::str::contains("Usage: cast run"))
-        .stdout(predicate::str::contains("opencode"));
+        .stdout(predicate::str::contains("Usage: cast up"));
+}
+
+#[test]
+fn test_cast_up_accepts_instance_name() {
+    cast()
+        .args(["up", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_down_accepts_instance_name() {
+    cast()
+        .args(["down", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast down"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_ps_help() {
+    cast()
+        .args(["ps", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast ps"));
+}
+
+#[test]
+fn test_cast_inspect_accepts_instance_name() {
+    cast()
+        .args(["inspect", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast inspect"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
+fn test_cast_status_is_not_available() {
+    cast()
+        .args(["status", "--help"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'status'"));
+}
+
+#[test]
+fn test_cast_exec_accepts_arbitrary_command() {
+    cast()
+        .args(["exec", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("<CMD>..."))
+        .stdout(predicate::str::contains("--name <NAME>"))
+        .stdout(predicate::str::contains("--headless"))
+        .stdout(predicate::str::contains("--raw"))
+        .stdout(predicate::str::contains("opencode").not());
 }
 
 #[test]
@@ -125,104 +155,113 @@ fn test_cast_build_help() {
 }
 
 #[test]
+fn test_cast_nix_daemon_up_help() {
+    cast()
+        .args(["nix-daemon", "up", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon up"));
+}
+
+#[test]
+fn test_cast_nix_daemon_down_help() {
+    cast()
+        .args(["nix-daemon", "down", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast nix-daemon down"));
+}
+
+#[test]
 fn test_cast_shell_help() {
     cast()
         .args(["shell", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage: cast shell"))
-        .stdout(predicate::str::contains("opencode"))
+        .stdout(predicate::str::contains("--name <NAME>"))
+        .stdout(predicate::str::contains("opencode").not())
         .stdout(predicate::str::contains("--raw"));
 }
 
-#[test]
-fn test_cast_shell_raw_opencode_help() {
-    cast()
-        .args(["shell", "--raw", "opencode", "--help"])
-        .assert()
-        .success();
+fn git_init(dir: &std::path::Path) {
+    let status = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(dir)
+        .status()
+        .expect("run git init");
+    assert!(status.success(), "git init should succeed");
 }
 
 #[test]
-fn test_cast_shell_opencode_raw_fails() {
+fn test_cast_dash_c_resolves_the_worktree_from_the_given_directory() {
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let repo = temp.path().join("repo");
+    let outside = temp.path().join("outside");
+    std::fs::create_dir_all(&repo).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    git_init(&repo);
+
+    // Invoked from inside a worktree, -C must redirect resolution to a
+    // directory that is not one.
     cast()
-        .args(["shell", "opencode", "--raw"])
+        .current_dir(&repo)
+        .arg("-C")
+        .arg(&outside)
+        .arg("down")
         .assert()
         .failure()
-        .stderr(predicate::str::contains(
-            "unexpected argument '--raw' found",
-        ));
+        .stderr(predicate::str::contains("not in a Git worktree"));
 }
 
 #[test]
-fn test_cast_shell_opencode_help() {
-    cast()
-        .args(["shell", "opencode", "--help"])
-        .assert()
-        .success();
-}
+fn test_cast_dash_c_rejects_a_missing_directory() {
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let missing = temp.path().join("missing");
 
-#[test]
-fn test_cast_shell_claudecode_help() {
     cast()
-        .args(["shell", "claudecode", "--help"])
-        .assert()
-        .success();
-}
-
-// ── Phase 6: --headless flag parsing ────────────────────────────────────────
-
-#[test]
-fn test_cast_run_headless_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--headless"));
-}
-
-#[test]
-fn test_cast_run_headless_name_flag_in_help() {
-    cast()
-        .args(["run", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("--name"));
-}
-
-/// `--headless` before the agent subcommand is consumed by RunFlags, not
-/// rejected as an unknown flag. Verified by confirming clap's only complaint
-/// is the missing subcommand, not an unrecognised argument.
-#[test]
-fn test_cast_run_headless_before_agent_is_consumed() {
-    cast()
-        .args(["run", "--headless"])
+        .arg("-C")
+        .arg(&missing)
+        .arg("down")
         .assert()
         .failure()
-        .stderr(
-            predicate::str::contains("subcommand is required")
-                .or(predicate::str::contains("requires a subcommand")),
-        )
-        .stderr(predicate::str::contains("unexpected argument").not());
+        .stderr(predicate::str::contains("missing"));
 }
 
-/// `cast port opencode --headless` — extra flag is forwarded to port
-/// computation as extra_args; port output is unaffected.
 #[test]
-fn test_cast_port_unaffected_by_headless_extra_arg() {
-    let output1 = cast().args(["port", "opencode"]).assert().success();
-    let stdout1 = String::from_utf8_lossy(&output1.get_output().stdout);
-    let port1: u16 = stdout1.trim().parse().unwrap();
+fn test_cast_rejects_instance_names_unsafe_for_container_names() {
+    for name in ["qa/x", "-qa", "q a", ""] {
+        for command in ["up", "down", "inspect", "shell"] {
+            cast()
+                .args([command, &format!("--name={name}")])
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("invalid value"));
+        }
+        cast()
+            .args(["exec", &format!("--name={name}"), "true"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid value"));
+    }
+}
 
-    let output2 = cast()
-        .args(["port", "opencode", "--headless"])
+#[test]
+fn test_cast_accepts_container_safe_instance_names() {
+    for name in ["qa", "reviews", "qa_2.x-y", "Q1"] {
+        cast()
+            .args(["down", "--name", name, "--help"])
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn test_cast_help_calls_containers_instances() {
+    cast()
+        .arg("--help")
         .assert()
-        .success();
-    let stdout2 = String::from_utf8_lossy(&output2.get_output().stdout);
-    let port2: u16 = stdout2.trim().parse().unwrap();
-
-    assert_eq!(
-        port1, port2,
-        "port must be identical with or without --headless in extra_args"
-    );
+        .success()
+        .stdout(predicate::str::contains("instance container"))
+        .stdout(predicate::str::contains("service").not());
 }

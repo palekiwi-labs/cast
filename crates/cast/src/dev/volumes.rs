@@ -13,12 +13,62 @@ pub fn build_extra_volume_args(
 
     for (key, vol) in &cfg.extra_data_volumes {
         let target = expand_container_target(&vol.target, &user.username, &ws.container_path);
+        if vol.volume_type == "tmpfs" {
+            // Ephemeral, per-container, and owned by the user: Docker would
+            // otherwise create a missing mount directory as root.
+            args.push("--tmpfs".to_string());
+            args.push(format!(
+                "{}:{},uid={},gid={},mode=0700",
+                target, vol.mode, user.uid, user.gid
+            ));
+            continue;
+        }
         let mount_spec = build_mount_spec(cfg, key, vol, &target, host_home_dir);
         args.push("-v".to_string());
         args.push(mount_spec);
     }
 
     args
+}
+
+/// Fail when a bind-mount source does not exist on the host.
+///
+/// Docker would otherwise create a missing source as a root-owned directory,
+/// even for an intended file mount.
+pub fn validate_bind_sources(
+    cfg: &Config,
+    user: &ResolvedUser,
+    ws: &ResolvedWorkspace,
+    host_home_dir: Option<&Path>,
+) -> anyhow::Result<()> {
+    for (key, vol) in &cfg.extra_data_volumes {
+        if vol.volume_type != "bind" {
+            continue;
+        }
+        let target = expand_container_target(&vol.target, &user.username, &ws.container_path);
+        let source = bind_source(vol, &target, host_home_dir);
+        if !Path::new(&source).exists() {
+            anyhow::bail!(
+                "extra_data_volumes entry '{key}': bind source '{source}' does not exist on the host"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn bind_source(
+    vol: &crate::config::VolumeConfig,
+    resolved_target: &str,
+    host_home_dir: Option<&Path>,
+) -> String {
+    vol.source
+        .as_deref()
+        .map(|s| {
+            super::utils::expand_tilde(s, host_home_dir)
+                .to_string_lossy()
+                .into_owned()
+        })
+        .unwrap_or_else(|| resolved_target.to_string())
 }
 
 /// Expand container-side target: `~/` → `/home/{username}/`, `./` → `{container_path}/`
@@ -45,15 +95,7 @@ fn build_mount_spec(
     host_home_dir: Option<&Path>,
 ) -> String {
     if vol.volume_type == "bind" {
-        let source = vol
-            .source
-            .as_deref()
-            .map(|s| {
-                super::utils::expand_tilde(s, host_home_dir)
-                    .to_string_lossy()
-                    .into_owned()
-            })
-            .unwrap_or_else(|| resolved_target.to_string());
+        let source = bind_source(vol, resolved_target, host_home_dir);
         format!("{}:{}:{}", source, resolved_target, vol.mode)
     } else {
         // named volume
@@ -93,7 +135,71 @@ mod tests {
         }
     }
 
+    // --- validate_bind_sources ---
+
+    #[test]
+    fn test_validate_bind_sources_rejects_missing_source_naming_key_and_path() {
+        let home = std::env::temp_dir().join(format!("cast-bind-missing-{}", std::process::id()));
+        let mut cfg = Config::default();
+        cfg.extra_data_volumes.insert(
+            "pi".to_string(),
+            volume("~/.pi", "bind", Some("~/.pi"), "rw"),
+        );
+        let user = make_user("alice");
+        let ws = make_ws("/home/alice/my-app", "/home/alice/my-app");
+
+        let err = validate_bind_sources(&cfg, &user, &ws, Some(&home)).unwrap_err();
+
+        let msg = err.to_string();
+        assert!(msg.contains("pi"), "error should name the entry: {msg}");
+        assert!(
+            msg.contains(&home.join(".pi").display().to_string()),
+            "error should name the host path: {msg}"
+        );
+    }
+
+    #[test]
+    fn test_validate_bind_sources_accepts_existing_source_and_ignores_non_binds() {
+        let home = std::env::temp_dir().join(format!("cast-bind-present-{}", std::process::id()));
+        std::fs::create_dir_all(home.join(".pi")).unwrap();
+        let mut cfg = Config::default();
+        cfg.extra_data_volumes.insert(
+            "pi".to_string(),
+            volume("~/.pi", "bind", Some("~/.pi"), "rw"),
+        );
+        cfg.extra_data_volumes
+            .insert("state".to_string(), volume("~/.state", "tmpfs", None, "rw"));
+        let user = make_user("alice");
+        let ws = make_ws("/home/alice/my-app", "/home/alice/my-app");
+
+        let result = validate_bind_sources(&cfg, &user, &ws, Some(&home));
+
+        std::fs::remove_dir_all(&home).unwrap();
+        assert!(result.is_ok(), "{result:?}");
+    }
+
     // --- build_extra_volume_args ---
+
+    #[test]
+    fn test_extra_volume_args_tmpfs_is_an_ephemeral_user_owned_directory() {
+        let mut cfg = Config::default();
+        cfg.extra_data_volumes.insert(
+            "herdr-state".to_string(),
+            volume("~/.config/herdr", "tmpfs", None, "rw"),
+        );
+        let user = make_user("alice");
+        let ws = make_ws("/home/alice/my-app", "/home/alice/my-app");
+
+        let args = build_extra_volume_args(&cfg, &user, &ws, Some(Path::new("/home/alice")));
+
+        assert_eq!(
+            args,
+            vec![
+                "--tmpfs",
+                "/home/alice/.config/herdr:rw,uid=1000,gid=1000,mode=0700"
+            ]
+        );
+    }
 
     #[test]
     fn test_extra_volume_args_empty_returns_empty_vec() {
