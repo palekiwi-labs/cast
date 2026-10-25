@@ -165,3 +165,47 @@ fn test_cast_shell_help() {
         .stdout(predicate::str::contains("opencode").not())
         .stdout(predicate::str::contains("--raw"));
 }
+
+fn git_init(dir: &std::path::Path) {
+    let status = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(dir)
+        .status()
+        .expect("run git init");
+    assert!(status.success(), "git init should succeed");
+}
+
+#[test]
+fn test_cast_dash_c_resolves_the_worktree_from_the_given_directory() {
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let repo = temp.path().join("repo");
+    let outside = temp.path().join("outside");
+    std::fs::create_dir_all(&repo).unwrap();
+    std::fs::create_dir_all(&outside).unwrap();
+    git_init(&repo);
+
+    // Invoked from inside a worktree, -C must redirect resolution to a
+    // directory that is not one.
+    cast()
+        .current_dir(&repo)
+        .arg("-C")
+        .arg(&outside)
+        .arg("status")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not in a Git worktree"));
+}
+
+#[test]
+fn test_cast_dash_c_rejects_a_missing_directory() {
+    let temp = tempfile::tempdir().expect("create temp directory");
+    let missing = temp.path().join("missing");
+
+    cast()
+        .arg("-C")
+        .arg(&missing)
+        .arg("status")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("missing"));
+}

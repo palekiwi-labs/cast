@@ -25,6 +25,10 @@ pub struct ServiceFlags {
 #[command(about, long_about = None, version)]
 #[command(subcommand_required = true, arg_required_else_help = true)]
 pub struct Cli {
+    /// Run as if cast was started in <DIR> instead of the current directory
+    #[arg(short = 'C', global = true, value_name = "DIR")]
+    pub directory: Option<std::path::PathBuf>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -37,6 +41,12 @@ fn verify_config(cfg: Config) -> Result<ApprovedConfig> {
 }
 
 pub fn run(cli: Cli) -> Result<ExitCode> {
+    // Like `git -C`: every later cwd lookup sees <DIR>.
+    if let Some(dir) = &cli.directory {
+        std::env::set_current_dir(dir)
+            .with_context(|| format!("Cannot change to directory {}", dir.display()))?;
+    }
+
     // Initialization must work even when an existing global config is invalid:
     // the command never overwrites it and can still create a missing flake.
     if matches!(
@@ -59,11 +69,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Config::default()
     } else if matches!(
         &cli.command,
-        Some(
-            Commands::Up { .. }
-                | Commands::Exec { .. }
-                | Commands::Shell { .. }
-        )
+        Some(Commands::Up { .. } | Commands::Exec { .. } | Commands::Shell { .. })
     ) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
         let context = ServiceContext::resolve(&cwd)?;
