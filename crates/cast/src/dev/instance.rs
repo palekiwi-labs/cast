@@ -205,7 +205,6 @@ pub fn status(context: &InstanceContext, instance_name: Option<&str>) -> Result<
 mod tests {
     use super::*;
     use crate::dev::instance_context::InstanceContext;
-    use crate::dev::ps::select;
     use crate::dev::run::{RunOpts, TtyMode};
     use crate::dev::workspace::ResolvedWorkspace;
     use crate::user::ResolvedUser;
@@ -359,28 +358,15 @@ mod tests {
     }
 
     #[test]
-    fn status_matches_instances_by_workspace_id_and_name_labels() {
-        let instances = [
-            labelled("other", None, "running"),
-            labelled("ws", Some("review"), "running"),
-            labelled("ws", None, "exited"),
-        ];
-
+    fn status_classifies_the_found_instance() {
+        assert_eq!(status_of(None), InstanceStatus::Absent);
         assert_eq!(
-            status_of(select(&instances, "ws", None)),
+            status_of(Some(&labelled("ws", None, "exited"))),
             InstanceStatus::Stopped
         );
         assert_eq!(
-            status_of(select(&instances, "ws", Some("review"))),
+            status_of(Some(&labelled("ws", None, "running"))),
             InstanceStatus::Running
-        );
-        assert_eq!(
-            status_of(select(&instances, "ws", Some("absent"))),
-            InstanceStatus::Absent
-        );
-        assert_eq!(
-            status_of(select(&instances, "none", None)),
-            InstanceStatus::Absent
         );
     }
 

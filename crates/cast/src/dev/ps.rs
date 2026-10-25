@@ -181,20 +181,15 @@ pub fn build_find_args(all: bool, labels: &[(&str, &str)]) -> Vec<String> {
 
 /// Picks the instance with the given workspace_id and name labels; the
 /// default instance is the one without a name label.
-pub fn select<'a>(
-    instances: &'a [Instance],
+fn select(
+    instances: Vec<Instance>,
     workspace_id: &str,
     instance_name: Option<&str>,
-) -> Option<&'a Instance> {
-    instances
-        .iter()
-        .find(|instance| instance.is(workspace_id, instance_name))
-}
-
-impl Instance {
-    fn is(&self, workspace_id: &str, instance_name: Option<&str>) -> bool {
-        self.workspace_id.as_deref() == Some(workspace_id) && self.name.as_deref() == instance_name
-    }
+) -> Option<Instance> {
+    instances.into_iter().find(|instance| {
+        instance.workspace_id.as_deref() == Some(workspace_id)
+            && instance.name.as_deref() == instance_name
+    })
 }
 
 /// Finds one instance of a workspace, running or stopped.
@@ -207,9 +202,11 @@ pub fn find_one(
     if let Some(name) = instance_name {
         labels.push(("name", name));
     }
-    Ok(find(docker, true, &labels)?
-        .into_iter()
-        .find(|instance| instance.is(workspace_id, instance_name)))
+    Ok(select(
+        find(docker, true, &labels)?,
+        workspace_id,
+        instance_name,
+    ))
 }
 
 /// Lists running instance containers as the `cast ps` JSON document.
@@ -291,12 +288,13 @@ mod tests {
 
     #[test]
     fn selects_instances_by_workspace_id_and_name() {
-        let instances = instances_from_inspect(INSPECT).unwrap();
-        let review = select(&instances, "1a2b3c", Some("review")).unwrap();
+        let instances = || instances_from_inspect(INSPECT).unwrap();
+        let review = select(instances(), "1a2b3c", Some("review")).unwrap();
         assert_eq!(review.container, "cast-dev-1a2b3c-review");
-        assert!(select(&instances, "1a2b3c", None).is_none());
+        assert!(select(instances(), "1a2b3c", None).is_none());
+        assert!(select(instances(), "9z", Some("review")).is_none());
         assert_eq!(
-            select(&instances, "9z", None).unwrap().container,
+            select(instances(), "9z", None).unwrap().container,
             "cast-dev-9z"
         );
     }
