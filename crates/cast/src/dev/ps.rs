@@ -29,6 +29,7 @@ struct Inspected {
 #[serde(rename_all = "PascalCase")]
 struct InspectedState {
     status: String,
+    running: bool,
     started_at: String,
 }
 
@@ -51,6 +52,9 @@ pub struct Instance {
     pub cast_version: Option<String>,
     /// Docker's `.State.Status`, verbatim.
     pub state: String,
+    /// Docker's `.State.Running`; also true while paused or restarting.
+    #[serde(skip)]
+    pub running: bool,
     pub created: i64,
     pub started: Option<i64>,
 }
@@ -96,6 +100,7 @@ fn instances_from_inspect(output: &str) -> Result<Vec<Instance>> {
                 created: rfc3339_to_unix(&c.created)?,
                 id: c.id,
                 state: c.state.status,
+                running: c.state.running,
                 started,
             })
         })
@@ -225,7 +230,7 @@ mod tests {
         "Id": "abc123",
         "Name": "/cast-dev-1a2b3c-review",
         "Created": "2026-05-01T10:00:00.123456789Z",
-        "State": {"Status": "running", "StartedAt": "2026-05-01T10:00:01.5Z"},
+        "State": {"Status": "running", "Running": true, "StartedAt": "2026-05-01T10:00:01.5Z"},
         "Config": {"Labels": {
           "com.palekiwi.cast.schema": "1",
           "com.palekiwi.cast.workspace": "/home/u/repo",
@@ -239,7 +244,7 @@ mod tests {
         "Id": "def456",
         "Name": "/cast-dev-9z",
         "Created": "1970-01-02T00:00:00Z",
-        "State": {"Status": "created", "StartedAt": "0001-01-01T00:00:00Z"},
+        "State": {"Status": "created", "Running": false, "StartedAt": "0001-01-01T00:00:00Z"},
         "Config": {"Labels": {
           "com.palekiwi.cast.schema": "1",
           "com.palekiwi.cast.workspace": "/w",

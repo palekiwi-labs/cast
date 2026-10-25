@@ -191,7 +191,7 @@ pub fn down(context: &InstanceContext, instance_name: Option<&str>) -> Result<()
 fn status_of(found: Option<&Instance>) -> InstanceStatus {
     classify_instance_status(
         found.is_some(),
-        found.is_some_and(|instance| instance.state == "running"),
+        found.is_some_and(|instance| instance.running),
     )
 }
 
@@ -342,7 +342,7 @@ mod tests {
         );
     }
 
-    fn labelled(workspace_id: &str, name: Option<&str>, state: &str) -> Instance {
+    fn labelled(workspace_id: &str, name: Option<&str>, state: &str, running: bool) -> Instance {
         Instance {
             id: "id".to_string(),
             container: "c".to_string(),
@@ -352,6 +352,7 @@ mod tests {
             repo: None,
             cast_version: None,
             state: state.to_string(),
+            running,
             created: 0,
             started: None,
         }
@@ -361,11 +362,16 @@ mod tests {
     fn status_classifies_the_found_instance() {
         assert_eq!(status_of(None), InstanceStatus::Absent);
         assert_eq!(
-            status_of(Some(&labelled("ws", None, "exited"))),
+            status_of(Some(&labelled("ws", None, "exited", false))),
             InstanceStatus::Stopped
         );
         assert_eq!(
-            status_of(Some(&labelled("ws", None, "running"))),
+            status_of(Some(&labelled("ws", None, "running", true))),
+            InstanceStatus::Running
+        );
+        // Docker keeps State.Running true while paused, as cast up does.
+        assert_eq!(
+            status_of(Some(&labelled("ws", None, "paused", true))),
             InstanceStatus::Running
         );
     }
