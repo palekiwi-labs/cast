@@ -33,6 +33,25 @@ fn is_missing_container_error(stderr: &str) -> bool {
     stderr.contains("No such object:") || stderr.contains("No such container:")
 }
 
+/// Output of `docker inspect <ids...>` run on containers listed moments
+/// earlier. `--rm` containers can vanish in between; Docker then exits
+/// non-zero but still prints the ones it found, which are kept. Any other
+/// error fails.
+fn batch_inspect_output(success: bool, stdout: &str, stderr: &str) -> Result<String> {
+    let only_missing = !stderr.trim().is_empty()
+        && stderr
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .all(is_missing_container_error);
+    if !success && !only_missing {
+        bail!("`docker inspect` failed\n{}", stderr.trim());
+    }
+    if stdout.trim().is_empty() {
+        return Ok("[]".to_string());
+    }
+    Ok(stdout.to_string())
+}
+
 /// Removing a `--rm` container races with Docker's own auto-removal; losing
 /// that race leaves the container gone either way.
 fn is_benign_removal_error(stderr: &str) -> bool {
@@ -205,6 +224,23 @@ impl DockerClient {
         Ok(())
     }
 
+    /// Inspects containers by id, skipping any removed since they were
+    /// listed.
+    pub fn inspect_containers(&self, ids: &[String]) -> Result<String> {
+        let mut args = vec!["inspect".to_string()];
+        args.extend(ids.iter().cloned());
+        debug!(command = "docker", args = ?args, "inspecting containers");
+        let output = Command::new("docker")
+            .args(&args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+        batch_inspect_output(
+            output.status.success(),
+            &String::from_utf8_lossy(&output.stdout),
+            &String::from_utf8_lossy(&output.stderr),
+        )
+    }
+
     pub fn query_command(&self, args: Vec<String>) -> Result<String> {
         debug!(command = "docker", args = ?args, "querying command");
         let output = Command::new("docker")
@@ -347,6 +383,34 @@ impl DockerClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspect_keeps_found_containers_when_others_vanished() {
+        let found = r#"[{"Id": "a"}]"#;
+        assert_eq!(batch_inspect_output(true, found, "").unwrap(), found);
+        assert_eq!(
+            batch_inspect_output(false, found, "Error: No such object: b\n").unwrap(),
+            found
+        );
+        assert_eq!(
+            batch_inspect_output(false, "[]\n", "Error: No such object: b\n").unwrap(),
+            "[]\n"
+        );
+        assert_eq!(
+            batch_inspect_output(false, "", "Error: No such object: b\n").unwrap(),
+            "[]"
+        );
+        assert!(batch_inspect_output(false, "", "").is_err());
+        assert!(batch_inspect_output(false, "", "Cannot connect to the Docker daemon").is_err());
+        assert!(
+            batch_inspect_output(
+                false,
+                "",
+                "Error: No such object: b\npermission denied while trying to connect\n"
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn removal_races_with_auto_remove_are_benign() {

@@ -164,9 +164,7 @@ pub fn find(docker: &DockerClient, all: bool, labels: &[(&str, &str)]) -> Result
     if ids.is_empty() {
         return Ok(Vec::new());
     }
-    let mut args = vec!["inspect".to_string()];
-    args.extend(ids);
-    instances_from_inspect(&docker.query_command(args)?)
+    instances_from_inspect(&docker.inspect_containers(&ids)?)
 }
 
 /// `docker ps` arguments printing the full ids of cast instances whose
