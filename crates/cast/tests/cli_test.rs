@@ -231,7 +231,7 @@ fn test_cast_dash_c_rejects_a_missing_directory() {
 #[test]
 fn test_cast_rejects_instance_names_unsafe_for_container_names() {
     for name in ["qa/x", "-qa", "q a", ""] {
-        for command in ["up", "down", "shell"] {
+        for command in ["up", "down", "inspect", "shell"] {
             cast()
                 .args([command, &format!("--name={name}")])
                 .assert()

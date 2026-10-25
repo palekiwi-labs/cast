@@ -267,6 +267,32 @@ mod tests {
     }
 
     #[test]
+    fn instance_lookup_filters_on_labels_that_up_sets() {
+        let context = InstanceContext {
+            worktree_root: PathBuf::from("/w"),
+            git_common_dir: PathBuf::from("/w/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+        let labels = build_instance_label_args(&context, Some("qa"));
+        let args = crate::dev::ps::build_find_args(
+            true,
+            &[("workspace_id", "a1b2c3d4e5f6"), ("name", "qa")],
+        );
+
+        assert_eq!(&args[..4], ["ps", "-q", "--no-trunc", "-a"]);
+        let filter_values: Vec<&str> = args
+            .iter()
+            .filter_map(|arg| arg.strip_prefix("label="))
+            .collect();
+        assert_eq!(filter_values.len(), 3);
+        for value in filter_values {
+            assert!(labels.iter().any(|label| label == value), "{value}");
+        }
+        assert!(!crate::dev::ps::build_find_args(false, &[]).contains(&"-a".to_string()));
+    }
+
+    #[test]
     fn instance_containers_carry_identifying_labels() {
         let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),

@@ -154,6 +154,19 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 /// Finds labelled instance containers, narrowed by extra `label=` filters
 /// (`key=value` under the cast prefix). `all` includes stopped containers.
 pub fn find(docker: &DockerClient, all: bool, labels: &[(&str, &str)]) -> Result<Vec<Instance>> {
+    let ids = docker.query_command(build_find_args(all, labels))?;
+    let ids: Vec<String> = ids.split_whitespace().map(str::to_string).collect();
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut args = vec!["inspect".to_string()];
+    args.extend(ids);
+    instances_from_inspect(&docker.query_command(args)?)
+}
+
+/// `docker ps` arguments printing the full ids of cast instances whose
+/// labels match; `all` includes stopped containers.
+pub fn build_find_args(all: bool, labels: &[(&str, &str)]) -> Vec<String> {
     let mut args = vec!["ps".to_string(), "-q".to_string(), "--no-trunc".to_string()];
     if all {
         args.push("-a".to_string());
@@ -163,14 +176,7 @@ pub fn find(docker: &DockerClient, all: bool, labels: &[(&str, &str)]) -> Result
         args.push("--filter".to_string());
         args.push(format!("label={LABEL_PREFIX}.{key}={value}"));
     }
-    let ids = docker.query_command(args)?;
-    let ids: Vec<String> = ids.split_whitespace().map(str::to_string).collect();
-    if ids.is_empty() {
-        return Ok(Vec::new());
-    }
-    let mut args = vec!["inspect".to_string()];
-    args.extend(ids);
-    instances_from_inspect(&docker.query_command(args)?)
+    args
 }
 
 /// Picks the instance with the given workspace_id and name labels; the
