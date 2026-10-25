@@ -101,6 +101,15 @@ fn test_cast_down_accepts_instance_name() {
 }
 
 #[test]
+fn test_cast_ps_help() {
+    cast()
+        .args(["ps", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast ps"));
+}
+
+#[test]
 fn test_cast_status_accepts_instance_name() {
     cast()
         .args(["status", "--name", "isolated", "--help"])

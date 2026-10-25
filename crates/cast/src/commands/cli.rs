@@ -77,7 +77,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // configuration scope.
     let cfg = if matches!(
         &cli.command,
-        Some(Commands::Down { .. } | Commands::Status { .. })
+        Some(Commands::Down { .. } | Commands::Status { .. } | Commands::Ps)
     ) {
         Config::default()
     } else if matches!(
@@ -135,6 +135,11 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
                 context.container_name(flags.name.as_deref()),
                 instance_status
             );
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(Commands::Ps) => {
+            let listing = dev::ps::list(&crate::docker::client::DockerClient)?;
+            println!("{}", serde_json::to_string_pretty(&listing)?);
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Exec { flags, cmd }) => {
@@ -244,6 +249,8 @@ pub enum Commands {
         #[command(flatten)]
         flags: InstanceFlags,
     },
+    /// List running instances across all workspaces as JSON
+    Ps,
     /// Execute an arbitrary command in an instance container
     Exec {
         #[command(flatten)]

@@ -6,6 +6,7 @@ pub mod extra_dirs;
 pub mod image;
 pub mod instance;
 pub mod instance_context;
+pub mod ps;
 pub mod run;
 pub mod shadow_mounts;
 pub mod shell;
