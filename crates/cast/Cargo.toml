@@ -3,7 +3,7 @@ description = "cast - coding agent sandbox tool"
 authors = ["palekiwi"]
 license = "MIT"
 name = "cast"
-version = "0.3.0-service"
+version = "0.3.0-spike.1"
 edition = "2024"
 rust-version = "1.98"
 

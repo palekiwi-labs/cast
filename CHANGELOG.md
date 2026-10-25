@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Version `0.3.0-spike.N` marks the service spike: a prototype that is not
+released or tagged. Production `0.3.0` will be rebuilt on `master`.
+
 ### Added
 
 - `cast ps` lists running instances across all workspaces as a JSON object
