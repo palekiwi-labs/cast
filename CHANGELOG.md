@@ -34,7 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Upgrade notes
 
 - Instances started by an older cast have no labels: `cast ps` ignores
-  them and `cast exec` treats them as absent. Recreate them with `cast down && cast up`.
+  them and `cast exec` treats them as absent. Recreate them with
+  `cast down && cast up`.
 
 ## [0.2.0-rc.2] - 2026-10-09
 
