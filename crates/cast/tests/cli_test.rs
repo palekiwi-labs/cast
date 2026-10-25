@@ -265,3 +265,78 @@ fn test_cast_help_calls_containers_instances() {
         .stdout(predicate::str::contains("instance container"))
         .stdout(predicate::str::contains("service").not());
 }
+
+/// Writes an executable stand-in for cast-tui that records its cwd and args.
+fn fake_tui(dir: &std::path::Path) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("cast-tui");
+    std::fs::write(
+        &path,
+        "#!/bin/sh\necho \"cwd=$(pwd -P)\"\necho \"args=$*\"\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[test]
+fn test_bare_cast_runs_cast_tui_from_cast_tui_env() {
+    let bin = tempfile::tempdir().unwrap();
+    let tui = fake_tui(bin.path());
+    cast()
+        .env("CAST_TUI", &tui)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("args=\n"));
+}
+
+#[test]
+fn test_bare_cast_finds_cast_tui_on_path() {
+    let bin = tempfile::tempdir().unwrap();
+    fake_tui(bin.path());
+    cast()
+        .env_remove("CAST_TUI")
+        .env("PATH", bin.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("args="));
+}
+
+#[test]
+fn test_bare_cast_runs_cast_tui_in_c_directory() {
+    let bin = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let tui = fake_tui(bin.path());
+    let expected = work.path().canonicalize().unwrap();
+    cast()
+        .env("CAST_TUI", &tui)
+        .arg("-C")
+        .arg(work.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(format!(
+            "cwd={}\n",
+            expected.display()
+        )));
+}
+
+#[test]
+fn test_bare_cast_reports_missing_cast_tui() {
+    let empty = tempfile::tempdir().unwrap();
+    cast()
+        .env_remove("CAST_TUI")
+        .env("PATH", empty.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cast-tui not found"));
+}
+
+#[test]
+fn test_bare_cast_propagates_cast_tui_exit_code() {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = tempfile::tempdir().unwrap();
+    let tui = bin.path().join("cast-tui");
+    std::fs::write(&tui, "#!/bin/sh\nexit 3\n").unwrap();
+    std::fs::set_permissions(&tui, std::fs::Permissions::from_mode(0o755)).unwrap();
+    cast().env("CAST_TUI", &tui).assert().code(3);
+}

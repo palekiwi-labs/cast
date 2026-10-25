@@ -36,7 +36,6 @@ pub struct InstanceFlags {
 #[derive(Parser)]
 #[command(name = "cast")]
 #[command(about, long_about = None, version)]
-#[command(subcommand_required = true, arg_required_else_help = true)]
 pub struct Cli {
     /// Run as if cast was started in <DIR> instead of the current directory
     #[arg(short = 'C', global = true, value_name = "DIR")]
@@ -58,6 +57,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     if let Some(dir) = &cli.directory {
         std::env::set_current_dir(dir)
             .with_context(|| format!("Cannot change to directory {}", dir.display()))?;
+    }
+
+    // Bare `cast` opens the TUI. It needs no cast config, so hand over
+    // before loading any.
+    if cli.command.is_none() {
+        match super::tui::exec()? {}
     }
 
     // Initialization must work even when an existing global config is invalid:
@@ -174,7 +179,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             rt.block_on(crate::commands::mcp::run(command, approved))?;
             Ok(ExitCode::SUCCESS)
         }
-        None => unreachable!("Clap should handle required subcommands"),
+        None => unreachable!("bare cast execs cast-tui above"),
     }
 }
 
