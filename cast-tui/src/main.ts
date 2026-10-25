@@ -1,15 +1,37 @@
-import { ProcessTerminal, Text, TuiAltScreen } from "@earendil-works/pi-tui";
+import { matchesKey, ProcessTerminal, TuiAltScreen } from "@earendil-works/pi-tui";
+import { listInstances } from "./cast.js";
 import { isQuitKey } from "./keys.js";
+import { InstanceListView } from "./view.js";
 
 export function main(): void {
   const tui = new TuiAltScreen(new ProcessTerminal());
-  tui.addChild(new Text("cast-tui: no instances view yet. Press q to quit."));
+  const view = new InstanceListView();
+  tui.addChild(view);
+
+  const refresh = async (): Promise<void> => {
+    try {
+      view.setInstances(await listInstances());
+    } catch (e) {
+      view.setError(e instanceof Error ? e.message : String(e));
+    }
+    tui.requestRender();
+  };
+
   tui.addInputListener((data) => {
     if (isQuitKey(data)) {
       tui.stop();
       process.exit(0);
+    } else if (matchesKey(data, "up")) {
+      view.moveUp();
+      tui.requestRender();
+    } else if (matchesKey(data, "down")) {
+      view.moveDown();
+      tui.requestRender();
+    } else if (matchesKey(data, "r")) {
+      void refresh();
     }
     return undefined;
   });
   tui.start();
+  void refresh();
 }
