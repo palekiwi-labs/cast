@@ -50,3 +50,24 @@ test("parses a v1 listing", () => {
   assert.equal(instances[1]?.name, null);
   assert.equal(instances[1]?.started, null);
 });
+
+test("parses an empty listing", () => {
+  assert.deepEqual(parseListing('{"version":1,"instances":[]}'), []);
+});
+
+test("rejects other schema versions", () => {
+  assert.throws(
+    () => parseListing('{"version":2,"instances":[]}'),
+    (e: Error) =>
+      e instanceof ListingError && /unsupported .*version 2/i.test(e.message),
+  );
+});
+
+test("rejects output that is not JSON", () => {
+  assert.throws(() => parseListing("Error: boom"), ListingError);
+});
+
+test("rejects instances missing required fields", () => {
+  const bad = '{"version":1,"instances":[{"id":"a","container":"c"}]}';
+  assert.throws(() => parseListing(bad), ListingError);
+});
