@@ -4,51 +4,51 @@ use std::process::ExitStatus;
 use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
-use crate::dev::exec::{ServiceExecOptions, build_service_exec_args};
-use crate::dev::service_context::ServiceContext;
+use crate::dev::exec::{InstanceExecOptions, build_instance_exec_args};
+use crate::dev::instance_context::InstanceContext;
 
-/// The shell a service session opens inside the container.
-const SERVICE_SHELL: &str = "/bin/bash";
+/// The shell an instance session opens inside the container.
+const INSTANCE_SHELL: &str = "/bin/bash";
 
-/// Build `docker exec` arguments for an interactive shell in a service.
-pub fn build_service_shell_args(
+/// Build `docker exec` arguments for an interactive shell in an instance.
+pub fn build_instance_shell_args(
     config: &Config,
-    context: &ServiceContext,
-    service_name: Option<&str>,
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     container_username: &str,
     container_workdir: &Path,
     raw: bool,
     host_term: Option<&str>,
 ) -> Vec<String> {
-    build_service_exec_args(
+    build_instance_exec_args(
         config,
         context,
-        &ServiceExecOptions {
-            service_name,
+        &InstanceExecOptions {
+            instance_name,
             container_username,
             container_workdir,
             headless: false,
             raw,
             host_term,
         },
-        &[SERVICE_SHELL.to_string()],
+        &[INSTANCE_SHELL.to_string()],
     )
 }
 
-/// Drop into an interactive shell in the selected worktree service.
+/// Drop into an interactive shell in the selected worktree instance.
 pub fn shell(
     config: &ApprovedConfig,
-    context: &ServiceContext,
-    service_name: Option<&str>,
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     raw: bool,
 ) -> Result<ExitStatus> {
     crate::dev::exec(
         config,
         context,
-        service_name,
+        instance_name,
         false,
         raw,
-        vec![SERVICE_SHELL.to_string()],
+        vec![INSTANCE_SHELL.to_string()],
     )
 }
 
@@ -56,24 +56,24 @@ pub fn shell(
 mod tests {
     use super::*;
     use crate::config::Config;
-    use crate::dev::service_context::ServiceContext;
+    use crate::dev::instance_context::InstanceContext;
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn service_shell_opens_an_interactive_wrapped_shell() {
+    fn instance_shell_opens_an_interactive_wrapped_shell() {
         let config = Config {
             sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
             project_shell: Some(".#ai".to_string()),
             ..Config::default()
         };
-        let context = ServiceContext {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
             workspace_id: "a1b2c3d4e5f6".to_string(),
         };
 
-        let args = build_service_shell_args(
+        let args = build_instance_shell_args(
             &config,
             &context,
             Some("review"),

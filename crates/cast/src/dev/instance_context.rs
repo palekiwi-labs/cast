@@ -5,16 +5,16 @@ use std::process::Command;
 
 use crate::dev::workspace::ResolvedWorkspace;
 
-/// Worktree-scoped context for a service command invocation.
+/// Worktree-scoped context for an instance command invocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ServiceContext {
+pub struct InstanceContext {
     pub worktree_root: PathBuf,
     pub git_common_dir: PathBuf,
     pub relative_cwd: PathBuf,
     pub workspace_id: String,
 }
 
-impl ServiceContext {
+impl InstanceContext {
     pub fn workspace(&self, host_home: Option<&Path>, username: &str) -> ResolvedWorkspace {
         ResolvedWorkspace::from_host_root(self.worktree_root.clone(), host_home, username)
     }
@@ -85,7 +85,7 @@ impl ServiceContext {
         })
     }
 
-    pub fn container_name(&self, service_name: Option<&str>) -> String {
+    pub fn container_name(&self, instance_name: Option<&str>) -> String {
         let basename = self
             .worktree_root
             .file_name()
@@ -93,7 +93,7 @@ impl ServiceContext {
             .to_string_lossy();
         let base = format!("cast-{basename}-{}", self.workspace_id);
 
-        match service_name {
+        match instance_name {
             Some(name) => format!("{base}-{name}"),
             None => base,
         }
@@ -118,9 +118,9 @@ mod tests {
             .expect("run git init");
         assert!(status.success(), "git init should succeed");
 
-        let from_root = ServiceContext::resolve(&worktree).expect("resolve worktree root");
+        let from_root = InstanceContext::resolve(&worktree).expect("resolve worktree root");
         let from_subdirectory =
-            ServiceContext::resolve(&subdirectory).expect("resolve worktree subdirectory");
+            InstanceContext::resolve(&subdirectory).expect("resolve worktree subdirectory");
 
         assert_eq!(from_root.worktree_root, from_subdirectory.worktree_root);
         assert_eq!(from_root.relative_cwd, std::path::Path::new(""));
@@ -131,7 +131,7 @@ mod tests {
     }
 
     #[test]
-    fn linked_worktrees_have_distinct_service_identities() {
+    fn linked_worktrees_have_distinct_instance_identities() {
         let temp = tempfile::tempdir().expect("create temp directory");
         let primary = temp.path().join("primary");
         let linked = temp.path().join("linked");
@@ -142,7 +142,7 @@ mod tests {
             .status()
             .expect("run git init");
         assert!(init.success(), "git init should succeed");
-        fs::write(primary.join("README.md"), "service context test").expect("write tracked file");
+        fs::write(primary.join("README.md"), "instance context test").expect("write tracked file");
         let commit = Command::new("git")
             .arg("-C")
             .arg(&primary)
@@ -182,8 +182,8 @@ mod tests {
             .expect("create linked worktree");
         assert!(add_worktree.success(), "git worktree add should succeed");
 
-        let primary = ServiceContext::resolve(&primary).expect("resolve primary worktree");
-        let linked = ServiceContext::resolve(&linked).expect("resolve linked worktree");
+        let primary = InstanceContext::resolve(&primary).expect("resolve primary worktree");
+        let linked = InstanceContext::resolve(&linked).expect("resolve linked worktree");
 
         assert_ne!(primary.worktree_root, linked.worktree_root);
         assert_ne!(primary.workspace_id, linked.workspace_id);
@@ -192,8 +192,8 @@ mod tests {
     }
 
     #[test]
-    fn service_container_names_include_worktree_identity_and_optional_name() {
-        let context = ServiceContext {
+    fn instance_container_names_include_worktree_identity_and_optional_name() {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
@@ -211,7 +211,7 @@ mod tests {
     fn non_git_directories_are_rejected() {
         let directory = tempfile::tempdir().expect("create temp directory");
 
-        let error = ServiceContext::resolve(directory.path())
+        let error = InstanceContext::resolve(directory.path())
             .expect_err("non-Git directory should be rejected");
 
         assert!(
@@ -222,8 +222,8 @@ mod tests {
     }
 
     #[test]
-    fn service_workspace_mounts_the_worktree_and_preserves_invocation_cwd() {
-        let context = ServiceContext {
+    fn instance_workspace_mounts_the_worktree_and_preserves_invocation_cwd() {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::from("crates/app"),

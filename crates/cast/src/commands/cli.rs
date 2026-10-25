@@ -3,7 +3,7 @@ use std::process::{ExitCode, ExitStatus};
 use super::{config, nix_daemon};
 use crate::config::{ApprovedConfig, Config, load_config, load_config_from};
 use crate::dev;
-use crate::dev::service_context::ServiceContext;
+use crate::dev::instance_context::InstanceContext;
 use crate::dev::workspace::get_workspace;
 use crate::logging::{generate_invocation_id, init_file_logger};
 use crate::user::get_user;
@@ -26,7 +26,7 @@ fn parse_instance_name(name: &str) -> Result<String, String> {
 
 /// Selects an instance within the current Git worktree.
 #[derive(clap::Args, Clone, Debug)]
-pub struct ServiceFlags {
+pub struct InstanceFlags {
     /// Select a named instance instead of the default instance
     #[arg(long, value_parser = parse_instance_name)]
     pub name: Option<String>,
@@ -85,7 +85,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Some(Commands::Up { .. } | Commands::Exec { .. } | Commands::Shell { .. })
     ) {
         let cwd = std::env::current_dir().context("Failed to get current directory")?;
-        let context = ServiceContext::resolve(&cwd)?;
+        let context = InstanceContext::resolve(&cwd)?;
         load_config_from(&context.worktree_root)?
     } else {
         load_config()?
@@ -115,31 +115,31 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Some(Commands::Up { flags }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = ServiceContext::resolve(&cwd)?;
+            let context = InstanceContext::resolve(&cwd)?;
             let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
-            dev::service::up(&approved, &context, flags.name.as_deref())?;
+            dev::instance::up(&approved, &context, flags.name.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Down { flags }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = ServiceContext::resolve(&cwd)?;
-            dev::service::down(&context, flags.name.as_deref())?;
+            let context = InstanceContext::resolve(&cwd)?;
+            dev::instance::down(&context, flags.name.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Status { flags }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = ServiceContext::resolve(&cwd)?;
-            let service_status = dev::service::status(&context, flags.name.as_deref())?;
+            let context = InstanceContext::resolve(&cwd)?;
+            let instance_status = dev::instance::status(&context, flags.name.as_deref())?;
             println!(
                 "{}: {}",
                 context.container_name(flags.name.as_deref()),
-                service_status
+                instance_status
             );
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Exec { flags, cmd }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = ServiceContext::resolve(&cwd)?;
+            let context = InstanceContext::resolve(&cwd)?;
             let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
             let status = dev::exec(
                 &approved,
@@ -153,7 +153,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Some(Commands::Shell { flags, raw }) => {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = ServiceContext::resolve(&cwd)?;
+            let context = InstanceContext::resolve(&cwd)?;
             let approved = crate::config::check_approved(cfg, &context.worktree_root)?;
             let status = dev::shell(&approved, &context, flags.name.as_deref(), raw)?;
             Ok(to_exit_code(status))
@@ -232,17 +232,17 @@ pub enum Commands {
     /// Start an instance container
     Up {
         #[command(flatten)]
-        flags: ServiceFlags,
+        flags: InstanceFlags,
     },
     /// Stop and remove an instance container
     Down {
         #[command(flatten)]
-        flags: ServiceFlags,
+        flags: InstanceFlags,
     },
     /// Show the status of an instance container
     Status {
         #[command(flatten)]
-        flags: ServiceFlags,
+        flags: InstanceFlags,
     },
     /// Execute an arbitrary command in an instance container
     Exec {
@@ -255,7 +255,7 @@ pub enum Commands {
     /// Drop into an interactive shell in an instance container
     Shell {
         #[command(flatten)]
-        flags: ServiceFlags,
+        flags: InstanceFlags,
         /// Skip Nix devshell wrapping and open a bare shell
         #[arg(long)]
         raw: bool,

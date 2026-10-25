@@ -3,8 +3,8 @@ use std::process::ExitStatus;
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::build_command::build_command;
-use crate::dev::service::ServiceStatus;
-use crate::dev::service_context::ServiceContext;
+use crate::dev::instance::InstanceStatus;
+use crate::dev::instance_context::InstanceContext;
 use crate::docker::client::DockerClient;
 use crate::nix_daemon;
 use crate::user::get_user;
@@ -27,9 +27,9 @@ pub fn build_exec_cmd(
     build_command(config, container_username, &cmd[0], cmd[1..].to_vec())
 }
 
-/// Options for a command targeting a worktree service.
-pub struct ServiceExecOptions<'a> {
-    pub service_name: Option<&'a str>,
+/// Options for a command targeting a worktree instance.
+pub struct InstanceExecOptions<'a> {
+    pub instance_name: Option<&'a str>,
     pub container_username: &'a str,
     pub container_workdir: &'a Path,
     pub headless: bool,
@@ -59,11 +59,11 @@ fn container_term(host_term: Option<&str>) -> &str {
     }
 }
 
-/// Build `docker exec` arguments for a command targeting a worktree service.
-pub fn build_service_exec_args(
+/// Build `docker exec` arguments for a command targeting a worktree instance.
+pub fn build_instance_exec_args(
     config: &Config,
-    context: &ServiceContext,
-    options: &ServiceExecOptions<'_>,
+    context: &InstanceContext,
+    options: &InstanceExecOptions<'_>,
     cmd: &[String],
 ) -> Vec<String> {
     let mut args = vec!["exec".to_string()];
@@ -83,7 +83,7 @@ pub fn build_service_exec_args(
     args.extend([
         "--workdir".to_string(),
         options.container_workdir.to_string_lossy().into_owned(),
-        context.container_name(options.service_name),
+        context.container_name(options.instance_name),
     ]);
     args.extend(build_exec_cmd(
         config,
@@ -94,19 +94,19 @@ pub fn build_service_exec_args(
     args
 }
 
-fn validate_service_exec_status(status: ServiceStatus, container_name: &str) -> Result<()> {
-    if status == ServiceStatus::Running {
+fn validate_instance_exec_status(status: InstanceStatus, container_name: &str) -> Result<()> {
+    if status == InstanceStatus::Running {
         return Ok(());
     }
 
     bail!("instance is {status}: {container_name}; run `cast up` first")
 }
 
-/// Execute a command in the selected worktree service.
+/// Execute a command in the selected worktree instance.
 pub fn exec(
     config: &ApprovedConfig,
-    context: &ServiceContext,
-    service_name: Option<&str>,
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     headless: bool,
     raw: bool,
     cmd: Vec<String>,
@@ -115,9 +115,9 @@ pub fn exec(
         bail!("cast exec requires a command")
     }
 
-    let container_name = context.container_name(service_name);
-    validate_service_exec_status(
-        crate::dev::service::status(context, service_name)?,
+    let container_name = context.container_name(instance_name);
+    validate_instance_exec_status(
+        crate::dev::instance::status(context, instance_name)?,
         &container_name,
     )?;
 
@@ -128,11 +128,11 @@ pub fn exec(
     let workspace = context.workspace(dirs::home_dir().as_deref(), &user.username);
     let container_workdir = context.container_workdir(&workspace);
     let host_term = std::env::var("TERM").ok();
-    let args = build_service_exec_args(
+    let args = build_instance_exec_args(
         config,
         context,
-        &ServiceExecOptions {
-            service_name,
+        &InstanceExecOptions {
+            instance_name,
             container_username: &user.username,
             container_workdir: &container_workdir,
             headless,
@@ -148,17 +148,17 @@ pub fn exec(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dev::service_context::ServiceContext;
+    use crate::dev::instance_context::InstanceContext;
     use std::path::{Path, PathBuf};
 
     #[test]
-    fn service_exec_enters_configured_shells_in_the_invocation_directory() {
+    fn instance_exec_enters_configured_shells_in_the_invocation_directory() {
         let config = Config {
             sandbox_shell: Some("~/.config/cast/nix#default".to_string()),
             project_shell: Some(".#ai".to_string()),
             ..Config::default()
         };
-        let context = ServiceContext {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::from("crates/app"),
@@ -166,11 +166,11 @@ mod tests {
         };
         let command = vec!["cargo".to_string(), "test".to_string()];
 
-        let args = build_service_exec_args(
+        let args = build_instance_exec_args(
             &config,
             &context,
-            &ServiceExecOptions {
-                service_name: None,
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app/crates/app"),
                 headless: false,
@@ -209,11 +209,11 @@ mod tests {
     }
 
     fn terminal_env_of(headless: bool) -> Vec<String> {
-        let args = build_service_exec_args(
+        let args = build_instance_exec_args(
             &Config::default(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: None,
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless,
@@ -229,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_service_exec_advertises_a_colour_terminal() {
+    fn interactive_instance_exec_advertises_a_colour_terminal() {
         assert_eq!(
             terminal_env_of(false),
             vec![
@@ -241,11 +241,11 @@ mod tests {
     }
 
     fn interactive_term_for(host_term: Option<&str>) -> Vec<String> {
-        let args = build_service_exec_args(
+        let args = build_instance_exec_args(
             &Config::default(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: None,
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: false,
@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_service_exec_forwards_the_host_term() {
+    fn interactive_instance_exec_forwards_the_host_term() {
         assert_eq!(interactive_term_for(Some("tmux")), vec!["TERM=tmux"]);
         assert_eq!(
             interactive_term_for(Some("tmux-256color")),
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_service_exec_falls_back_when_host_term_is_unusable() {
+    fn interactive_instance_exec_falls_back_when_host_term_is_unusable() {
         for host in [None, Some(""), Some("bad term"), Some("x;rm"), Some("a=b")] {
             assert_eq!(
                 interactive_term_for(host),
@@ -281,12 +281,12 @@ mod tests {
     }
 
     #[test]
-    fn headless_service_exec_ignores_the_host_term() {
-        let args = build_service_exec_args(
+    fn headless_instance_exec_ignores_the_host_term() {
+        let args = build_instance_exec_args(
             &Config::default(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: None,
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: true,
@@ -299,12 +299,12 @@ mod tests {
     }
 
     #[test]
-    fn headless_service_exec_disables_colour() {
+    fn headless_instance_exec_disables_colour() {
         assert_eq!(terminal_env_of(true), vec!["NO_COLOR=1"]);
     }
 
-    fn service_context_fixture() -> ServiceContext {
-        ServiceContext {
+    fn instance_context_fixture() -> InstanceContext {
+        InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
@@ -321,12 +321,12 @@ mod tests {
     }
 
     #[test]
-    fn raw_service_exec_skips_devshell_wrapping() {
-        let args = build_service_exec_args(
+    fn raw_instance_exec_skips_devshell_wrapping() {
+        let args = build_instance_exec_args(
             &wrapped_config(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: None,
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: false,
@@ -357,12 +357,12 @@ mod tests {
     }
 
     #[test]
-    fn headless_service_exec_allocates_no_terminal() {
-        let args = build_service_exec_args(
+    fn headless_instance_exec_allocates_no_terminal() {
+        let args = build_instance_exec_args(
             &Config::default(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: None,
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: None,
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: true,
@@ -388,12 +388,12 @@ mod tests {
     }
 
     #[test]
-    fn service_exec_routes_to_a_named_service() {
-        let args = build_service_exec_args(
+    fn instance_exec_routes_to_a_named_instance() {
+        let args = build_instance_exec_args(
             &Config::default(),
-            &service_context_fixture(),
-            &ServiceExecOptions {
-                service_name: Some("review"),
+            &instance_context_fixture(),
+            &InstanceExecOptions {
+                instance_name: Some("review"),
                 container_username: "alice",
                 container_workdir: Path::new("/home/alice/projects/my-app"),
                 headless: true,
@@ -405,15 +405,15 @@ mod tests {
 
         assert!(
             args.contains(&"cast-my-app-a1b2c3d4e5f6-review".to_string()),
-            "named exec must target the named service container: {args:?}"
+            "named exec must target the named instance container: {args:?}"
         );
     }
 
     #[test]
-    fn service_exec_rejects_a_stopped_service() {
+    fn instance_exec_rejects_a_stopped_instance() {
         let error =
-            validate_service_exec_status(ServiceStatus::Stopped, "cast-my-app-a1b2c3d4e5f6")
-                .expect_err("a stopped service must reject exec");
+            validate_instance_exec_status(InstanceStatus::Stopped, "cast-my-app-a1b2c3d4e5f6")
+                .expect_err("a stopped instance must reject exec");
 
         assert_eq!(
             error.to_string(),
@@ -422,12 +422,12 @@ mod tests {
     }
 
     #[test]
-    fn service_exec_rejects_an_absent_service() {
-        let error = validate_service_exec_status(
-            crate::dev::service::ServiceStatus::Absent,
+    fn instance_exec_rejects_an_absent_instance() {
+        let error = validate_instance_exec_status(
+            crate::dev::instance::InstanceStatus::Absent,
             "cast-my-app-a1b2c3d4e5f6",
         )
-        .expect_err("an absent service must reject exec");
+        .expect_err("an absent instance must reject exec");
 
         assert_eq!(
             error.to_string(),
@@ -534,7 +534,7 @@ mod tests {
         use crate::config::ApprovedConfig;
 
         let config = ApprovedConfig::assume_approved_for_test(Config::default());
-        let context = ServiceContext {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),

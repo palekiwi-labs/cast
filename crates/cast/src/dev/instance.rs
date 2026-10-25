@@ -3,8 +3,8 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
-use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_service_run_flags, resolve_run_opts};
-use crate::dev::service_context::ServiceContext;
+use crate::dev::instance_context::InstanceContext;
+use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_instance_run_flags, resolve_run_opts};
 use crate::docker::BuildOptions;
 use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
 use crate::docker::client::DockerClient;
@@ -12,62 +12,62 @@ use crate::user::get_user;
 use crate::{dev, nix_daemon};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ServiceStatus {
+pub enum InstanceStatus {
     Absent,
     Stopped,
     Running,
 }
 
-fn classify_service_status(exists: bool, running: bool) -> ServiceStatus {
+fn classify_instance_status(exists: bool, running: bool) -> InstanceStatus {
     match (exists, running) {
-        (false, _) => ServiceStatus::Absent,
-        (true, false) => ServiceStatus::Stopped,
-        (true, true) => ServiceStatus::Running,
+        (false, _) => InstanceStatus::Absent,
+        (true, false) => InstanceStatus::Stopped,
+        (true, true) => InstanceStatus::Running,
     }
 }
 
-impl std::fmt::Display for ServiceStatus {
+impl std::fmt::Display for InstanceStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            ServiceStatus::Absent => "absent",
-            ServiceStatus::Stopped => "stopped",
-            ServiceStatus::Running => "running",
+            InstanceStatus::Absent => "absent",
+            InstanceStatus::Stopped => "stopped",
+            InstanceStatus::Running => "running",
         })
     }
 }
 
-pub fn build_service_command() -> Vec<String> {
+pub fn build_instance_command() -> Vec<String> {
     vec!["sleep".to_string(), "infinity".to_string()]
 }
 
-pub fn build_service_docker_args(
+pub fn build_instance_docker_args(
     config: &Config,
     opts: &RunOpts,
-    context: &ServiceContext,
-    service_name: Option<&str>,
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     image_tag: &str,
     host_env_names: &BTreeSet<String>,
 ) -> Vec<String> {
-    let container_name = context.container_name(service_name);
+    let container_name = context.container_name(instance_name);
     let container_workdir = context.container_workdir(&opts.workspace);
-    let flags = build_service_run_flags(
+    let flags = build_instance_run_flags(
         config,
         opts,
         host_env_names,
         &context.git_common_dir,
         &container_workdir,
     );
-    let command = build_service_command();
+    let command = build_instance_command();
 
     build_run_args(&container_name, image_tag, flags, Some(command))
 }
 
-fn build_service_down_commands(
-    context: &ServiceContext,
-    service_name: Option<&str>,
+fn build_instance_down_commands(
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     running: bool,
 ) -> Vec<Vec<String>> {
-    let container_name = context.container_name(service_name);
+    let container_name = context.container_name(instance_name);
     let mut commands = Vec::with_capacity(if running { 2 } else { 1 });
     if running {
         commands.push(build_stop_args(&container_name));
@@ -76,27 +76,27 @@ fn build_service_down_commands(
     commands
 }
 
-fn build_service_up_cleanup_command(
-    context: &ServiceContext,
-    service_name: Option<&str>,
+fn build_instance_up_cleanup_command(
+    context: &InstanceContext,
+    instance_name: Option<&str>,
     running: bool,
 ) -> Option<Vec<String>> {
-    (!running).then(|| build_remove_args(&context.container_name(service_name)))
+    (!running).then(|| build_remove_args(&context.container_name(instance_name)))
 }
 
 pub fn up(
     config: &ApprovedConfig,
-    context: &ServiceContext,
-    service_name: Option<&str>,
+    context: &InstanceContext,
+    instance_name: Option<&str>,
 ) -> Result<()> {
     let docker = DockerClient;
-    let container_name = context.container_name(service_name);
+    let container_name = context.container_name(instance_name);
     if let Some(inspection) = docker.inspect_container(&container_name)? {
         if inspection.running {
             eprintln!("instance is already running: {container_name}");
             return Ok(());
         }
-        if let Some(command) = build_service_up_cleanup_command(context, service_name, false) {
+        if let Some(command) = build_instance_up_cleanup_command(context, instance_name, false) {
             docker.run_command(command)?;
         }
     }
@@ -109,9 +109,9 @@ pub fn up(
         0,
         &SessionFlags {
             mode: RunMode::Headless {
-                token: "service".to_string(),
+                token: "instance".to_string(),
             },
-            name: service_name.map(str::to_string),
+            name: instance_name.map(str::to_string),
             publish: false,
         },
     );
@@ -131,11 +131,11 @@ pub fn up(
         .map(|(name, _)| name)
         .collect::<BTreeSet<_>>();
     let image_tag = dev::image::image_tag();
-    let args = build_service_docker_args(
+    let args = build_instance_docker_args(
         config,
         &run_opts,
         context,
-        service_name,
+        instance_name,
         &image_tag,
         &host_env_names,
     );
@@ -145,16 +145,16 @@ pub fn up(
     Ok(())
 }
 
-pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> {
+pub fn down(context: &InstanceContext, instance_name: Option<&str>) -> Result<()> {
     let docker = DockerClient;
-    let container_name = context.container_name(service_name);
+    let container_name = context.container_name(instance_name);
     if !docker.container_exists(&container_name)? {
         eprintln!("instance is already absent: {container_name}");
         return Ok(());
     }
 
     let running = docker.is_container_running(&container_name)?;
-    for command in build_service_down_commands(context, service_name, running) {
+    for command in build_instance_down_commands(context, instance_name, running) {
         docker.run_command(command)?;
     }
     eprintln!("instance removed: {container_name}");
@@ -162,11 +162,11 @@ pub fn down(context: &ServiceContext, service_name: Option<&str>) -> Result<()> 
     Ok(())
 }
 
-pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<ServiceStatus> {
+pub fn status(context: &InstanceContext, instance_name: Option<&str>) -> Result<InstanceStatus> {
     let docker = DockerClient;
-    let container_name = context.container_name(service_name);
+    let container_name = context.container_name(instance_name);
     let inspection = docker.inspect_container(&container_name)?;
-    Ok(classify_service_status(
+    Ok(classify_instance_status(
         inspection.is_some(),
         inspection.is_some_and(|state| state.running),
     ))
@@ -175,24 +175,24 @@ pub fn status(context: &ServiceContext, service_name: Option<&str>) -> Result<Se
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dev::instance_context::InstanceContext;
     use crate::dev::run::{RunOpts, TtyMode};
-    use crate::dev::service_context::ServiceContext;
     use crate::dev::workspace::ResolvedWorkspace;
     use crate::user::ResolvedUser;
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
     #[test]
-    fn service_command_is_a_vendor_neutral_keepalive() {
-        let command = build_service_command();
+    fn instance_command_is_a_vendor_neutral_keepalive() {
+        let command = build_instance_command();
 
         assert_eq!(command, vec!["sleep", "infinity"]);
     }
 
     #[test]
-    fn service_docker_args_target_the_named_worktree_service() {
+    fn instance_docker_args_target_the_named_worktree_instance() {
         let config = Config::default();
-        let context = ServiceContext {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/main/.git"),
             relative_cwd: PathBuf::from("crates/app"),
@@ -216,7 +216,7 @@ mod tests {
             publish: false,
         };
 
-        let args = build_service_docker_args(
+        let args = build_instance_docker_args(
             &config,
             &opts,
             &context,
@@ -237,15 +237,24 @@ mod tests {
     }
 
     #[test]
-    fn service_status_reports_container_lifecycle() {
-        assert_eq!(classify_service_status(false, false), ServiceStatus::Absent);
-        assert_eq!(classify_service_status(true, false), ServiceStatus::Stopped);
-        assert_eq!(classify_service_status(true, true), ServiceStatus::Running);
+    fn instance_status_reports_container_lifecycle() {
+        assert_eq!(
+            classify_instance_status(false, false),
+            InstanceStatus::Absent
+        );
+        assert_eq!(
+            classify_instance_status(true, false),
+            InstanceStatus::Stopped
+        );
+        assert_eq!(
+            classify_instance_status(true, true),
+            InstanceStatus::Running
+        );
     }
 
     #[test]
-    fn service_up_removes_a_stopped_container_before_recreating_it() {
-        let context = ServiceContext {
+    fn instance_up_removes_a_stopped_container_before_recreating_it() {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
@@ -253,21 +262,21 @@ mod tests {
         };
 
         assert_eq!(
-            build_service_up_cleanup_command(&context, Some("isolated"), false),
+            build_instance_up_cleanup_command(&context, Some("isolated"), false),
             Some(vec![
                 "rm".to_string(),
                 "cast-my-app-a1b2c3d4e5f6-isolated".to_string()
             ])
         );
         assert_eq!(
-            build_service_up_cleanup_command(&context, Some("isolated"), true),
+            build_instance_up_cleanup_command(&context, Some("isolated"), true),
             None
         );
     }
 
     #[test]
-    fn service_down_stops_then_removes_the_named_running_container() {
-        let context = ServiceContext {
+    fn instance_down_stops_then_removes_the_named_running_container() {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
@@ -275,7 +284,7 @@ mod tests {
         };
 
         assert_eq!(
-            build_service_down_commands(&context, Some("isolated"), true),
+            build_instance_down_commands(&context, Some("isolated"), true),
             vec![
                 vec!["stop", "cast-my-app-a1b2c3d4e5f6-isolated"],
                 vec!["rm", "cast-my-app-a1b2c3d4e5f6-isolated"],
@@ -284,8 +293,8 @@ mod tests {
     }
 
     #[test]
-    fn service_down_only_removes_an_already_stopped_container() {
-        let context = ServiceContext {
+    fn instance_down_only_removes_an_already_stopped_container() {
+        let context = InstanceContext {
             worktree_root: PathBuf::from("/home/alice/projects/my-app"),
             git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
             relative_cwd: PathBuf::new(),
@@ -293,7 +302,7 @@ mod tests {
         };
 
         assert_eq!(
-            build_service_down_commands(&context, None, false),
+            build_instance_down_commands(&context, None, false),
             vec![vec!["rm", "cast-my-app-a1b2c3d4e5f6"]]
         );
     }

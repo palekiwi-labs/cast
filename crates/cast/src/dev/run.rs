@@ -245,8 +245,8 @@ pub fn build_docker_run_flags(
     run_args
 }
 
-/// Build Docker flags for a detached, long-lived service container.
-pub fn build_service_run_flags(
+/// Build Docker flags for a detached, long-lived instance container.
+pub fn build_instance_run_flags(
     config: &Config,
     opts: &RunOpts,
     host_env_names: &BTreeSet<String>,
@@ -259,7 +259,7 @@ pub fn build_service_run_flags(
     }
     run_args.retain(|arg| arg != "--rm");
     // Terminal capabilities belong to each `docker exec`: a long-lived
-    // service serves both interactive and headless callers, and exec can
+    // instance serves both interactive and headless callers, and exec can
     // override container variables but never unset them.
     if let Some(position) = run_args.iter().position(|arg| arg == "NO_COLOR=1") {
         run_args.drain(position - 1..=position);
@@ -405,11 +405,11 @@ mod tests {
     }
 
     #[test]
-    fn service_run_is_detached_without_vendor_specific_stop_signals() {
+    fn instance_run_is_detached_without_vendor_specific_stop_signals() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -423,12 +423,12 @@ mod tests {
     }
 
     #[test]
-    fn service_run_never_publishes_agent_ports() {
+    fn instance_run_never_publishes_agent_ports() {
         let config = Config::default();
         let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         opts.publish = true;
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -441,11 +441,11 @@ mod tests {
     }
 
     #[test]
-    fn service_run_leaves_terminal_capabilities_to_each_exec() {
+    fn instance_run_leaves_terminal_capabilities_to_each_exec() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -458,17 +458,17 @@ mod tests {
                 !run_args
                     .iter()
                     .any(|arg| arg.starts_with(&format!("{var}="))),
-                "service container must not fix {var}, got: {run_args:?}"
+                "instance container must not fix {var}, got: {run_args:?}"
             );
         }
     }
 
     #[test]
-    fn service_run_names_no_multiplexer() {
+    fn instance_run_names_no_multiplexer() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -478,16 +478,16 @@ mod tests {
 
         assert!(
             !run_args.iter().any(|arg| arg.starts_with("HERDR_")),
-            "service environment must not name a multiplexer, got: {run_args:?}"
+            "instance environment must not name a multiplexer, got: {run_args:?}"
         );
     }
 
     #[test]
-    fn service_run_mounts_an_external_git_common_directory() {
+    fn instance_run_mounts_an_external_git_common_directory() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -499,7 +499,7 @@ mod tests {
     }
 
     #[test]
-    fn service_run_mounts_the_global_cast_nix_directory() {
+    fn instance_run_mounts_the_global_cast_nix_directory() {
         let config = Config::default();
         let home = tempfile::tempdir().expect("create temporary home");
         let nix_dir = home.path().join(".config/cast/nix");
@@ -507,7 +507,7 @@ mod tests {
         let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
         opts.host_home_dir = Some(home.path().to_path_buf());
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -522,14 +522,14 @@ mod tests {
     }
 
     #[test]
-    fn service_run_mounts_persistent_mux_data_volumes() {
+    fn instance_run_mounts_persistent_mux_data_volumes() {
         let config = Config {
             volumes_namespace: "spike".to_string(),
             ..Config::default()
         };
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -542,11 +542,11 @@ mod tests {
     }
 
     #[test]
-    fn service_run_uses_the_invocation_directory_as_workdir() {
+    fn instance_run_uses_the_invocation_directory_as_workdir() {
         let config = Config::default();
         let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
 
-        let run_args = build_service_run_flags(
+        let run_args = build_instance_run_flags(
             &config,
             &opts,
             &no_host_env(),
@@ -556,7 +556,7 @@ mod tests {
         let workdir = run_args
             .iter()
             .position(|arg| arg == "--workdir")
-            .expect("service flags should set a workdir");
+            .expect("instance flags should set a workdir");
 
         assert_eq!(run_args[workdir + 1], "/home/alice/project/crates/app");
     }

@@ -82,7 +82,7 @@ fn test_cast_up_help() {
 }
 
 #[test]
-fn test_cast_up_accepts_service_name() {
+fn test_cast_up_accepts_instance_name() {
     cast()
         .args(["up", "--name", "isolated", "--help"])
         .assert()
@@ -91,7 +91,7 @@ fn test_cast_up_accepts_service_name() {
 }
 
 #[test]
-fn test_cast_down_accepts_service_name() {
+fn test_cast_down_accepts_instance_name() {
     cast()
         .args(["down", "--name", "isolated", "--help"])
         .assert()
@@ -101,7 +101,7 @@ fn test_cast_down_accepts_service_name() {
 }
 
 #[test]
-fn test_cast_status_accepts_service_name() {
+fn test_cast_status_accepts_instance_name() {
     cast()
         .args(["status", "--name", "isolated", "--help"])
         .assert()
