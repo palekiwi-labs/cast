@@ -110,6 +110,16 @@ fn test_cast_ps_help() {
 }
 
 #[test]
+fn test_cast_inspect_accepts_instance_name() {
+    cast()
+        .args(["inspect", "--name", "isolated", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Usage: cast inspect"))
+        .stdout(predicate::str::contains("--name <NAME>"));
+}
+
+#[test]
 fn test_cast_status_is_not_available() {
     cast()
         .args(["status", "--help"])

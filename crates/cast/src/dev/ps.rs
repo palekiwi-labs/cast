@@ -173,6 +173,54 @@ pub fn find(docker: &DockerClient, all: bool, labels: &[(&str, &str)]) -> Result
     instances_from_inspect(&docker.query_command(args)?)
 }
 
+/// Picks the instance with the given workspace_id and name labels; the
+/// default instance is the one without a name label.
+pub fn select<'a>(
+    instances: &'a [Instance],
+    workspace_id: &str,
+    instance_name: Option<&str>,
+) -> Option<&'a Instance> {
+    instances
+        .iter()
+        .find(|instance| instance.is(workspace_id, instance_name))
+}
+
+impl Instance {
+    fn is(&self, workspace_id: &str, instance_name: Option<&str>) -> bool {
+        self.workspace_id.as_deref() == Some(workspace_id) && self.name.as_deref() == instance_name
+    }
+}
+
+/// Finds one instance of a workspace, running or stopped.
+pub fn find_one(
+    docker: &DockerClient,
+    workspace_id: &str,
+    instance_name: Option<&str>,
+) -> Result<Option<Instance>> {
+    let mut labels = vec![("workspace_id", workspace_id)];
+    if let Some(name) = instance_name {
+        labels.push(("name", name));
+    }
+    Ok(find(docker, true, &labels)?
+        .into_iter()
+        .find(|instance| instance.is(workspace_id, instance_name)))
+}
+
+#[derive(Serialize)]
+struct Inspection<'a> {
+    version: u32,
+    instance: &'a Instance,
+}
+
+/// The `cast inspect` JSON document.
+pub fn inspection(instance: &Instance) -> Value {
+    serde_json::to_value(Inspection {
+        version: OUTPUT_VERSION,
+        instance,
+    })
+    .expect("inspection serializes")
+}
+
 /// Lists running instance containers as the `cast ps` JSON document.
 pub fn list(docker: &DockerClient) -> Result<Value> {
     Ok(listing(find(docker, false, &[])?))
@@ -247,6 +295,22 @@ mod tests {
                     }
                 ]
             })
+        );
+    }
+
+    #[test]
+    fn inspection_wraps_the_selected_instance() {
+        let instances = instances_from_inspect(INSPECT).unwrap();
+        let review = select(&instances, "1a2b3c", Some("review")).unwrap();
+        assert_eq!(
+            inspection(review)["instance"]["container"],
+            "cast-dev-1a2b3c-review"
+        );
+        assert_eq!(inspection(review)["version"], 1);
+        assert!(select(&instances, "1a2b3c", None).is_none());
+        assert_eq!(
+            select(&instances, "9z", None).unwrap().container,
+            "cast-dev-9z"
         );
     }
 

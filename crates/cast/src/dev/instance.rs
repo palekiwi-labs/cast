@@ -5,7 +5,7 @@ use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::instance_context::InstanceContext;
-use crate::dev::ps::{Instance, find};
+use crate::dev::ps::{Instance, find_one};
 use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_instance_run_flags, resolve_run_opts};
 use crate::docker::BuildOptions;
 use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
@@ -187,17 +187,8 @@ pub fn down(context: &InstanceContext, instance_name: Option<&str>) -> Result<()
     Ok(())
 }
 
-/// Picks the instance identified by its workspace_id and name labels; the
-/// default instance is the one without a name label.
-fn status_from_instances(
-    instances: &[Instance],
-    workspace_id: &str,
-    instance_name: Option<&str>,
-) -> InstanceStatus {
-    let found = instances.iter().find(|instance| {
-        instance.workspace_id.as_deref() == Some(workspace_id)
-            && instance.name.as_deref() == instance_name
-    });
+/// Classifies the instance found by its labels, if any.
+fn status_of(found: Option<&Instance>) -> InstanceStatus {
     classify_instance_status(
         found.is_some(),
         found.is_some_and(|instance| instance.state == "running"),
@@ -206,22 +197,15 @@ fn status_from_instances(
 
 /// Status of an instance, found through the same label query as `cast ps`.
 pub fn status(context: &InstanceContext, instance_name: Option<&str>) -> Result<InstanceStatus> {
-    let mut labels = vec![("workspace_id", context.workspace_id.as_str())];
-    if let Some(name) = instance_name {
-        labels.push(("name", name));
-    }
-    let instances = find(&DockerClient, true, &labels)?;
-    Ok(status_from_instances(
-        &instances,
-        &context.workspace_id,
-        instance_name,
-    ))
+    let found = find_one(&DockerClient, &context.workspace_id, instance_name)?;
+    Ok(status_of(found.as_ref()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::dev::instance_context::InstanceContext;
+    use crate::dev::ps::select;
     use crate::dev::run::{RunOpts, TtyMode};
     use crate::dev::workspace::ResolvedWorkspace;
     use crate::user::ResolvedUser;
@@ -357,19 +341,19 @@ mod tests {
         ];
 
         assert_eq!(
-            status_from_instances(&instances, "ws", None),
+            status_of(select(&instances, "ws", None)),
             InstanceStatus::Stopped
         );
         assert_eq!(
-            status_from_instances(&instances, "ws", Some("review")),
+            status_of(select(&instances, "ws", Some("review"))),
             InstanceStatus::Running
         );
         assert_eq!(
-            status_from_instances(&instances, "ws", Some("absent")),
+            status_of(select(&instances, "ws", Some("absent"))),
             InstanceStatus::Absent
         );
         assert_eq!(
-            status_from_instances(&instances, "none", None),
+            status_of(select(&instances, "none", None)),
             InstanceStatus::Absent
         );
     }

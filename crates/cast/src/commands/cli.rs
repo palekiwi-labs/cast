@@ -75,7 +75,10 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // Instance commands are scoped to the Git worktree, even when invoked from
     // one of its subdirectories. Other commands retain their existing cwd
     // configuration scope.
-    let cfg = if matches!(&cli.command, Some(Commands::Down { .. } | Commands::Ps)) {
+    let cfg = if matches!(
+        &cli.command,
+        Some(Commands::Down { .. } | Commands::Ps | Commands::Inspect { .. })
+    ) {
         Config::default()
     } else if matches!(
         &cli.command,
@@ -126,6 +129,22 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Some(Commands::Ps) => {
             let listing = dev::ps::list(&crate::docker::client::DockerClient)?;
             println!("{}", serde_json::to_string_pretty(&listing)?);
+            Ok(ExitCode::SUCCESS)
+        }
+        Some(Commands::Inspect { flags }) => {
+            let cwd = std::env::current_dir().context("Failed to get current directory")?;
+            let context = InstanceContext::resolve(&cwd)?;
+            let name = flags.name.as_deref();
+            let instance = dev::ps::find_one(
+                &crate::docker::client::DockerClient,
+                &context.workspace_id,
+                name,
+            )?
+            .ok_or_else(|| anyhow::anyhow!("No such instance: {}", context.container_name(name)))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&dev::ps::inspection(&instance))?
+            );
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Exec { flags, cmd }) => {
@@ -232,6 +251,11 @@ pub enum Commands {
     },
     /// List running instances across all workspaces as JSON
     Ps,
+    /// Show one instance of this workspace as JSON
+    Inspect {
+        #[command(flatten)]
+        flags: InstanceFlags,
+    },
     /// Execute an arbitrary command in an instance container
     Exec {
         #[command(flatten)]
