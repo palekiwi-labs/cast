@@ -41,6 +41,38 @@ pub fn build_instance_command() -> Vec<String> {
     vec!["sleep".to_string(), "infinity".to_string()]
 }
 
+/// Prefix of every Docker label cast sets; reverse DNS of palekiwi.com.
+pub const LABEL_PREFIX: &str = "com.palekiwi.cast";
+/// Version of the label set; bump when keys change meaning.
+pub const LABEL_SCHEMA: &str = "1";
+
+/// Labels that identify an instance container to `cast ps` and other host
+/// tools. The name label is omitted for the default instance.
+fn build_instance_label_args(
+    context: &InstanceContext,
+    instance_name: Option<&str>,
+) -> Vec<String> {
+    let mut labels = vec![
+        ("schema", LABEL_SCHEMA.to_string()),
+        ("workspace", context.worktree_root.display().to_string()),
+        ("workspace_id", context.workspace_id.clone()),
+        ("repo", context.git_common_dir.display().to_string()),
+        ("version", env!("CARGO_PKG_VERSION").to_string()),
+    ];
+    if let Some(name) = instance_name {
+        labels.push(("name", name.to_string()));
+    }
+    labels
+        .into_iter()
+        .flat_map(|(key, value)| {
+            [
+                "--label".to_string(),
+                format!("{LABEL_PREFIX}.{key}={value}"),
+            ]
+        })
+        .collect()
+}
+
 pub fn build_instance_docker_args(
     config: &Config,
     opts: &RunOpts,
@@ -51,13 +83,14 @@ pub fn build_instance_docker_args(
 ) -> Vec<String> {
     let container_name = context.container_name(instance_name);
     let container_workdir = context.container_workdir(&opts.workspace);
-    let flags = build_instance_run_flags(
+    let mut flags = build_instance_run_flags(
         config,
         opts,
         host_env_names,
         &context.git_common_dir,
         &container_workdir,
     );
+    flags.extend(build_instance_label_args(context, instance_name));
     let command = build_instance_command();
 
     build_run_args(&container_name, image_tag, flags, Some(command))
@@ -225,6 +258,41 @@ mod tests {
             "sleep".to_string(),
             "infinity".to_string()
         ]));
+    }
+
+    #[test]
+    fn instance_containers_carry_identifying_labels() {
+        let context = InstanceContext {
+            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
+            git_common_dir: PathBuf::from("/home/alice/main/.git"),
+            relative_cwd: PathBuf::new(),
+            workspace_id: "a1b2c3d4e5f6".to_string(),
+        };
+        let version = env!("CARGO_PKG_VERSION");
+
+        assert_eq!(
+            build_instance_label_args(&context, Some("qa")),
+            vec![
+                "--label".to_string(),
+                "com.palekiwi.cast.schema=1".to_string(),
+                "--label".to_string(),
+                "com.palekiwi.cast.workspace=/home/alice/projects/my-app".to_string(),
+                "--label".to_string(),
+                "com.palekiwi.cast.workspace_id=a1b2c3d4e5f6".to_string(),
+                "--label".to_string(),
+                "com.palekiwi.cast.repo=/home/alice/main/.git".to_string(),
+                "--label".to_string(),
+                format!("com.palekiwi.cast.version={version}"),
+                "--label".to_string(),
+                "com.palekiwi.cast.name=qa".to_string(),
+            ]
+        );
+        assert!(
+            !build_instance_label_args(&context, None)
+                .iter()
+                .any(|arg| arg.starts_with("com.palekiwi.cast.name=")),
+            "the default instance carries no name label"
+        );
     }
 
     #[test]
