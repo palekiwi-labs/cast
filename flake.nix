@@ -95,6 +95,7 @@
               pkgs.cargo-expand
               pkgs.cargo-watch
               pkgs.cargo-edit
+              pkgs.nodejs
             ];
 
             shellHook = ''

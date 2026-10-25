@@ -1,0 +1,30 @@
+{
+  "name": "cast-tui",
+  "version": "0.3.0-spike.1",
+  "description": "Terminal UI for cast",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "cast-tui": "bin/cast-tui.js"
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test 'build-test/test/**/*.test.js'",
+    "start": "node bin/cast-tui.js"
+  },
+  "dependencies": {
+    "@earendil-works/pi-tui": "1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}
