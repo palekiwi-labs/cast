@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 use anyhow::Result;
 
@@ -60,20 +61,6 @@ pub fn build_instance_docker_args(
     let command = build_instance_command();
 
     build_run_args(&container_name, image_tag, flags, Some(command))
-}
-
-fn build_instance_down_commands(
-    context: &InstanceContext,
-    instance_name: Option<&str>,
-    running: bool,
-) -> Vec<Vec<String>> {
-    let container_name = context.container_name(instance_name);
-    let mut commands = Vec::with_capacity(if running { 2 } else { 1 });
-    if running {
-        commands.push(build_stop_args(&container_name));
-    }
-    commands.push(build_remove_args(&container_name));
-    commands
 }
 
 fn build_instance_up_cleanup_command(
@@ -153,10 +140,14 @@ pub fn down(context: &InstanceContext, instance_name: Option<&str>) -> Result<()
         return Ok(());
     }
 
-    let running = docker.is_container_running(&container_name)?;
-    for command in build_instance_down_commands(context, instance_name, running) {
-        docker.run_command(command)?;
+    if docker.is_container_running(&container_name)? {
+        docker.run_command(build_stop_args(&container_name))?;
     }
+    // Stopping auto-removes the container (`--rm`); the explicit removal
+    // covers containers created without it, and the wait frees the name
+    // for an immediate `cast up`.
+    docker.remove_container(&container_name)?;
+    docker.wait_until_absent(&container_name, Duration::from_secs(10))?;
     eprintln!("instance removed: {container_name}");
 
     Ok(())
@@ -271,39 +262,6 @@ mod tests {
         assert_eq!(
             build_instance_up_cleanup_command(&context, Some("isolated"), true),
             None
-        );
-    }
-
-    #[test]
-    fn instance_down_stops_then_removes_the_named_running_container() {
-        let context = InstanceContext {
-            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
-            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
-            relative_cwd: PathBuf::new(),
-            workspace_id: "a1b2c3d4e5f6".to_string(),
-        };
-
-        assert_eq!(
-            build_instance_down_commands(&context, Some("isolated"), true),
-            vec![
-                vec!["stop", "cast-my-app-a1b2c3d4e5f6-isolated"],
-                vec!["rm", "cast-my-app-a1b2c3d4e5f6-isolated"],
-            ]
-        );
-    }
-
-    #[test]
-    fn instance_down_only_removes_an_already_stopped_container() {
-        let context = InstanceContext {
-            worktree_root: PathBuf::from("/home/alice/projects/my-app"),
-            git_common_dir: PathBuf::from("/home/alice/projects/my-app/.git"),
-            relative_cwd: PathBuf::new(),
-            workspace_id: "a1b2c3d4e5f6".to_string(),
-        };
-
-        assert_eq!(
-            build_instance_down_commands(&context, None, false),
-            vec![vec!["rm", "cast-my-app-a1b2c3d4e5f6"]]
         );
     }
 }

@@ -33,6 +33,12 @@ fn is_missing_container_error(stderr: &str) -> bool {
     stderr.contains("No such object:") || stderr.contains("No such container:")
 }
 
+/// Removing a `--rm` container races with Docker's own auto-removal; losing
+/// that race leaves the container gone either way.
+fn is_benign_removal_error(stderr: &str) -> bool {
+    is_missing_container_error(stderr) || stderr.contains("is already in progress")
+}
+
 /// RAII guard to ignore SIGINT and SIGQUIT in the parent process and restore
 /// them to their previous handlers when dropped.
 struct SignalGuard {
@@ -126,6 +132,39 @@ impl DockerClient {
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         parse_container_inspection(&stdout).map(Some)
+    }
+
+    /// Remove a container, treating "already gone" outcomes as success.
+    pub fn remove_container(&self, name: &str) -> Result<()> {
+        let command_args = args::build_remove_args(name);
+        debug!(command = "docker", args = ?command_args, "removing container");
+        let output = Command::new("docker")
+            .args(&command_args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.status.success() || is_benign_removal_error(&stderr) {
+            return Ok(());
+        }
+        bail!(
+            "`docker {}` failed ({})\n{}",
+            command_args.join(" "),
+            output.status,
+            stderr.trim()
+        );
+    }
+
+    /// Poll until the container no longer exists, so its name is free again.
+    pub fn wait_until_absent(&self, name: &str, timeout: Duration) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        while self.inspect_container(name)?.is_some() {
+            if std::time::Instant::now() >= deadline {
+                bail!("container {name} still exists after {timeout:?}");
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
     }
 
     pub fn container_exists(&self, name: &str) -> Result<bool> {
@@ -308,6 +347,19 @@ impl DockerClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removal_races_with_auto_remove_are_benign() {
+        assert!(is_benign_removal_error(
+            "Error response from daemon: No such container: cast-app-1"
+        ));
+        assert!(is_benign_removal_error(
+            "Error response from daemon: removal of container cast-app-1 is already in progress"
+        ));
+        assert!(!is_benign_removal_error(
+            "Error response from daemon: cannot remove container: permission denied"
+        ));
+    }
 
     #[test]
     fn container_inspection_preserves_stopped_lifecycle_details() {

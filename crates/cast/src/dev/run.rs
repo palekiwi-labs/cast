@@ -257,7 +257,6 @@ pub fn build_instance_run_flags(
     if let Some(workdir) = run_args.iter().position(|arg| arg == "--workdir") {
         run_args[workdir + 1] = container_workdir.to_string_lossy().into_owned();
     }
-    run_args.retain(|arg| arg != "--rm");
     // Terminal capabilities belong to each `docker exec`: a long-lived
     // instance serves both interactive and headless callers, and exec can
     // override container variables but never unset them.
@@ -279,7 +278,7 @@ pub fn build_instance_run_flags(
     }
     run_args.extend(build_cast_nix_mount_args(opts));
     run_args.extend(build_universal_data_volume_args(config, &opts.user));
-    run_args.splice(0..0, ["--detach", "--init"].map(str::to_string));
+    run_args.insert(0, "--detach".to_string());
     run_args
 }
 
@@ -417,9 +416,11 @@ mod tests {
             Path::new("/home/alice/project"),
         );
 
-        assert_eq!(&run_args[..2], ["--detach", "--init"]);
+        assert_eq!(run_args[0], "--detach");
+        assert_eq!(run_args.iter().filter(|arg| *arg == "--init").count(), 1);
         assert!(!run_args.iter().any(|arg| arg == "--stop-signal"));
-        assert!(!run_args.iter().any(|arg| arg == "--rm"));
+        // Instances are disposable: stopping one removes it.
+        assert_eq!(run_args.iter().filter(|arg| *arg == "--rm").count(), 1);
     }
 
     #[test]
