@@ -23,13 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Containers started by `cast up` are called instances in help and output.
 - `--name` accepts only container-safe names: letters, digits, `_`, `.`
   and `-`, starting with a letter or digit.
+- `cast status` finds the instance by its labels, the same way `cast ps`
+  does, instead of by container name.
 - Instance containers run with `--rm`; `cast down` waits until the
   container is gone.
 
 ### Upgrade notes
 
-- Instances started by an older cast have no labels and are ignored by
-  `cast ps`. Recreate them with `cast down && cast up`.
+- Instances started by an older cast have no labels: `cast ps` ignores
+  them and `cast status` reports them absent. Recreate them with `cast down && cast up`.
 
 ## [0.2.0-rc.2] - 2026-10-09
 
