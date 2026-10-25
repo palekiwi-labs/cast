@@ -38,6 +38,7 @@
         # never need a matching flake.nix edit.
         castCargo = pkgs.lib.importTOML ./crates/cast/Cargo.toml;
         mcpClientCargo = pkgs.lib.importTOML ./crates/cast-mcp-client/Cargo.toml;
+        castTuiPackage = pkgs.lib.importJSON ./cast-tui/package.json;
         common = {
 
           src = pkgs.lib.cleanSourceWith {
@@ -46,8 +47,10 @@
               let
                 relPath = pkgs.lib.removePrefix (toString ./.) (toString path);
               in
-              (pkgs.lib.hasPrefix "/crates/cast/docs" relPath) ||
-              (pkgs.lib.cleanSourceFilter path type);
+              !(pkgs.lib.hasPrefix "/cast-tui" relPath) && (
+                (pkgs.lib.hasPrefix "/crates/cast/docs" relPath) ||
+                (pkgs.lib.cleanSourceFilter path type)
+              );
           };
           cargoLock = {
             lockFile = ./Cargo.lock;
@@ -84,8 +87,51 @@
             };
           });
 
-          default = self.packages.${system}.cast;
+          # Host TUI for cast. Ships in lockstep with the cast crate; the
+          # version-sync check below enforces that.
+          cast-tui = pkgs.buildNpmPackage {
+            pname = "cast-tui";
+            version = castTuiPackage.version;
+            src = pkgs.lib.cleanSourceWith {
+              src = ./cast-tui;
+              filter = path: type:
+                let base = baseNameOf path; in
+                !(builtins.elem base [ "node_modules" "dist" "build-test" ]) &&
+                (pkgs.lib.cleanSourceFilter path type);
+            };
+            # After changing cast-tui/package-lock.json, set this to
+            # pkgs.lib.fakeHash, build, and copy the reported hash.
+            npmDepsHash = "sha256-thLJ1Yk1QRple6eHff5ZCONxCxgvZLBViVrVN/AvPqI=";
+            nodejs = pkgs.nodejs;
+            doCheck = true;
+            checkPhase = ''
+              runHook preCheck
+              npm test
+              runHook postCheck
+            '';
+            meta = with pkgs.lib; {
+              description = "Terminal UI for cast";
+              homepage = "https://github.com/palekiwi-labs/cast";
+              license = licenses.mit;
+              mainProgram = "cast-tui";
+            };
+          };
+
+          default = pkgs.symlinkJoin {
+            name = "cast-${castCargo.package.version}";
+            paths = [
+              self.packages.${system}.cast
+              self.packages.${system}.cast-tui
+            ];
+            meta.mainProgram = "cast";
+          };
         };
+
+        checks.version-sync =
+          assert pkgs.lib.assertMsg
+            (castCargo.package.version == castTuiPackage.version)
+            "cast crate (${castCargo.package.version}) and cast-tui (${castTuiPackage.version}) versions differ";
+          pkgs.runCommand "cast-version-sync" { } "touch $out";
 
         devShells.default = pkgs.mkShell
           {
