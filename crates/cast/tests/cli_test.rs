@@ -110,13 +110,12 @@ fn test_cast_ps_help() {
 }
 
 #[test]
-fn test_cast_status_accepts_instance_name() {
+fn test_cast_status_is_not_available() {
     cast()
-        .args(["status", "--name", "isolated", "--help"])
+        .args(["status", "--help"])
         .assert()
-        .success()
-        .stdout(predicate::str::contains("Usage: cast status"))
-        .stdout(predicate::str::contains("--name <NAME>"));
+        .failure()
+        .stderr(predicate::str::contains("unrecognized subcommand 'status'"));
 }
 
 #[test]
@@ -199,7 +198,7 @@ fn test_cast_dash_c_resolves_the_worktree_from_the_given_directory() {
         .current_dir(&repo)
         .arg("-C")
         .arg(&outside)
-        .arg("status")
+        .arg("down")
         .assert()
         .failure()
         .stderr(predicate::str::contains("not in a Git worktree"));
@@ -213,7 +212,7 @@ fn test_cast_dash_c_rejects_a_missing_directory() {
     cast()
         .arg("-C")
         .arg(&missing)
-        .arg("status")
+        .arg("down")
         .assert()
         .failure()
         .stderr(predicate::str::contains("missing"));
@@ -222,7 +221,7 @@ fn test_cast_dash_c_rejects_a_missing_directory() {
 #[test]
 fn test_cast_rejects_instance_names_unsafe_for_container_names() {
     for name in ["qa/x", "-qa", "q a", ""] {
-        for command in ["up", "down", "status", "shell"] {
+        for command in ["up", "down", "shell"] {
             cast()
                 .args([command, &format!("--name={name}")])
                 .assert()
@@ -241,7 +240,7 @@ fn test_cast_rejects_instance_names_unsafe_for_container_names() {
 fn test_cast_accepts_container_safe_instance_names() {
     for name in ["qa", "reviews", "qa_2.x-y", "Q1"] {
         cast()
-            .args(["status", "--name", name, "--help"])
+            .args(["down", "--name", name, "--help"])
             .assert()
             .success();
     }

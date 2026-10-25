@@ -75,10 +75,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // Instance commands are scoped to the Git worktree, even when invoked from
     // one of its subdirectories. Other commands retain their existing cwd
     // configuration scope.
-    let cfg = if matches!(
-        &cli.command,
-        Some(Commands::Down { .. } | Commands::Status { .. } | Commands::Ps)
-    ) {
+    let cfg = if matches!(&cli.command, Some(Commands::Down { .. } | Commands::Ps)) {
         Config::default()
     } else if matches!(
         &cli.command,
@@ -124,17 +121,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
             let context = InstanceContext::resolve(&cwd)?;
             dev::instance::down(&context, flags.name.as_deref())?;
-            Ok(ExitCode::SUCCESS)
-        }
-        Some(Commands::Status { flags }) => {
-            let cwd = std::env::current_dir().context("Failed to get current directory")?;
-            let context = InstanceContext::resolve(&cwd)?;
-            let instance_status = dev::instance::status(&context, flags.name.as_deref())?;
-            println!(
-                "{}: {}",
-                context.container_name(flags.name.as_deref()),
-                instance_status
-            );
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Ps) => {
@@ -241,11 +227,6 @@ pub enum Commands {
     },
     /// Stop and remove an instance container
     Down {
-        #[command(flatten)]
-        flags: InstanceFlags,
-    },
-    /// Show the status of an instance container
-    Status {
         #[command(flatten)]
         flags: InstanceFlags,
     },
