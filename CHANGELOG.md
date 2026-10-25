@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `cast ps` lists running instances across all workspaces as a JSON object
+  `{ "version": 1, "instances": [...] }`. Each instance reports its id,
+  container name, instance name (null for the default), workspace,
+  workspace id, repository, cast version, Docker state, and created and
+  started times in Unix seconds.
+- Instance containers carry `com.palekiwi.cast.*` labels (schema,
+  workspace, workspace_id, repo, name, version) that `cast ps` reads.
+- Global `-C <DIR>` flag runs cast as if started in `<DIR>`, like `git -C`.
+
+### Changed
+
+- Containers started by `cast up` are called instances in help and output.
+- `--name` accepts only container-safe names: letters, digits, `_`, `.`
+  and `-`, starting with a letter or digit.
+- Instance containers run with `--rm`; `cast down` waits until the
+  container is gone.
+
+### Upgrade notes
+
+- Instances started by an older cast have no labels and are ignored by
+  `cast ps`. Recreate them with `cast down && cast up`.
+
 ## [0.2.0-rc.2] - 2026-10-09
 
 Second release candidate of the 0.2 line: the `CAST_MCP_URL` injection
