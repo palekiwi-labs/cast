@@ -39,18 +39,20 @@ struct InspectedConfig {
     labels: Option<HashMap<String, String>>,
 }
 
-#[derive(Serialize)]
-struct Instance {
-    id: String,
-    container: String,
-    name: Option<String>,
-    workspace: Option<String>,
-    workspace_id: Option<String>,
-    repo: Option<String>,
-    cast_version: Option<String>,
-    state: String,
-    created: i64,
-    started: Option<i64>,
+/// A labelled instance container as reported by `cast ps`.
+#[derive(Debug, Serialize)]
+pub struct Instance {
+    pub id: String,
+    pub container: String,
+    pub name: Option<String>,
+    pub workspace: Option<String>,
+    pub workspace_id: Option<String>,
+    pub repo: Option<String>,
+    pub cast_version: Option<String>,
+    /// Docker's `.State.Status`, verbatim.
+    pub state: String,
+    pub created: i64,
+    pub started: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -63,16 +65,15 @@ fn to_value(listing: Listing) -> Value {
     serde_json::to_value(listing).expect("listing serializes")
 }
 
-fn empty_listing() -> Value {
+/// The `cast ps` JSON document.
+fn listing(instances: Vec<Instance>) -> Value {
     to_value(Listing {
         version: OUTPUT_VERSION,
-        instances: Vec::new(),
+        instances,
     })
 }
 
-/// Converts `docker inspect` output for labelled containers into the
-/// `cast ps` listing.
-fn listing_from_inspect(output: &str) -> Result<Value> {
+fn instances_from_inspect(output: &str) -> Result<Vec<Instance>> {
     let inspected: Vec<Inspected> =
         serde_json::from_str(output).context("failed to parse docker inspect output")?;
     let instances = inspected
@@ -99,10 +100,7 @@ fn listing_from_inspect(output: &str) -> Result<Value> {
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(to_value(Listing {
-        version: OUTPUT_VERSION,
-        instances,
-    }))
+    Ok(instances)
 }
 
 /// Parses a UTC RFC 3339 timestamp as Docker prints it
@@ -153,22 +151,31 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     era * 146_097 + doe - 719_468
 }
 
-/// Lists running instance containers as the `cast ps` JSON document.
-pub fn list(docker: &DockerClient) -> Result<Value> {
-    let ids = docker.query_command(vec![
-        "ps".to_string(),
-        "-q".to_string(),
-        "--no-trunc".to_string(),
-        "--filter".to_string(),
-        format!("label={LABEL_PREFIX}.schema={LABEL_SCHEMA}"),
-    ])?;
+/// Finds labelled instance containers, narrowed by extra `label=` filters
+/// (`key=value` under the cast prefix). `all` includes stopped containers.
+pub fn find(docker: &DockerClient, all: bool, labels: &[(&str, &str)]) -> Result<Vec<Instance>> {
+    let mut args = vec!["ps".to_string(), "-q".to_string(), "--no-trunc".to_string()];
+    if all {
+        args.push("-a".to_string());
+    }
+    let filters = std::iter::once(("schema", LABEL_SCHEMA)).chain(labels.iter().copied());
+    for (key, value) in filters {
+        args.push("--filter".to_string());
+        args.push(format!("label={LABEL_PREFIX}.{key}={value}"));
+    }
+    let ids = docker.query_command(args)?;
     let ids: Vec<String> = ids.split_whitespace().map(str::to_string).collect();
     if ids.is_empty() {
-        return Ok(empty_listing());
+        return Ok(Vec::new());
     }
     let mut args = vec!["inspect".to_string()];
     args.extend(ids);
-    listing_from_inspect(&docker.query_command(args)?)
+    instances_from_inspect(&docker.query_command(args)?)
+}
+
+/// Lists running instance containers as the `cast ps` JSON document.
+pub fn list(docker: &DockerClient) -> Result<Value> {
+    Ok(listing(find(docker, false, &[])?))
 }
 
 #[cfg(test)]
@@ -209,9 +216,8 @@ mod tests {
 
     #[test]
     fn converts_inspect_output_to_listing() {
-        let listing = listing_from_inspect(INSPECT).unwrap();
         assert_eq!(
-            listing,
+            listing(instances_from_inspect(INSPECT).unwrap()),
             json!({
                 "version": 1,
                 "instances": [
@@ -242,11 +248,6 @@ mod tests {
                 ]
             })
         );
-    }
-
-    #[test]
-    fn empty_listing_has_no_instances() {
-        assert_eq!(empty_listing(), json!({"version": 1, "instances": []}));
     }
 
     #[test]

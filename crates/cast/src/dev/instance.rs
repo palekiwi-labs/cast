@@ -5,6 +5,7 @@ use anyhow::Result;
 
 use crate::config::{ApprovedConfig, Config};
 use crate::dev::instance_context::InstanceContext;
+use crate::dev::ps::{Instance, find};
 use crate::dev::run::{RunMode, RunOpts, SessionFlags, build_instance_run_flags, resolve_run_opts};
 use crate::docker::BuildOptions;
 use crate::docker::args::{build_remove_args, build_run_args, build_stop_args};
@@ -186,13 +187,34 @@ pub fn down(context: &InstanceContext, instance_name: Option<&str>) -> Result<()
     Ok(())
 }
 
+/// Picks the instance identified by its workspace_id and name labels; the
+/// default instance is the one without a name label.
+fn status_from_instances(
+    instances: &[Instance],
+    workspace_id: &str,
+    instance_name: Option<&str>,
+) -> InstanceStatus {
+    let found = instances.iter().find(|instance| {
+        instance.workspace_id.as_deref() == Some(workspace_id)
+            && instance.name.as_deref() == instance_name
+    });
+    classify_instance_status(
+        found.is_some(),
+        found.is_some_and(|instance| instance.state == "running"),
+    )
+}
+
+/// Status of an instance, found through the same label query as `cast ps`.
 pub fn status(context: &InstanceContext, instance_name: Option<&str>) -> Result<InstanceStatus> {
-    let docker = DockerClient;
-    let container_name = context.container_name(instance_name);
-    let inspection = docker.inspect_container(&container_name)?;
-    Ok(classify_instance_status(
-        inspection.is_some(),
-        inspection.is_some_and(|state| state.running),
+    let mut labels = vec![("workspace_id", context.workspace_id.as_str())];
+    if let Some(name) = instance_name {
+        labels.push(("name", name));
+    }
+    let instances = find(&DockerClient, true, &labels)?;
+    Ok(status_from_instances(
+        &instances,
+        &context.workspace_id,
+        instance_name,
     ))
 }
 
@@ -308,6 +330,47 @@ mod tests {
         assert_eq!(
             classify_instance_status(true, true),
             InstanceStatus::Running
+        );
+    }
+
+    fn labelled(workspace_id: &str, name: Option<&str>, state: &str) -> Instance {
+        Instance {
+            id: "id".to_string(),
+            container: "c".to_string(),
+            name: name.map(str::to_string),
+            workspace: None,
+            workspace_id: Some(workspace_id.to_string()),
+            repo: None,
+            cast_version: None,
+            state: state.to_string(),
+            created: 0,
+            started: None,
+        }
+    }
+
+    #[test]
+    fn status_matches_instances_by_workspace_id_and_name_labels() {
+        let instances = [
+            labelled("other", None, "running"),
+            labelled("ws", Some("review"), "running"),
+            labelled("ws", None, "exited"),
+        ];
+
+        assert_eq!(
+            status_from_instances(&instances, "ws", None),
+            InstanceStatus::Stopped
+        );
+        assert_eq!(
+            status_from_instances(&instances, "ws", Some("review")),
+            InstanceStatus::Running
+        );
+        assert_eq!(
+            status_from_instances(&instances, "ws", Some("absent")),
+            InstanceStatus::Absent
+        );
+        assert_eq!(
+            status_from_instances(&instances, "none", None),
+            InstanceStatus::Absent
         );
     }
 
