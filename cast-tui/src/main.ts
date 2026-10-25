@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import { matchesKey, ProcessTerminal, TuiAltScreen } from "@earendil-works/pi-tui";
 import { listInstances } from "./cast.js";
 import { isQuitKey } from "./keys.js";
@@ -5,7 +6,7 @@ import { InstanceListView } from "./view.js";
 
 export function main(): void {
   const tui = new TuiAltScreen(new ProcessTerminal());
-  const view = new InstanceListView();
+  const view = new InstanceListView({ home: homedir() });
   tui.addChild(view);
 
   const refresh = async (): Promise<void> => {

@@ -31,48 +31,65 @@ function selectedLine(view: InstanceListView): string | undefined {
 }
 
 test("lists instances with workspace, name, state and uptime", () => {
-  const view = new InstanceListView(() => NOW);
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
   view.setInstances([instance("a", { name: "review" }), instance("b")]);
   const out = lines(view).join("\n");
-  assert.match(out, /\/home\/u\/a\s+review\s+running\s+1h 2m/);
-  assert.match(out, /\/home\/u\/b\s+default\s+running/);
+  assert.match(out, /~\/a\s+review\s+a\s+running\s+1h 2m/);
+  assert.match(out, /~\/b\s+default\s+b\s+running/);
 });
 
 test("selects the first instance and moves with up/down, clamped", () => {
-  const view = new InstanceListView(() => NOW);
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
   view.setInstances([instance("a"), instance("b")]);
-  assert.match(selectedLine(view) ?? "", /\/home\/u\/a/);
+  assert.match(selectedLine(view) ?? "", /~\/a/);
   view.moveDown();
   view.moveDown();
-  assert.match(selectedLine(view) ?? "", /\/home\/u\/b/);
+  assert.match(selectedLine(view) ?? "", /~\/b/);
   view.moveUp();
   view.moveUp();
-  assert.match(selectedLine(view) ?? "", /\/home\/u\/a/);
+  assert.match(selectedLine(view) ?? "", /~\/a/);
 });
 
 test("keeps the selected instance across a refresh", () => {
-  const view = new InstanceListView(() => NOW);
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
   view.setInstances([instance("a"), instance("b")]);
   view.moveDown();
   view.setInstances([instance("c"), instance("a"), instance("b")]);
-  assert.match(selectedLine(view) ?? "", /\/home\/u\/b/);
+  assert.match(selectedLine(view) ?? "", /~\/b/);
   assert.equal(view.selected()?.id, "b");
 });
 
 test("shows an empty state", () => {
-  const view = new InstanceListView(() => NOW);
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
   view.setInstances([]);
   assert.match(lines(view).join("\n"), /no running instances/i);
   assert.equal(view.selected(), undefined);
 });
 
 test("shows an error without dropping the last listing", () => {
-  const view = new InstanceListView(() => NOW);
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
   view.setInstances([instance("a")]);
   view.setError("cast ps failed: docker is down");
   const out = lines(view).join("\n");
   assert.match(out, /docker is down/);
-  assert.match(out, /\/home\/u\/a/);
+  assert.match(out, /~\/a/);
   view.setInstances([instance("a")]);
   assert.doesNotMatch(lines(view).join("\n"), /docker is down/);
+});
+
+test("shows the repo directory and abbreviates home", () => {
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
+  view.setInstances([
+    instance("wt", { workspace: "/home/u/repo/worktrees/feat", repo: "/home/u/repo/.git" }),
+    instance("x", { workspace: "/srv/x", repo: null }),
+  ]);
+  const out = lines(view).join("\n");
+  assert.match(out, /~\/repo\/worktrees\/feat\s+default\s+repo\s+running/);
+  assert.match(out, /\/srv\/x\s+default\s+-\s+running/);
+});
+
+test("marks stopped containers without an uptime", () => {
+  const view = new InstanceListView({ now: () => NOW, home: "/home/u" });
+  view.setInstances([instance("a", { state: "created", started: null })]);
+  assert.match(lines(view).join("\n"), /created\s+-/);
 });
