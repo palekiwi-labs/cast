@@ -11,11 +11,24 @@ use anyhow::{Context as _, Result};
 use clap::{Parser, Subcommand};
 use tracing::info_span;
 
+/// Accepts names that keep the derived container name valid for Docker:
+/// `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.
+fn parse_instance_name(name: &str) -> Result<String, String> {
+    let mut chars = name.chars();
+    let valid = chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && chars.all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c));
+    if valid {
+        Ok(name.to_string())
+    } else {
+        Err("use letters, digits, '_', '.' or '-', starting with a letter or digit".to_string())
+    }
+}
+
 /// Selects a service within the current Git worktree.
 #[derive(clap::Args, Clone, Debug)]
 pub struct ServiceFlags {
     /// Select a named service instead of the default service
-    #[arg(long)]
+    #[arg(long, value_parser = parse_instance_name)]
     pub name: Option<String>,
 }
 
@@ -182,7 +195,7 @@ pub struct ExecFlags {
     pub headless: bool,
 
     /// Select a named service instead of the default service
-    #[arg(long)]
+    #[arg(long, value_parser = parse_instance_name)]
     pub name: Option<String>,
 
     /// Skip Nix devshell wrapping; command wrapping is skipped but /nix is

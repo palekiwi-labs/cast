@@ -209,3 +209,31 @@ fn test_cast_dash_c_rejects_a_missing_directory() {
         .failure()
         .stderr(predicate::str::contains("missing"));
 }
+
+#[test]
+fn test_cast_rejects_instance_names_unsafe_for_container_names() {
+    for name in ["qa/x", "-qa", "q a", ""] {
+        for command in ["up", "down", "status", "shell"] {
+            cast()
+                .args([command, &format!("--name={name}")])
+                .assert()
+                .failure()
+                .stderr(predicate::str::contains("invalid value"));
+        }
+        cast()
+            .args(["exec", &format!("--name={name}"), "true"])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid value"));
+    }
+}
+
+#[test]
+fn test_cast_accepts_container_safe_instance_names() {
+    for name in ["qa", "reviews", "qa_2.x-y", "Q1"] {
+        cast()
+            .args(["status", "--name", name, "--help"])
+            .assert()
+            .success();
+    }
+}
