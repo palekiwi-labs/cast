@@ -14,9 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   container name, instance name (null for the default), workspace,
   workspace id, repository, cast version, Docker state, and created and
   started times in Unix seconds.
-- `cast inspect [--name NAME]` prints one instance of the current workspace
-  as `{ "version": 1, "instance": {...} }`, with the same fields as a
-  `cast ps` entry. It fails with "No such instance" when there is none.
+- `cast inspect [--name NAME]` prints `docker inspect` output for an
+  instance of the current workspace (or of `-C <DIR>`), found by its labels.
+  It fails with "No such instance" when there is none.
 - Instance containers carry `com.palekiwi.cast.*` labels (schema,
   workspace, workspace_id, repo, name, version) that `cast ps` reads.
 - Global `-C <DIR>` flag runs cast as if started in `<DIR>`, like `git -C`.

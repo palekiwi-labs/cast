@@ -206,21 +206,6 @@ pub fn find_one(
         .find(|instance| instance.is(workspace_id, instance_name)))
 }
 
-#[derive(Serialize)]
-struct Inspection<'a> {
-    version: u32,
-    instance: &'a Instance,
-}
-
-/// The `cast inspect` JSON document.
-pub fn inspection(instance: &Instance) -> Value {
-    serde_json::to_value(Inspection {
-        version: OUTPUT_VERSION,
-        instance,
-    })
-    .expect("inspection serializes")
-}
-
 /// Lists running instance containers as the `cast ps` JSON document.
 pub fn list(docker: &DockerClient) -> Result<Value> {
     Ok(listing(find(docker, false, &[])?))
@@ -299,14 +284,10 @@ mod tests {
     }
 
     #[test]
-    fn inspection_wraps_the_selected_instance() {
+    fn selects_instances_by_workspace_id_and_name() {
         let instances = instances_from_inspect(INSPECT).unwrap();
         let review = select(&instances, "1a2b3c", Some("review")).unwrap();
-        assert_eq!(
-            inspection(review)["instance"]["container"],
-            "cast-dev-1a2b3c-review"
-        );
-        assert_eq!(inspection(review)["version"], 1);
+        assert_eq!(review.container, "cast-dev-1a2b3c-review");
         assert!(select(&instances, "1a2b3c", None).is_none());
         assert_eq!(
             select(&instances, "9z", None).unwrap().container,

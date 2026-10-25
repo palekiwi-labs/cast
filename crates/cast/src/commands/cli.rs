@@ -135,16 +135,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             let cwd = std::env::current_dir().context("Failed to get current directory")?;
             let context = InstanceContext::resolve(&cwd)?;
             let name = flags.name.as_deref();
-            let instance = dev::ps::find_one(
-                &crate::docker::client::DockerClient,
-                &context.workspace_id,
-                name,
-            )?
-            .ok_or_else(|| anyhow::anyhow!("No such instance: {}", context.container_name(name)))?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&dev::ps::inspection(&instance))?
-            );
+            let docker = crate::docker::client::DockerClient;
+            let instance =
+                dev::ps::find_one(&docker, &context.workspace_id, name)?.ok_or_else(|| {
+                    anyhow::anyhow!("No such instance: {}", context.container_name(name))
+                })?;
+            docker.stream_command(vec!["inspect".to_string(), instance.id])?;
             Ok(ExitCode::SUCCESS)
         }
         Some(Commands::Exec { flags, cmd }) => {
@@ -251,7 +247,7 @@ pub enum Commands {
     },
     /// List running instances across all workspaces as JSON
     Ps,
-    /// Show one instance of this workspace as JSON
+    /// Show docker inspect output for an instance of this workspace
     Inspect {
         #[command(flatten)]
         flags: InstanceFlags,
