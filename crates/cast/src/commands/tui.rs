@@ -1,5 +1,5 @@
-//! Bare `cast` hands the terminal to cast-tui, the host TUI shipped
-//! alongside this binary (git-style: a separate executable on PATH).
+//! Bare `cast` hands the terminal to cast-tui, the host TUI shipped by
+//! cue-platform (git-style: a separate executable on PATH).
 
 use std::ffi::{OsStr, OsString};
 use std::os::unix::process::CommandExt;

@@ -12,8 +12,8 @@ released or tagged. Production `0.3.0` will be rebuilt on `master`.
 
 ### Added
 
-- `cast` with no subcommand opens cast-tui, the terminal UI shipped in
-  the same flake (`packages.cast-tui`; `packages.default` provides both).
+- `cast` with no subcommand opens cast-tui, the terminal UI shipped by
+  cue-platform (`packages.cast-tui`; `packages.host` provides both).
   cast looks for `$CAST_TUI`, then `cast-tui` on PATH, and runs it in the
   directory chosen by `-C`. `cast --help` still prints help.
 - `cast ps` lists running instances across all workspaces as a JSON object
