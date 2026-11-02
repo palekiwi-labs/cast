@@ -34,6 +34,30 @@ pub fn build_ps_args(name: &str) -> Vec<String> {
     ]
 }
 
+/// Build arguments for `docker ps --all` to check whether a container exists.
+pub fn build_ps_all_args(name: &str) -> Vec<String> {
+    let escaped_name = escape_regex(name);
+    vec![
+        "ps".to_string(),
+        "--all".to_string(),
+        "--filter".to_string(),
+        format!("name=^{escaped_name}$"),
+        "--format".to_string(),
+        "{{.Names}}".to_string(),
+    ]
+}
+
+/// Build arguments for reading a container's complete lifecycle state.
+pub fn build_inspect_args(name: &str) -> Vec<String> {
+    vec![
+        "container".to_string(),
+        "inspect".to_string(),
+        "--format".to_string(),
+        "{{json .State}}".to_string(),
+        name.to_string(),
+    ]
+}
+
 fn escape_regex(value: &str) -> String {
     let mut escaped = String::with_capacity(value.len());
     for character in value.chars() {
@@ -84,6 +108,11 @@ pub fn build_docker_build_args(
 /// Build arguments for `docker stop` command
 pub fn build_stop_args(name: &str) -> Vec<String> {
     vec!["stop".to_string(), name.to_string()]
+}
+
+/// Build arguments for `docker rm` command.
+pub fn build_remove_args(name: &str) -> Vec<String> {
+    vec!["rm".to_string(), name.to_string()]
 }
 
 #[cfg(test)]
@@ -166,6 +195,35 @@ mod tests {
                 "name=^my-container$",
                 "--format",
                 "{{.Names}}"
+            ]
+        );
+    }
+
+    #[test]
+    fn build_ps_all_args_includes_stopped_containers() {
+        assert_eq!(
+            build_ps_all_args("cast-project-a1b2c3d4e5f6"),
+            vec![
+                "ps",
+                "--all",
+                "--filter",
+                "name=^cast-project-a1b2c3d4e5f6$",
+                "--format",
+                "{{.Names}}",
+            ]
+        );
+    }
+
+    #[test]
+    fn build_inspect_args_reports_container_lifecycle_once() {
+        assert_eq!(
+            build_inspect_args("cast-project-a1b2c3d4e5f6"),
+            vec![
+                "container",
+                "inspect",
+                "--format",
+                "{{json .State}}",
+                "cast-project-a1b2c3d4e5f6",
             ]
         );
     }

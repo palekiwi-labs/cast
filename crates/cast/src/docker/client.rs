@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail};
+use serde::Deserialize;
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -7,6 +8,55 @@ use tracing::debug;
 use crate::docker::args;
 
 pub struct DockerClient;
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ContainerInspection {
+    #[serde(rename = "Status")]
+    pub status: String,
+    #[serde(rename = "Running")]
+    pub running: bool,
+    #[serde(rename = "Paused")]
+    pub paused: bool,
+    #[serde(rename = "Restarting")]
+    pub restarting: bool,
+    #[serde(rename = "ExitCode")]
+    pub exit_code: i32,
+    #[serde(rename = "StartedAt")]
+    pub started_at: String,
+}
+
+fn parse_container_inspection(output: &str) -> Result<ContainerInspection> {
+    serde_json::from_str(output.trim()).context("failed to parse Docker container state")
+}
+
+fn is_missing_container_error(stderr: &str) -> bool {
+    stderr.contains("No such object:") || stderr.contains("No such container:")
+}
+
+/// Output of `docker inspect <ids...>` run on containers listed moments
+/// earlier. `--rm` containers can vanish in between; Docker then exits
+/// non-zero but still prints the ones it found, which are kept. Any other
+/// error fails.
+fn batch_inspect_output(success: bool, stdout: &str, stderr: &str) -> Result<String> {
+    let only_missing = !stderr.trim().is_empty()
+        && stderr
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .all(is_missing_container_error);
+    if !success && !only_missing {
+        bail!("`docker inspect` failed\n{}", stderr.trim());
+    }
+    if stdout.trim().is_empty() {
+        return Ok("[]".to_string());
+    }
+    Ok(stdout.to_string())
+}
+
+/// Removing a `--rm` container races with Docker's own auto-removal; losing
+/// that race leaves the container gone either way.
+fn is_benign_removal_error(stderr: &str) -> bool {
+    is_missing_container_error(stderr) || stderr.contains("is already in progress")
+}
 
 /// RAII guard to ignore SIGINT and SIGQUIT in the parent process and restore
 /// them to their previous handlers when dropped.
@@ -78,6 +128,70 @@ impl Drop for HeadlessSignalGuard {
 }
 
 impl DockerClient {
+    pub fn inspect_container(&self, name: &str) -> Result<Option<ContainerInspection>> {
+        let command_args = args::build_inspect_args(name);
+        debug!(command = "docker", args = ?command_args, "inspecting container");
+        let output = Command::new("docker")
+            .args(&command_args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            if is_missing_container_error(&stderr) {
+                return Ok(None);
+            }
+            bail!(
+                "`docker {}` failed ({})\n{}",
+                command_args.join(" "),
+                output.status,
+                stderr.trim()
+            );
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        parse_container_inspection(&stdout).map(Some)
+    }
+
+    /// Remove a container, treating "already gone" outcomes as success.
+    pub fn remove_container(&self, name: &str) -> Result<()> {
+        let command_args = args::build_remove_args(name);
+        debug!(command = "docker", args = ?command_args, "removing container");
+        let output = Command::new("docker")
+            .args(&command_args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", command_args.join(" ")))?;
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if output.status.success() || is_benign_removal_error(&stderr) {
+            return Ok(());
+        }
+        bail!(
+            "`docker {}` failed ({})\n{}",
+            command_args.join(" "),
+            output.status,
+            stderr.trim()
+        );
+    }
+
+    /// Poll until the container no longer exists, so its name is free again.
+    pub fn wait_until_absent(&self, name: &str, timeout: Duration) -> Result<()> {
+        let deadline = std::time::Instant::now() + timeout;
+        while self.inspect_container(name)?.is_some() {
+            if std::time::Instant::now() >= deadline {
+                bail!("container {name} still exists after {timeout:?}");
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        Ok(())
+    }
+
+    pub fn container_exists(&self, name: &str) -> Result<bool> {
+        let ps_args = args::build_ps_all_args(name);
+        let output = self.query_command(ps_args)?;
+        Ok(!output.trim().is_empty())
+    }
+
     pub fn is_container_running(&self, name: &str) -> Result<bool> {
         let ps_args = args::build_ps_args(name);
         let output = self.query_command(ps_args)?;
@@ -108,6 +222,23 @@ impl DockerClient {
         }
 
         Ok(())
+    }
+
+    /// Inspects containers by id, skipping any removed since they were
+    /// listed.
+    pub fn inspect_containers(&self, ids: &[String]) -> Result<String> {
+        let mut args = vec!["inspect".to_string()];
+        args.extend(ids.iter().cloned());
+        debug!(command = "docker", args = ?args, "inspecting containers");
+        let output = Command::new("docker")
+            .args(&args)
+            .output()
+            .with_context(|| format!("failed to spawn `docker {}`", args.join(" ")))?;
+        batch_inspect_output(
+            output.status.success(),
+            &String::from_utf8_lossy(&output.stdout),
+            &String::from_utf8_lossy(&output.stderr),
+        )
     }
 
     pub fn query_command(&self, args: Vec<String>) -> Result<String> {
@@ -246,5 +377,66 @@ impl DockerClient {
 
             std::thread::sleep(Duration::from_millis(100));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn inspect_keeps_found_containers_when_others_vanished() {
+        let found = r#"[{"Id": "a"}]"#;
+        assert_eq!(batch_inspect_output(true, found, "").unwrap(), found);
+        assert_eq!(
+            batch_inspect_output(false, found, "Error: No such object: b\n").unwrap(),
+            found
+        );
+        assert_eq!(
+            batch_inspect_output(false, "[]\n", "Error: No such object: b\n").unwrap(),
+            "[]\n"
+        );
+        assert_eq!(
+            batch_inspect_output(false, "", "Error: No such object: b\n").unwrap(),
+            "[]"
+        );
+        assert!(batch_inspect_output(false, "", "").is_err());
+        assert!(batch_inspect_output(false, "", "Cannot connect to the Docker daemon").is_err());
+        assert!(
+            batch_inspect_output(
+                false,
+                "",
+                "Error: No such object: b\npermission denied while trying to connect\n"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn removal_races_with_auto_remove_are_benign() {
+        assert!(is_benign_removal_error(
+            "Error response from daemon: No such container: cast-app-1"
+        ));
+        assert!(is_benign_removal_error(
+            "Error response from daemon: removal of container cast-app-1 is already in progress"
+        ));
+        assert!(!is_benign_removal_error(
+            "Error response from daemon: cannot remove container: permission denied"
+        ));
+    }
+
+    #[test]
+    fn container_inspection_preserves_stopped_lifecycle_details() {
+        let inspection = parse_container_inspection(
+            r#"{"Status":"exited","Running":false,"Paused":false,"Restarting":false,"ExitCode":137,"StartedAt":"2026-09-06T12:34:56.123456789Z"}"#,
+        )
+        .expect("Docker state should parse");
+
+        assert_eq!(inspection.status, "exited");
+        assert!(!inspection.running);
+        assert!(!inspection.paused);
+        assert!(!inspection.restarting);
+        assert_eq!(inspection.exit_code, 137);
+        assert_eq!(inspection.started_at, "2026-09-06T12:34:56.123456789Z");
     }
 }

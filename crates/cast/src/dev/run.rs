@@ -1,25 +1,13 @@
 use std::collections::BTreeSet;
-use std::path::PathBuf;
-use std::time::Instant;
+use std::path::{Path, PathBuf};
 
-use anyhow::Result;
-use tracing::{debug, info, info_span};
-
-use crate::config::{ApprovedConfig, Config};
-use crate::dev;
-use crate::dev::agent::Agent;
-use crate::dev::container_name::resolve_container_name;
-use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args, reserved_names_in};
+use crate::config::Config;
+use crate::dev::env_file::{build_env_file_args, build_env_passthrough_args};
 use crate::dev::shadow_mounts::{build_shadow_mount_args, resolve_shadow_mounts};
-use crate::dev::universal::registry::all_agents;
-use crate::dev::universal::volumes::build_universal_run_args;
+use crate::dev::universal::volumes::{build_cast_nix_mount_args, build_universal_data_volume_args};
 use crate::dev::volumes::build_extra_volume_args;
-use crate::dev::workspace::{ResolvedWorkspace, get_workspace};
-use crate::docker::BuildOptions;
-use crate::docker::args::build_run_args;
-use crate::docker::client::DockerClient;
-use crate::nix_daemon;
-use crate::user::{ResolvedUser, get_user};
+use crate::dev::workspace::ResolvedWorkspace;
+use crate::user::ResolvedUser;
 
 /// Whether the session uses a pseudo-TTY (interactive) or not (headless).
 #[derive(Debug, Clone, PartialEq)]
@@ -72,188 +60,6 @@ pub struct RunOpts {
     pub tty_mode: TtyMode,
     /// Whether to publish the container's port to the host. `false` means no publish.
     pub publish: bool,
-}
-
-use std::process::ExitStatus;
-
-/// Dispatch the final `docker run` command, logging session duration.
-///
-/// Combines the generic `docker_flags` with agent-specific `extra_args`,
-/// builds the full argument vector, and dispatches on `tty_mode`. This is
-/// the shared tail used by [`run_in_container`], which serves both
-/// `cast run` (via [`run_agent`]) and `cast exec`.
-fn dispatch_run(
-    docker: &DockerClient,
-    run_opts: &RunOpts,
-    container_name: &str,
-    image_tag: &str,
-    docker_flags: Vec<String>,
-    extra_args: Vec<String>,
-    cmd: Vec<String>,
-) -> Result<ExitStatus> {
-    let start_time = Instant::now();
-
-    let mut all_flags = docker_flags;
-    all_flags.extend(extra_args);
-
-    let docker_args = build_run_args(container_name, image_tag, all_flags, Some(cmd));
-
-    let status = match run_opts.tty_mode {
-        TtyMode::Interactive => docker.interactive_command(docker_args)?,
-        TtyMode::Headless => docker.headless_command(docker_args, container_name)?,
-    };
-
-    let duration = start_time.elapsed();
-    info!(
-        exit_code = status.code(),
-        duration_secs = duration.as_secs(),
-        "session ended"
-    );
-
-    Ok(status)
-}
-
-/// Assemble the agent-specific `docker run` args for a session.
-///
-/// Both `cast run` and `cast exec` route through this so the two commands
-/// share an identical mount topology: the shared `{ns}-cache`/`{ns}-local`
-/// data volumes, the cross-harness `~/.agents` bind mount, and the union of
-/// every agent's config-directory mounts (universal mounts are the
-/// unconditional default).
-fn build_session_run_args(config: &Config, run_opts: &RunOpts) -> Result<Vec<String>> {
-    build_universal_run_args(all_agents(), config, run_opts)
-}
-
-/// Shared container-run core used by both `run_agent` and `exec`.
-///
-/// Takes a pre-resolved `RunOpts`, container name, image tag, and final
-/// command vector. Handles: per-agent `prepare_host` for every known agent,
-/// `universal::prepare_host` (creates the cross-harness `~/.agents` dir),
-/// docker flags, the universal agent args, dispatch on tty_mode, and duration
-/// logging.
-pub fn run_in_container(
-    docker: &DockerClient,
-    config: &ApprovedConfig,
-    run_opts: &RunOpts,
-    container_name: &str,
-    image_tag: &str,
-    cmd: Vec<String>,
-) -> Result<ExitStatus> {
-    // Names only, and set-but-empty host vars are excluded: `-e NAME` beats
-    // --env-file, so an empty host value would silently shadow a real one
-    // from cast.env.
-    let host_env_names: BTreeSet<String> = std::env::vars()
-        .filter(|(_, value)| !value.is_empty())
-        .map(|(name, _)| name)
-        .collect();
-
-    let reserved = reserved_names_in(&effective_env_passthrough(config));
-    if !reserved.is_empty() {
-        eprintln!(
-            "Warning: env_passthrough/extra_env_passthrough lists reserved name(s) [{}]: the sandbox owns them, \
-             so they are never forwarded. Remove them from env_passthrough or extra_env_passthrough.",
-            reserved
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-
-    // Prepare host directories for ALL known agents so every config dir and
-    // cache dir exists before the container starts (universal mounts).
-    for ag in all_agents() {
-        ag.prepare_host(config, run_opts)?;
-    }
-
-    // Prepare cross-harness host directories (e.g. ~/.agents) shared by every
-    // session regardless of which agents are included.
-    dev::universal::prepare_host(run_opts)?;
-
-    let docker_flags = build_docker_run_flags(config, run_opts, &host_env_names);
-    let extra_args = build_session_run_args(config, run_opts)?;
-
-    dispatch_run(
-        docker,
-        run_opts,
-        container_name,
-        image_tag,
-        docker_flags,
-        extra_args,
-        cmd,
-    )
-}
-
-/// Orchestrate and run an agent session inside the dev container.
-pub fn run_agent(
-    agent: &dyn Agent,
-    config: &ApprovedConfig,
-    flags: SessionFlags,
-    extra_args: Vec<String>,
-) -> Result<ExitStatus> {
-    let docker = DockerClient;
-    let user = get_user()?;
-    let workspace = get_workspace(&user.username)?;
-
-    // Resolve port and container name early for span.
-    let port = dev::port::resolve_port(config, agent.name())?;
-    let cwd_basename = workspace.root_basename();
-    let token = match &flags.mode {
-        RunMode::Headless { token } => Some(token.as_str()),
-        RunMode::Interactive => None,
-    };
-    let container_name = resolve_container_name(
-        config,
-        agent.name(),
-        cwd_basename,
-        port,
-        flags.name.as_deref(),
-        token,
-    );
-
-    let span = info_span!(
-        "agent_session",
-        agent = agent.name(),
-        container = %container_name,
-        port = port
-    );
-    let _guard = span.enter();
-
-    debug!(port, %container_name, "resolved session parameters");
-
-    // Ensure the Nix daemon is running.
-    nix_daemon::ensure_running(&docker, config)?;
-
-    // Resolve the single shared dev image and ensure it exists locally.
-    let image_tag = dev::image::image_tag();
-
-    info!(
-        %image_tag,
-        %container_name,
-        port,
-        "starting agent session"
-    );
-
-    dev::image::ensure_dev_image(&docker, config, &user, BuildOptions::default())?;
-
-    let run_opts = resolve_run_opts(user, workspace, port, &flags);
-
-    // Announce nix devshell layers before handing off to docker, so the
-    // user knows what environment is being loaded.  The sandbox devshell is
-    // the outermost layer and is announced here; the project flake
-    // announces itself via its own shellHook (echo ... >&2).
-    if should_announce_sandbox_devshell(config) {
-        info!("loading sandbox nix devshell");
-        eprintln!("Loading sandbox nix devshell...");
-    }
-
-    let cmd = agent.build_command(config, &run_opts.user.username, extra_args);
-
-    run_in_container(&docker, config, &run_opts, &container_name, &image_tag, cmd)
-}
-
-fn should_announce_sandbox_devshell(config: &Config) -> bool {
-    crate::dev::build_command::sandbox_layer(config).is_some()
 }
 
 /// Resolve the generic options for a session.
@@ -439,9 +245,47 @@ pub fn build_docker_run_flags(
     run_args
 }
 
+/// Build Docker flags for a detached, long-lived instance container.
+pub fn build_instance_run_flags(
+    config: &Config,
+    opts: &RunOpts,
+    host_env_names: &BTreeSet<String>,
+    git_common_dir: &Path,
+    container_workdir: &Path,
+) -> Vec<String> {
+    let mut run_args = build_docker_run_flags(config, opts, host_env_names);
+    if let Some(workdir) = run_args.iter().position(|arg| arg == "--workdir") {
+        run_args[workdir + 1] = container_workdir.to_string_lossy().into_owned();
+    }
+    // Terminal capabilities belong to each `docker exec`: a long-lived
+    // instance serves both interactive and headless callers, and exec can
+    // override container variables but never unset them.
+    if let Some(position) = run_args.iter().position(|arg| arg == "NO_COLOR=1") {
+        run_args.drain(position - 1..=position);
+    }
+    if let Some(position) = run_args.iter().position(|arg| arg == "-p") {
+        run_args.drain(position..=position + 1);
+    }
+    if !git_common_dir.starts_with(&opts.workspace.root) {
+        run_args.extend([
+            "-v".to_string(),
+            format!(
+                "{}:{}:rw",
+                git_common_dir.display(),
+                git_common_dir.display()
+            ),
+        ]);
+    }
+    run_args.extend(build_cast_nix_mount_args(opts));
+    run_args.extend(build_universal_data_volume_args(config, &opts.user));
+    run_args.insert(0, "--detach".to_string());
+    run_args
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dev::env_file::reserved_names_in;
     use std::path::PathBuf;
 
     // ── Phase 1: RunMode → TtyMode conversion ───────────────────────────────
@@ -457,22 +301,6 @@ mod tests {
             token: "tok".to_string(),
         };
         assert_eq!(TtyMode::from(&mode), TtyMode::Headless);
-    }
-
-    #[test]
-    fn test_sandbox_devshell_announcement_requires_enabled_ref() {
-        let enabled = Config {
-            sandbox_shell: Some("github:org/repo#shell".to_string()),
-            ..Config::default()
-        };
-        assert!(should_announce_sandbox_devshell(&enabled));
-
-        let disabled = Config {
-            use_sandbox_shell: false,
-            ..enabled.clone()
-        };
-        assert!(!should_announce_sandbox_devshell(&disabled));
-        assert!(!should_announce_sandbox_devshell(&Config::default()));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -573,6 +401,165 @@ mod tests {
             !run_args.iter().any(|a| a.starts_with("CAST_MCP_URL")),
             "CAST_MCP_URL must not be injected without an mcp block: {run_args:?}"
         );
+    }
+
+    #[test]
+    fn instance_run_is_detached_without_vendor_specific_stop_signals() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert_eq!(run_args[0], "--detach");
+        assert_eq!(run_args.iter().filter(|arg| *arg == "--init").count(), 1);
+        assert!(!run_args.iter().any(|arg| arg == "--stop-signal"));
+        // Instances are disposable: stopping one removes it.
+        assert_eq!(run_args.iter().filter(|arg| *arg == "--rm").count(), 1);
+    }
+
+    #[test]
+    fn instance_run_never_publishes_agent_ports() {
+        let config = Config::default();
+        let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        opts.publish = true;
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert!(!run_args.iter().any(|arg| arg == "-p"));
+        assert!(!run_args.iter().any(|arg| arg == "32768:80"));
+    }
+
+    #[test]
+    fn instance_run_leaves_terminal_capabilities_to_each_exec() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        for var in ["NO_COLOR", "TERM", "COLORTERM", "FORCE_COLOR"] {
+            assert!(
+                !run_args
+                    .iter()
+                    .any(|arg| arg.starts_with(&format!("{var}="))),
+                "instance container must not fix {var}, got: {run_args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn instance_run_names_no_multiplexer() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert!(
+            !run_args.iter().any(|arg| arg.starts_with("HERDR_")),
+            "instance environment must not name a multiplexer, got: {run_args:?}"
+        );
+    }
+
+    #[test]
+    fn instance_run_mounts_an_external_git_common_directory() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/main/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert!(run_args.contains(&"/home/alice/main/.git:/home/alice/main/.git:rw".to_string()));
+    }
+
+    #[test]
+    fn instance_run_mounts_the_global_cast_nix_directory() {
+        let config = Config::default();
+        let home = tempfile::tempdir().expect("create temporary home");
+        let nix_dir = home.path().join(".config/cast/nix");
+        std::fs::create_dir_all(&nix_dir).expect("create global cast Nix directory");
+        let mut opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+        opts.host_home_dir = Some(home.path().to_path_buf());
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert!(run_args.contains(&format!(
+            "{}:/home/alice/.config/cast/nix:rw",
+            nix_dir.display()
+        )));
+    }
+
+    #[test]
+    fn instance_run_mounts_persistent_mux_data_volumes() {
+        let config = Config {
+            volumes_namespace: "spike".to_string(),
+            ..Config::default()
+        };
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project"),
+        );
+
+        assert!(run_args.contains(&"spike-cache:/home/alice/.cache:rw".to_string()));
+        assert!(run_args.contains(&"spike-local:/home/alice/.local:rw".to_string()));
+    }
+
+    #[test]
+    fn instance_run_uses_the_invocation_directory_as_workdir() {
+        let config = Config::default();
+        let opts = make_headless_opts(alice_user(), alice_workspace(), 32768);
+
+        let run_args = build_instance_run_flags(
+            &config,
+            &opts,
+            &no_host_env(),
+            Path::new("/home/alice/project/.git"),
+            Path::new("/home/alice/project/crates/app"),
+        );
+        let workdir = run_args
+            .iter()
+            .position(|arg| arg == "--workdir")
+            .expect("instance flags should set a workdir");
+
+        assert_eq!(run_args[workdir + 1], "/home/alice/project/crates/app");
     }
 
     #[test]
@@ -878,44 +865,6 @@ mod tests {
         assert!(
             !opts.host_name.is_empty(),
             "host_name must be non-empty (real hostname or 'unknown' sentinel)"
-        );
-    }
-
-    // ── Session run args: universal topology (run == exec) ──────────────────
-
-    #[test]
-    fn test_session_run_args_use_universal_topology() {
-        let config = Config::default();
-        let opts = make_interactive_opts(alice_user(), alice_workspace(), 32768);
-
-        let args = build_session_run_args(&config, &opts).unwrap();
-
-        // Shared cache/local volumes — NOT per-agent.
-        assert!(
-            args.contains(&"cast-cache:/home/alice/.cache:rw".to_string()),
-            "expected shared cache volume, got: {args:?}"
-        );
-        assert!(
-            args.contains(&"cast-local:/home/alice/.local:rw".to_string()),
-            "expected shared local volume, got: {args:?}"
-        );
-        assert!(
-            !args.iter().any(|a| a.contains("cast-opencode-cache")),
-            "session must not use per-agent data volumes: {args:?}"
-        );
-
-        // Union of every agent's config mounts (opencode, claude, pi).
-        assert!(
-            args.iter().any(|a| a.contains("/.config/opencode:rw")),
-            "opencode config mount missing: {args:?}"
-        );
-        assert!(
-            args.iter().any(|a| a.contains("/.claude:rw")),
-            "claude config mount missing: {args:?}"
-        );
-        assert!(
-            args.iter().any(|a| a.contains("/.pi:rw")),
-            "pi config mount missing: {args:?}"
         );
     }
 

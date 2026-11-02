@@ -9,6 +9,14 @@ pub struct ResolvedWorkspace {
 }
 
 impl ResolvedWorkspace {
+    pub fn from_host_root(root: PathBuf, home_dir: Option<&Path>, username: &str) -> Self {
+        let container_path = map_container_path(&root, home_dir, username);
+        Self {
+            root,
+            container_path,
+        }
+    }
+
     /// Get the basename of the workspace root directory.
     pub fn root_basename(&self) -> &str {
         self.root
@@ -23,11 +31,11 @@ impl ResolvedWorkspace {
 pub fn get_workspace(username: &str) -> Result<ResolvedWorkspace> {
     let root = std::env::current_dir().context("Failed to get current directory")?;
     let home_dir = dirs::home_dir();
-    let container_path = map_container_path(&root, home_dir.as_deref(), username);
-    Ok(ResolvedWorkspace {
+    Ok(ResolvedWorkspace::from_host_root(
         root,
-        container_path,
-    })
+        home_dir.as_deref(),
+        username,
+    ))
 }
 
 /// Map a host path to its container-side equivalent.

@@ -39,6 +39,7 @@
         castCargo = pkgs.lib.importTOML ./crates/cast/Cargo.toml;
         mcpClientCargo = pkgs.lib.importTOML ./crates/cast-mcp-client/Cargo.toml;
         common = {
+
           src = pkgs.lib.cleanSourceWith {
             src = ./.;
             filter = path: type:
@@ -62,6 +63,7 @@
             version = castCargo.package.version;
             cargoBuildFlags = [ "-p" "cast" ];
             cargoTestFlags = [ "-p" "cast" ];
+            nativeCheckInputs = [ pkgs.git ];
             meta = with pkgs.lib; {
               description = "cast - coding agent sandbox tool";
               homepage = "https://github.com/palekiwi-labs/cast";

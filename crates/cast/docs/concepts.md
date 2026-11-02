@@ -11,14 +11,11 @@ isolated from your host system.
 
 ## Agents and Harnesses
 
-An **Agent** is a specific coding tool (like OpenCode, ClaudeCode, or Pi).
-A **Harness** is the implementation of the `Agent` trait in `cast` that knows
-how to run the agent binary with the correct flags and environment.
-
-Harnesses are provisioned by Nix, not baked into the image. A single,
-harness-free dev image is shared by every agent; the harness binary comes from
-the explicit flake reference in `sandbox_shell`. See [Agents](agents.md) for the
-full model.
+`cast` has no knowledge of specific coding agents. Harness binaries are
+provisioned by Nix through the devshells you configure (`sandbox_shell`,
+`project_shell`), not baked into the image, and their configuration
+directories are mounted through `extra_data_volumes` (see
+[Configuration Reference](config/reference.md)).
 
 ## Nix Integration
 

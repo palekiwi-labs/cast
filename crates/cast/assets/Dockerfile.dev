@@ -2,7 +2,7 @@ FROM debian:trixie-slim
 
 ARG TARGETARCH
 
-# Install essential tools for development (union of all agents' deps).
+# Install essential tools for development.
 # No harness binaries are baked in — harnesses are provided by the sandbox
 # Nix devShell selected at run time.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -63,18 +63,12 @@ RUN set -e; \
     mkdir -p /home/${USERNAME} && \
     mkdir -p /workspace \
              /home/${USERNAME}/.cache \
-             /home/${USERNAME}/.claude \
-             /home/${USERNAME}/.pi \
              /home/${USERNAME}/.config \
-             /home/${USERNAME}/.agents \
              /home/${USERNAME}/.local \
              ${EXTRA_DIRS} && \
     chown -R ${UID}:${GID} /workspace \
                            /home/${USERNAME}/.cache \
-                           /home/${USERNAME}/.claude \
-                           /home/${USERNAME}/.pi \
                            /home/${USERNAME}/.config \
-                           /home/${USERNAME}/.agents \
                            /home/${USERNAME}/.local \
                            /home/${USERNAME} \
                            ${EXTRA_DIRS} 2>/dev/null || true
